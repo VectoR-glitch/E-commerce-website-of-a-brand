@@ -1,0 +1,421 @@
+"use client";
+
+import Image from "next/image";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FRAGRANCE_HEX, formatINR, type Product } from "@/lib/catalog";
+import { useCart } from "@/lib/cart-context";
+import { Ornament } from "@/components/ornament";
+
+// Flies a clone of the product image in an arc into the header cart link, then
+// fires `klen:cart-bump` so the cart pops on arrival. No-ops under reduced
+// motion (still fires the event so the count updates without animation).
+function flyToCart(source: HTMLElement | null, imageSrc?: string) {
+  if (typeof window === "undefined") return;
+  const fire = () => window.dispatchEvent(new Event("klen:cart-bump"));
+  const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const target = document.getElementById("cart-link");
+  if (reduce || !source || !target || !imageSrc) {
+    fire();
+    return;
+  }
+
+  const s = source.getBoundingClientRect();
+  const t = target.getBoundingClientRect();
+  const size = Math.min(150, s.width * 0.55);
+  const startX = s.left + s.width / 2 - size / 2;
+  const startY = s.top + s.height / 2 - size / 2;
+
+  const clone = document.createElement("img");
+  clone.src = imageSrc;
+  Object.assign(clone.style, {
+    position: "fixed",
+    left: `${startX}px`,
+    top: `${startY}px`,
+    width: `${size}px`,
+    height: `${size}px`,
+    objectFit: "contain",
+    pointerEvents: "none",
+    zIndex: "60",
+    filter: "drop-shadow(0 12px 22px rgba(0,0,0,0.18))",
+  });
+  document.body.appendChild(clone);
+
+  const dx = t.left + t.width / 2 - (startX + size / 2);
+  const dy = t.top + t.height / 2 - (startY + size / 2);
+
+  const anim = clone.animate(
+    [
+      { transform: "translate(0,0) scale(1) rotate(0deg)", opacity: 1, offset: 0 },
+      {
+        transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 70}px) scale(0.78) rotate(-6deg)`,
+        opacity: 1,
+        offset: 0.55,
+      },
+      { transform: `translate(${dx}px, ${dy}px) scale(0.12)`, opacity: 0.2, offset: 1 },
+    ],
+    { duration: 720, easing: "cubic-bezier(0.45, 0, 0.55, 1)" },
+  );
+  anim.onfinish = () => {
+    clone.remove();
+    fire();
+  };
+  anim.oncancel = () => clone.remove();
+}
+
+export function ProductDetail({
+  product,
+  initialFragrance,
+}: {
+  product: Product;
+  initialFragrance?: string;
+}) {
+  const hasFragrance = product.fragrances.length > 0;
+  const { addItem } = useCart();
+  const imageRef = useRef<HTMLDivElement>(null);
+  const addRowRef = useRef<HTMLDivElement>(null);
+  const stickyRef = useRef<HTMLDivElement>(null);
+  const [justAdded, setJustAdded] = useState(false);
+  const [showSticky, setShowSticky] = useState(false);
+  const [zoomed, setZoomed] = useState(false);
+  const [fragrance, setFragrance] = useState<string | undefined>(
+    hasFragrance
+      ? initialFragrance && product.fragrances.includes(initialFragrance)
+        ? initialFragrance
+        : product.fragrances[0]
+      : undefined,
+  );
+  const [size, setSize] = useState<string>(product.sizes[0]);
+
+  const selected = useMemo(
+    () =>
+      product.variants.find(
+        (v) => v.size === size && (!hasFragrance || v.fragrance === fragrance),
+      ),
+    [product.variants, size, fragrance, hasFragrance],
+  );
+  const outOfStock =
+    !!selected && typeof selected.stock === "number" && selected.stock <= 0;
+  // Genuine low-stock cue — only from real numbers, so it stays truthful.
+  const lowStock =
+    !!selected &&
+    typeof selected.stock === "number" &&
+    selected.stock > 0 &&
+    selected.stock <= 10;
+
+  // Show the photo matching the selected fragrance AND size, with fallbacks.
+  const image =
+    product.variantImages?.[`${fragrance ?? ""}|${size}`] ||
+    (fragrance ? product.fragranceImages?.[fragrance] : undefined) ||
+    product.image;
+
+  // Reveal the mobile sticky bar once the main add-to-cart row scrolls off-screen.
+  useEffect(() => {
+    const el = addRowRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) =>
+        setShowSticky(!entry.isIntersecting && entry.boundingClientRect.top < 0),
+      { threshold: 0 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  // Lightbox: lock body scroll and close on Esc while the zoomed view is open.
+  useEffect(() => {
+    if (!zoomed) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setZoomed(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [zoomed]);
+
+  function addToCart(source: HTMLElement | null) {
+    if (!selected || outOfStock) return;
+    flyToCart(source, image);
+    addItem({
+      sku: selected.sku,
+      productSlug: product.slug,
+      name: product.name,
+      fragrance: selected.fragrance,
+      size: selected.size,
+      image,
+      pricePaise: selected.pricePaise,
+    });
+    setJustAdded(true);
+    setTimeout(() => setJustAdded(false), 1800);
+  }
+
+  return (
+    <>
+    <div className="mt-10 grid gap-16 md:grid-cols-2">
+      {/* Visual — fragrance-aware */}
+      <div
+        ref={imageRef}
+        className="relative min-h-[460px] overflow-hidden border border-line bg-paper"
+      >
+        <Image
+          key={image}
+          src={image}
+          alt={`${product.name}${fragrance ? ` — ${fragrance}` : ""}`}
+          fill
+          sizes="(max-width: 768px) 100vw, 600px"
+          className="object-contain variant-in"
+          priority
+        />
+        {/* Tap/click to enlarge — full-cover button keeps it keyboard-accessible. */}
+        <button
+          type="button"
+          onClick={() => setZoomed(true)}
+          aria-label="Zoom image"
+          className="group absolute inset-0 cursor-zoom-in"
+        >
+          <span className="smallcaps absolute bottom-3 right-3 flex items-center gap-1.5 border border-line bg-bone/85 px-2.5 py-1 text-ink/70 opacity-100 backdrop-blur transition-opacity md:opacity-0 md:group-hover:opacity-100">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M7.6 7.6L10.5 10.5M5 3.5v3M3.5 5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+            </svg>
+            Zoom
+          </span>
+        </button>
+      </div>
+
+      {/* Details */}
+      <div className="flex flex-col">
+        <span className="smallcaps text-brass-deep">{product.claim}</span>
+        <h1 className="mt-4 font-serif text-5xl">{product.name}</h1>
+        <p className="mt-3 text-lg text-ink/70">{product.tagline}</p>
+        <Ornament align="left" className="mt-5" />
+
+        <div className="mt-10 flex flex-col gap-8">
+          {hasFragrance && (
+            <div>
+              <p className="smallcaps mb-3 text-ink/70">Fragrance</p>
+              <div className="flex flex-wrap gap-3">
+                {product.fragrances.map((f) => {
+                  const active = f === fragrance;
+                  return (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFragrance(f)}
+                      className={`flex items-center gap-2 border px-4 py-2.5 text-sm transition-colors ${
+                        active
+                          ? "border-forest bg-forest text-bone"
+                          : "border-line hover:border-ink"
+                      }`}
+                    >
+                      <span
+                        className="h-3 w-3 rounded-full border border-black/10"
+                        style={{ background: FRAGRANCE_HEX[f] }}
+                      />
+                      {f}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          <div>
+            <p className="smallcaps mb-3 text-ink/70">Size</p>
+            <div className="flex flex-wrap gap-3">
+              {product.sizes.map((s) => {
+                const active = s === size;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setSize(s)}
+                    className={`border px-5 py-2.5 text-sm transition-colors ${
+                      active
+                        ? "border-forest bg-forest text-bone"
+                        : "border-line hover:border-ink"
+                    }`}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div
+            ref={addRowRef}
+            className="flex items-center justify-between border-t border-line pt-7"
+          >
+            <div className="flex flex-col">
+              <span className="font-serif text-3xl">
+                {selected ? formatINR(selected.pricePaise) : "—"}
+              </span>
+              {selected && (
+                <span className="smallcaps mt-1.5 text-ink/40">
+                  SKU {selected.sku}
+                </span>
+              )}
+              {lowStock && (
+                <span className="smallcaps mt-1.5 text-brass-deep">
+                  Only {selected!.stock} left
+                </span>
+              )}
+            </div>
+            <button
+              type="button"
+              disabled={!selected || outOfStock}
+              onClick={() => addToCart(imageRef.current)}
+              className="smallcaps bg-forest px-9 py-4 text-bone btn-fill-forest disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {outOfStock ? "Out of Stock" : justAdded ? "Added ✓" : "Add to Cart"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-12 space-y-2 border-t border-line pt-7 text-sm text-ink/70">
+          <p>🌱 Plant-powered formula, made in India</p>
+          <p>🚚 Dispatched within 1 working day · delivery ₹64 (WB) / ₹160 (India)</p>
+          <p>↩️ Returns on damaged or wrong items</p>
+        </div>
+      </div>
+    </div>
+
+    {/* Editorial depth — description, benefits, ritual, safety */}
+    {(product.description ||
+      product.benefits?.length ||
+      product.howToUse?.length) && (
+      <div className="mt-20 grid gap-14 border-t border-line pt-16 md:grid-cols-2">
+        <div>
+          <span className="smallcaps text-brass-deep">About this product</span>
+          <Ornament align="left" className="mt-3 mb-7" />
+          {product.description && (
+            <p className="text-lg leading-relaxed text-ink/75">
+              {product.description}
+            </p>
+          )}
+          {product.benefits && product.benefits.length > 0 && (
+            <ul className="mt-9 space-y-3.5">
+              {product.benefits.map((b) => (
+                <li key={b} className="flex items-start gap-3 text-ink/80">
+                  <span className="mt-2 h-2 w-2 shrink-0 rotate-45 bg-brass" />
+                  {b}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        {product.howToUse && product.howToUse.length > 0 && (
+          <div>
+            <span className="smallcaps text-brass-deep">The Ritual</span>
+            <Ornament align="left" className="mt-3 mb-7" />
+            <ol className="space-y-7">
+              {product.howToUse.map((step, i) => (
+                <li key={i} className="flex gap-5">
+                  <span className="font-serif text-3xl leading-none text-brass-deep/70">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span className="pt-1 leading-relaxed text-ink/75">
+                    {step}
+                  </span>
+                </li>
+              ))}
+            </ol>
+            {product.safety && (
+              <p className="mt-9 border-l-2 border-brass/50 bg-brass/[0.06] px-5 py-4 text-sm leading-relaxed text-ink/65">
+                <strong className="smallcaps text-brass-deep">Safety</strong>
+                <br />
+                {product.safety}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    )}
+
+    {/* Brand promise badges */}
+    <div className="mt-16 grid grid-cols-2 gap-px border border-line bg-line sm:grid-cols-4">
+      {[
+        ["🇮🇳", "Made in India"],
+        ["🌱", "Plant-Powered"],
+        ["🐇", "Not Tested on Animals"],
+        ["📦", "Ships in 1 Day"],
+      ].map(([icon, label]) => (
+        <div
+          key={label}
+          className="flex flex-col items-center gap-2 bg-paper px-4 py-7 text-center"
+        >
+          <span className="text-2xl">{icon}</span>
+          <span className="smallcaps text-ink/70">{label}</span>
+        </div>
+      ))}
+    </div>
+
+    {/* Mobile sticky add-to-cart — appears after the main row scrolls away */}
+    <div
+      ref={stickyRef}
+      className={`fixed inset-x-0 bottom-0 z-40 border-t border-line bg-bone/95 px-5 py-3 backdrop-blur transition-transform duration-300 ease-out md:hidden ${
+        showSticky ? "translate-y-0" : "translate-y-full"
+      }`}
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+    >
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 flex-col">
+          <span className="truncate font-serif text-base leading-tight">
+            {product.name}
+          </span>
+          <span className="text-sm text-ink/55">
+            {selected ? formatINR(selected.pricePaise) : "—"}
+            {lowStock && (
+              <span className="text-brass-deep"> · Only {selected!.stock} left</span>
+            )}
+          </span>
+        </div>
+        <button
+          type="button"
+          disabled={!selected || outOfStock}
+          onClick={() => addToCart(stickyRef.current)}
+          className="smallcaps shrink-0 bg-forest px-6 py-3 text-bone btn-fill-forest disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {outOfStock ? "Out of Stock" : justAdded ? "Added ✓" : "Add"}
+        </button>
+      </div>
+    </div>
+
+    {/* Image lightbox */}
+    {zoomed && (
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${product.name} — enlarged image`}
+        onClick={() => setZoomed(false)}
+        className="fade-in fixed inset-0 z-[70] flex items-center justify-center bg-ink/90 p-6 backdrop-blur-sm"
+      >
+        <button
+          type="button"
+          onClick={() => setZoomed(false)}
+          aria-label="Close zoom"
+          className="absolute right-5 top-5 flex h-10 w-10 items-center justify-center text-bone/80 transition-colors hover:text-bone"
+        >
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+          </svg>
+        </button>
+        <div className="relative h-full max-h-[85vh] w-full max-w-3xl">
+          <Image
+            src={image}
+            alt={`${product.name}${fragrance ? ` — ${fragrance}` : ""}`}
+            fill
+            sizes="(max-width: 768px) 100vw, 768px"
+            className="object-contain"
+          />
+        </div>
+      </div>
+    )}
+    </>
+  );
+}

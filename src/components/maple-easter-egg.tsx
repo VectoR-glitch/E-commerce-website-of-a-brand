@@ -11,6 +11,13 @@ const KONAMI = [
   "b", "a",
 ];
 
+// Mobile equivalent: the same shape as swipes, then two taps for B + A.
+const SWIPES = [
+  "up", "up", "down", "down",
+  "left", "right", "left", "right",
+  "tap", "tap",
+];
+
 type Leaf = {
   left: number;
   size: number;
@@ -46,25 +53,83 @@ export function MapleEasterEgg() {
   const [burst, setBurst] = useState<{ id: number; leaves: Leaf[] } | null>(null);
 
   useEffect(() => {
-    let pos = 0;
+    let kpos = 0; // keyboard progress
+    let tpos = 0; // touch (swipe) progress
+    let start: { x: number; y: number } | null = null;
+
+    function fire() {
+      const reduce =
+        window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+      setBurst({ id: Date.now(), leaves: makeLeaves(reduce ? 0 : 18) });
+    }
+
+    // Desktop: the classic Konami keypresses.
     function onKey(e: KeyboardEvent) {
       if (isEditable(e.target)) return; // don't hijack typing
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-      if (key === KONAMI[pos]) {
-        pos += 1;
-        if (pos === KONAMI.length) {
-          pos = 0;
-          const reduce =
-            window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-          setBurst({ id: Date.now(), leaves: makeLeaves(reduce ? 0 : 18) });
+      if (key === KONAMI[kpos]) {
+        kpos += 1;
+        if (kpos === KONAMI.length) {
+          kpos = 0;
+          fire();
         }
       } else {
-        // Allow this key to start a fresh attempt.
-        pos = key === KONAMI[0] ? 1 : 0;
+        kpos = key === KONAMI[0] ? 1 : 0; // allow a fresh attempt
       }
     }
+
+    // Mobile: the same sequence as swipes (then two taps). Passive listeners —
+    // we only read coordinates and never preventDefault, so scrolling is intact.
+    function onTouchStart(e: TouchEvent) {
+      if (e.touches.length !== 1) {
+        start = null;
+        return;
+      }
+      start = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (!start) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      start = null;
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+      const max = Math.max(absX, absY);
+
+      let gesture: string;
+      if (max < 14) {
+        if (isEditable(e.target)) return; // a tap on a control, not the egg
+        gesture = "tap";
+      } else if (max < 36) {
+        tpos = 0; // ambiguous tiny swipe — reset
+        return;
+      } else if (absX > absY) {
+        gesture = dx > 0 ? "right" : "left";
+      } else {
+        gesture = dy > 0 ? "down" : "up";
+      }
+
+      if (gesture === SWIPES[tpos]) {
+        tpos += 1;
+        if (tpos === SWIPES.length) {
+          tpos = 0;
+          fire();
+        }
+      } else {
+        tpos = gesture === SWIPES[0] ? 1 : 0;
+      }
+    }
+
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("touchstart", onTouchStart, { passive: true });
+    window.addEventListener("touchend", onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("touchstart", onTouchStart);
+      window.removeEventListener("touchend", onTouchEnd);
+    };
   }, []);
 
   // Self-clean once the longest leaf has finished falling.

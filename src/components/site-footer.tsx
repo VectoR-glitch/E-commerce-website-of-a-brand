@@ -67,7 +67,7 @@ export function SiteFooter() {
       <div className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-8 py-6 sm:flex-row sm:justify-between">
           <p className="smallcaps text-ink/70">
-            Bliss in Every Drop · Bharat Bliss Pvt Ltd · © {new Date().getFullYear()}
+            Bliss in Every Drop · Bharat Bliss Pvt Ltd · © {new Date().getFullYear()} 🍁
           </p>
           <div className="flex gap-5">
             <Link href="/privacy" className="smallcaps link-underline text-ink/70 hover:text-forest">

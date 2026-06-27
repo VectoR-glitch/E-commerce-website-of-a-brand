@@ -4,6 +4,7 @@ import { CleaningFact } from "@/components/cleaning-fact";
 import { ScrollProgress } from "@/components/scroll-progress";
 import { BackToTop } from "@/components/back-to-top";
 import { CartDrawer } from "@/components/cart-drawer";
+import { MapleEasterEgg } from "@/components/maple-easter-egg";
 import { CartProvider } from "@/lib/cart-context";
 
 export default function SiteLayout({
@@ -28,6 +29,7 @@ export default function SiteLayout({
       <SiteFooter />
       <BackToTop />
       <CartDrawer />
+      <MapleEasterEgg />
     </CartProvider>
   );
 }

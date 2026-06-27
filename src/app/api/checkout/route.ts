@@ -96,10 +96,13 @@ export async function POST(request: Request) {
     const variant = bySku.get(line.sku);
     if (!variant)
       return badRequest(`An item in your cart is no longer available.`);
-    if (variant.stock < qty)
+    if (variant.stock < qty) {
+      // Name the exact variant (fragrance + size), not just the product line.
+      const desc = [variant.fragrance, variant.size].filter(Boolean).join(" · ");
       return badRequest(
-        `Only ${variant.stock} left of ${variant.product.name}. Please adjust your cart.`,
+        `Only ${variant.stock} left of ${variant.product.name}${desc ? ` (${desc})` : ""}. Please adjust your cart.`,
       );
+    }
 
     const linePaise = variant.pricePaise * qty;
     subtotalPaise += linePaise;

@@ -1,0 +1,163 @@
+// KLENICH — transactional data (source of truth for price, inventory, orders).
+// Marketing content (descriptions, images) lives in Sanity, merged by slug/sku.
+// Money is stored in PAISE (integer) to avoid floating-point errors.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// A product line (e.g. Floor Cleaner). Marketing content keyed by `slug` in Sanity.
+model Product {
+  id        String    @id @default(cuid())
+  slug      String    @unique // matches Sanity product.slug.current
+  name      String
+  active    Boolean   @default(true)
+  variants  Variant[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+/// A buyable SKU (fragrance + size). Price & stock are the source of truth here.
+model Variant {
+  id         String      @id @default(cuid())
+  sku        String      @unique
+  barcode    String?     @unique // EAN-13; null for items without a barcode
+  product    Product     @relation(fields: [productId], references: [id])
+  productId  String
+  fragrance  String? // null when the product has no fragrance axis
+  size       String
+  pricePaise Int
+  stock      Int         @default(0)
+  // Packed shipping weight of one unit in grams (bottle + packaging). Nullable
+  // means "not yet measured": courier rate calc must treat null as a hard block,
+  // never as 0g. Set per-SKU once each bottle is weighed.
+  weightGrams Int?
+  active     Boolean     @default(true) // inactive variants never show on the site
+  orderItems OrderItem[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([productId])
+}
+
+model Customer {
+  id        String    @id @default(cuid())
+  email     String    @unique
+  name      String?
+  phone     String?
+  orders    Order[]
+  addresses Address[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  customer   Customer @relation(fields: [customerId], references: [id])
+  customerId String
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  pincode    String
+  phone      String?
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([customerId])
+}
+
+/// An order. All address/price fields are SNAPSHOTTED at checkout so later
+/// catalog or address edits never alter a historical order.
+model Order {
+  id          String  @id @default(cuid())
+  orderNumber String  @unique // human-friendly, e.g. KLN-2026-0042
+
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  customerId String? // null for guest checkout
+
+  // contact snapshot
+  email String
+  phone String?
+
+  // shipping snapshot (denormalized on purpose)
+  shipName    String
+  shipLine1   String
+  shipLine2   String?
+  shipCity    String
+  shipState   String
+  shipPincode String
+
+  status        OrderStatus   @default(PENDING)
+  paymentStatus PaymentStatus @default(PENDING)
+  paymentMethod PaymentMethod @default(ONLINE)
+
+  // money, all in paise
+  subtotalPaise Int
+  shippingPaise Int @default(0)
+  discountPaise Int @default(0)
+  totalPaise    Int
+  // Amount actually collected via Razorpay. ONLINE = totalPaise; COD = the
+  // delivery fee prepaid up front (goods are paid in cash on delivery, so the
+  // cash due on delivery = totalPaise - amountPaidPaise).
+  amountPaidPaise Int @default(0)
+
+  // Razorpay
+  razorpayOrderId   String? @unique
+  razorpayPaymentId String?
+  razorpaySignature String?
+
+  items     OrderItem[]
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@index([customerId])
+  @@index([status])
+}
+
+model OrderItem {
+  id      String @id @default(cuid())
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId String
+
+  variant   Variant? @relation(fields: [variantId], references: [id])
+  variantId String? // kept nullable so deleting a variant never orphans history
+
+  // snapshot fields — immutable record of what was bought
+  sku         String
+  productName String
+  fragrance   String?
+  size        String
+  unitPaise   Int
+  quantity    Int
+  linePaise   Int
+
+  @@index([orderId])
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PACKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  RETURNED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  PARTIALLY_PAID // COD: delivery fee prepaid online, goods still due as cash
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  ONLINE // prepaid via Razorpay
+  COD    // delivery fee prepaid via Razorpay; goods collected in cash on delivery
+}

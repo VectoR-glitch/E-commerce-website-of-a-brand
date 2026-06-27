@@ -1,0 +1,352 @@
+@import "tailwindcss";
+
+/*
+  KLENICH — Modern Apothecary design tokens (Pillar 6, locked)
+  bone / charcoal / deep forest / brass / sage
+*/
+@theme {
+  --color-bone: #f5f1e8;
+  --color-paper: #fbfaf5;
+  --color-ink: #1c1c1a;
+  --color-forest: #1f3d2b;
+  --color-forest-dark: #162c1f;
+  --color-brass: #b08d4c;
+  /* Deeper brass for label TEXT — clears WCAG AA (≥4.5:1) on bone/paper.
+     Bright --color-brass stays for ornaments, hairlines, borders & fills. */
+  --color-brass-deep: #806224;
+  --color-sage: #c8d1c0;
+  --color-line: #e0dac9;
+
+  /* fragrance chips */
+  --color-lime: #9cb84a;
+  --color-jasmine: #efe9dc;
+  --color-lavender: #a89bc4;
+  --color-lemongrass: #c2c56a;
+
+  --font-serif: var(--font-fraunces), ui-serif, Georgia, serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+}
+
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* Let Fraunces use its display optical size at large headings. */
+  font-optical-sizing: auto;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--color-bone);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  line-height: 1.65;
+}
+
+/* ── Display typography refinement ──────────────────────────────────────
+   Serif headings get a touch of negative tracking and tighter leading for
+   an editorial feel, plus balanced wrapping so multi-line titles break
+   evenly. Body copy gets orphan-avoiding "pretty" wrapping. */
+h1,
+h2,
+h3 {
+  letter-spacing: -0.015em;
+  text-wrap: balance;
+}
+h1 {
+  line-height: 1.05;
+}
+h2 {
+  line-height: 1.1;
+}
+p {
+  text-wrap: pretty;
+}
+
+/* Editorial drop cap for long-form story copy. */
+.dropcap::first-letter {
+  float: left;
+  font-family: var(--font-serif);
+  font-weight: 600;
+  font-size: 3.4em;
+  line-height: 0.72;
+  padding-right: 0.09em;
+  margin-top: 0.06em;
+  color: var(--color-forest);
+}
+
+/* Wide letter-spaced small-caps label — the Modern Apothecary signature */
+.smallcaps {
+  text-transform: uppercase;
+  letter-spacing: 0.28em;
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+/* ── Motion: subtle, premium scroll-reveal ──────────────────────────────
+   Elements start gently lowered + transparent (in the SSR HTML, so there's
+   no flash) and ease into place when scrolled into view via <Reveal>. */
+.reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition:
+    opacity 0.7s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.7s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+.reveal.is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Soft fade + settle-in for hero/featured imagery on first paint */
+@keyframes klen-soft-in {
+  from {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.soft-in {
+  animation: klen-soft-in 1.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+/* Add-to-cart: a lively "pop" on the cart link when an item lands in it. */
+@keyframes klen-cart-bump {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.16);
+  }
+  60% {
+    transform: scale(0.97);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.cart-bump {
+  animation: klen-cart-bump 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Variant swap: gentle fade + micro-zoom when the product image changes. */
+@keyframes klen-variant-in {
+  from {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+.variant-in {
+  animation: klen-variant-in 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Continuous marquee ticker — two identical groups, shift by half for a
+   seamless loop. Pauses on hover. */
+@keyframes klen-ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.ticker-track {
+  animation: klen-ticker 32s linear infinite;
+}
+.ticker:hover .ticker-track {
+  animation-play-state: paused;
+}
+
+/* Mobile menu: panel drops in, links stagger, backdrop fades. */
+@keyframes klen-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.menu-in {
+  animation: klen-menu-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes klen-menu-item {
+  from {
+    opacity: 0;
+    transform: translateY(-7px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.menu-item {
+  animation: klen-menu-item 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes klen-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.fade-in {
+  animation: klen-fade-in 0.3s ease-out;
+}
+
+/* Respect users who prefer no motion — show everything, animate nothing. */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+  .soft-in {
+    animation: none !important;
+  }
+  .cart-bump {
+    animation: none !important;
+  }
+  .variant-in {
+    animation: none !important;
+  }
+  .ticker-track {
+    animation: none !important;
+  }
+  .page-fade {
+    animation: none !important;
+  }
+  .menu-in,
+  .menu-item,
+  .fade-in {
+    animation: none !important;
+  }
+  .btn-fill,
+  .btn-fill-forest {
+    transition: none !important;
+  }
+}
+
+/* ── Fine craft details ────────────────────────────────────────────────── */
+
+/* Branded text selection. */
+::selection {
+  background: var(--color-forest);
+  color: var(--color-bone);
+}
+
+/* Slim, brand-toned scrollbar. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line) transparent;
+}
+::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bone);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-line);
+  border-radius: 999px;
+  border: 3px solid var(--color-bone);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-brass);
+}
+
+/* Accessible, on-brand keyboard focus ring (mouse clicks unaffected). */
+:focus-visible {
+  outline: 2px solid var(--color-brass);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Button hover: a solid ink fill sweeps in from the left; text flips to bone. */
+.btn-fill {
+  background-image: linear-gradient(var(--color-ink), var(--color-ink));
+  background-size: 0% 100%;
+  background-position: left center;
+  background-repeat: no-repeat;
+  transition:
+    background-size 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.3s ease;
+}
+.btn-fill:hover,
+.btn-fill:focus-visible,
+.group:hover .btn-fill {
+  background-size: 100% 100%;
+  color: var(--color-bone);
+}
+
+/* Same left-to-right sweep for solid forest buttons: a forest-dark wash fills
+   in over the existing forest fill (text stays bone). */
+.btn-fill-forest {
+  background-image: linear-gradient(
+    var(--color-forest-dark),
+    var(--color-forest-dark)
+  );
+  background-size: 0% 100%;
+  background-position: left center;
+  background-repeat: no-repeat;
+  transition: background-size 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.btn-fill-forest:hover,
+.btn-fill-forest:focus-visible,
+.group:hover .btn-fill-forest {
+  background-size: 100% 100%;
+}
+
+/* Animated underline that grows from the left on hover. */
+.link-underline {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-size: 0% 1px;
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  transition: background-size 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.link-underline:hover {
+  background-size: 100% 1px;
+}
+
+/* Soft fade-up on every route change (via the (site) template). */
+@keyframes klen-page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.page-fade {
+  animation: klen-page-in 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Barely-there paper grain for a tactile, printed feel. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.025;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}

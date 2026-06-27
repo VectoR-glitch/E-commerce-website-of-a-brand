@@ -25,7 +25,11 @@ type SettleResult =
  *   - COD:    only the delivery fee was prepaid → paymentStatus PARTIALLY_PAID,
  *             with the goods (totalPaise - amountPaidPaise) still due as cash on
  *             delivery.
- * Either way the order moves to CONFIRMED and stock is decremented.
+ * Stock is decremented with a GUARDED update (only when enough remains), so a
+ * stock change between order creation and payment can never push it negative.
+ * If every line is satisfiable the order moves to CONFIRMED; if any line falls
+ * short the order is left ON_HOLD for staff (the payment is already captured —
+ * we never silently confirm an order we can't fulfill).
  *
  * Race-safety: the PENDING→settled flip is an atomic conditional `updateMany`
  * inside a transaction. Only the caller that wins that flip (claimed.count === 1)
@@ -55,11 +59,13 @@ export async function settleOrderPaid(params: {
     const isCod = existing.paymentMethod === "COD";
     const amountPaidPaise = isCod ? existing.shippingPaise : existing.totalPaise;
 
+    // Claim the settlement by flipping paymentStatus off PENDING. The final
+    // order status is set AFTER the stock check below, so we don't confirm an
+    // order we then find we can't fulfill.
     const claimed = await tx.order.updateMany({
       where: { razorpayOrderId, paymentStatus: "PENDING" },
       data: {
         paymentStatus: isCod ? "PARTIALLY_PAID" : "PAID",
-        status: "CONFIRMED",
         amountPaidPaise,
         razorpayPaymentId: paymentId,
         ...(signature ? { razorpaySignature: signature } : {}),
@@ -72,15 +78,23 @@ export async function settleOrderPaid(params: {
       return { ok: true, orderNumber: existing.orderNumber, newlySettled: false, order: existing };
     }
 
-    // We won the claim: decrement stock for each line that maps to a variant.
+    // We won the claim: decrement each line with a GUARDED update that only
+    // matches rows with enough stock — so it can never go negative. A line that
+    // can't be satisfied flags the whole order for staff review (ON_HOLD).
+    let shortfall = false;
     for (const item of existing.items) {
-      if (item.variantId) {
-        await tx.variant.update({
-          where: { id: item.variantId },
-          data: { stock: { decrement: item.quantity } },
-        });
-      }
+      if (!item.variantId) continue;
+      const dec = await tx.variant.updateMany({
+        where: { id: item.variantId, stock: { gte: item.quantity } },
+        data: { stock: { decrement: item.quantity } },
+      });
+      if (dec.count === 0) shortfall = true;
     }
+
+    await tx.order.update({
+      where: { id: existing.id },
+      data: { status: shortfall ? "ON_HOLD" : "CONFIRMED" },
+    });
 
     // Re-read so the returned order (used for the confirmation email) reflects
     // the settled status + amountPaidPaise we just wrote.

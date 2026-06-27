@@ -142,6 +142,7 @@ model OrderItem {
 enum OrderStatus {
   PENDING
   CONFIRMED
+  ON_HOLD // paid, but a stock shortfall at settlement blocks fulfillment — needs staff review/refund
   PACKED
   SHIPPED
   DELIVERED

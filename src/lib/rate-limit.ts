@@ -129,16 +129,20 @@ export async function rateLimit(
  * other proxies) uses the LAST hop — the entry the nearest trusted proxy added —
  * rather than the spoofable first one.
  */
-export function getClientIp(request: Request): string {
-  const realIp = request.headers.get("x-real-ip")?.trim();
+export function getClientIpFromHeaders(headers: Headers): string {
+  const realIp = headers.get("x-real-ip")?.trim();
   if (realIp) return realIp;
 
-  const xff = request.headers.get("x-forwarded-for");
+  const xff = headers.get("x-forwarded-for");
   if (xff) {
     const parts = xff.split(",").map((p) => p.trim()).filter(Boolean);
     if (parts.length > 0) return parts[parts.length - 1]!;
   }
   return "unknown";
+}
+
+export function getClientIp(request: Request): string {
+  return getClientIpFromHeaders(request.headers);
 }
 
 /** Builds a 429 JSON response with a Retry-After header. */

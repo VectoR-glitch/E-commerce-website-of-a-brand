@@ -49,6 +49,11 @@ model Customer {
   email     String    @unique
   name      String?
   phone     String?
+  // Account auth. passwordHash is null for guest/order-only rows (no login);
+  // set (scrypt) once a row is an actual login account. role gates the admin
+  // ops console — only ADMIN reaches /admin.
+  passwordHash String?
+  role         Role    @default(CUSTOMER)
   orders    Order[]
   addresses Address[]
   createdAt DateTime  @default(now())
@@ -137,6 +142,12 @@ model OrderItem {
   linePaise   Int
 
   @@index([orderId])
+}
+
+enum Role {
+  CUSTOMER // default — a shopper account (or guest order-only row)
+  STAFF // reserved for future limited-access staff
+  ADMIN // full ops console access
 }
 
 enum OrderStatus {

@@ -122,6 +122,66 @@ function shell(heading: string, intro: string, body: string): string {
   </div>`;
 }
 
+// Plain-text counterpart of the order email. A text/plain part alongside the
+// HTML improves deliverability (some filters penalise HTML-only mail) and gives
+// a clean fallback in text-only clients. No HTML escaping here — this is not an
+// HTML context, so the raw user values are correct.
+function orderText(order: OrderForEmail, opts: { admin: boolean }): string {
+  const isCod = order.paymentMethod === "COD";
+  const codDue = order.totalPaise - order.amountPaidPaise;
+  const lines: string[] = [];
+
+  lines.push(
+    opts.admin
+      ? `New ${isCod ? "COD " : ""}order ${order.orderNumber}`
+      : `Your Klenich order ${order.orderNumber} is confirmed`,
+  );
+  lines.push("");
+
+  if (opts.admin) {
+    lines.push(`Customer: ${order.shipName} · ${order.email}`);
+    lines.push("");
+  }
+  if (isCod) {
+    lines.push(`Cash on Delivery — delivery fee ${formatINR(order.amountPaidPaise)} paid online.`);
+    lines.push(
+      opts.admin
+        ? `Collect ${formatINR(codDue)} in cash on delivery.`
+        : `Please keep ${formatINR(codDue)} in cash ready for the delivery agent.`,
+    );
+    lines.push("");
+  }
+
+  lines.push("Items:");
+  for (const it of order.items) {
+    const variant = [it.fragrance, it.size].filter(Boolean).join(" · ");
+    lines.push(`  - ${it.productName}${variant ? ` (${variant})` : ""} × ${it.quantity} — ${formatINR(it.linePaise)}`);
+  }
+  lines.push("");
+
+  lines.push(`Subtotal: ${formatINR(order.subtotalPaise)}`);
+  lines.push(
+    `${isCod ? "Delivery (paid online)" : "Shipping"}: ${order.shippingPaise === 0 ? "Free" : formatINR(order.shippingPaise)}`,
+  );
+  lines.push(`Total: ${formatINR(order.totalPaise)}`);
+  if (isCod) {
+    lines.push(`Paid online (delivery): ${formatINR(order.amountPaidPaise)}`);
+    lines.push(`Due on delivery (cash): ${formatINR(codDue)}`);
+  }
+  lines.push("");
+
+  lines.push("Shipping to:");
+  lines.push(`  ${order.shipName}`);
+  lines.push(`  ${order.shipLine1}`);
+  if (order.shipLine2) lines.push(`  ${order.shipLine2}`);
+  lines.push(`  ${order.shipCity}, ${order.shipState} — ${order.shipPincode}`);
+  lines.push("");
+
+  lines.push("Klenich · Plant-powered home care, made in India");
+  lines.push(SITE_URL);
+  return lines.join("\n");
+}
+
 /**
  * Sends the customer confirmation and the admin notification for a paid order.
  * Call only from the path that newly settles the order (exactly once). Throws
@@ -144,6 +204,7 @@ export async function sendOrderEmails(order: OrderForEmail): Promise<void> {
     from: FROM,
     to: order.email,
     subject: `Your Klenich order ${order.orderNumber} is confirmed`,
+    text: orderText(order, { admin: false }),
     html: shell(
       "Order confirmed",
       isCod
@@ -159,6 +220,7 @@ export async function sendOrderEmails(order: OrderForEmail): Promise<void> {
     to: ADMIN_EMAIL,
     replyTo: order.email,
     subject: `New ${isCod ? "COD " : ""}order ${order.orderNumber} — ${formatINR(order.totalPaise)}`,
+    text: orderText(order, { admin: true }),
     html: shell(
       "New order",
       `New ${isCod ? "COD " : ""}order ${order.orderNumber}`,
@@ -199,11 +261,24 @@ export async function sendContactEmail(msg: ContactMessage): Promise<boolean> {
   const phoneHref = msg.phone.replace(/[^\d+]/g, "");
   const body = escapeHtml(msg.message).replace(/\n/g, "<br/>");
 
+  // Plain-text counterpart (raw values — not an HTML context, so no escaping).
+  const text = [
+    `New contact message from ${msg.name}`,
+    "",
+    `Name:  ${msg.name}`,
+    `Email: ${msg.email}`,
+    `Phone: ${msg.phone}`,
+    "",
+    "Message:",
+    msg.message,
+  ].join("\n");
+
   await resend.emails.send({
     from: FROM,
     to: ADMIN_EMAIL,
     replyTo: msg.email,
     subject: `New contact message from ${msg.name}`,
+    text,
     html: shell(
       "Contact form",
       `Message from ${name}`,

@@ -56,6 +56,15 @@
 4. Shiprocket order-push + AWB capture (on payment settlement).
 5. Tracking webhook + status-update emails → fully live.
 
+## Route naming — reconcile before building
+The live page already exists at **`/track-order`** (static placeholder, linked in the
+footer Help column). This plan's endpoints above were sketched as `/track` + `/track/[token]`.
+To avoid a broken footer link or a second competing route, keep the existing prefix:
+- `/track-order` — the human manual-lookup page (order# + email), replacing today's placeholder.
+- `/track-order/[token]` — the tokened deep-link opened from the order email.
+- `POST /api/track` — manual lookup endpoint (unchanged).
+Update the endpoint paths above to this `/track-order…` prefix when implementing.
+
 ## Security notes
 - Manual lookup requires order# **and** matching email.
 - The email-link token is random + unique (not derivable from the order number).

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { RAZORPAY_KEY_SECRET } from "@/lib/razorpay";
 import { settleOrderPaid } from "@/lib/orders";
 import { sendOrderEmails } from "@/lib/email";
+import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 type VerifyBody = {
   razorpay_order_id?: string;
@@ -18,6 +19,20 @@ function safeEqual(a: string, b: string) {
 }
 
 export async function POST(request: Request) {
+  // Rate limit: a bad-signature request still hits the DB (marks the order
+  // FAILED below), so throttle by IP to blunt unauthenticated write floods and
+  // griefing. Generous enough for a real shopper retrying a failed payment.
+  const rl = await rateLimit(`verify:${getClientIp(request)}`, {
+    limit: 20,
+    windowMs: 5 * 60 * 1000,
+  });
+  if (!rl.ok) {
+    return tooManyRequests(
+      rl.retryAfter,
+      "Too many attempts. Please wait a moment and try again.",
+    );
+  }
+
   let body: VerifyBody;
   try {
     body = await request.json();

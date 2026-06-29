@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { razorpay, RAZORPAY_KEY_ID } from "@/lib/razorpay";
 import { formatINR } from "@/lib/catalog";
-import { MAX_ORDER_PAISE } from "@/lib/constants";
+import { MAX_ORDER_PAISE, MAX_QTY_PER_ITEM, MAX_COD_ORDER_PAISE } from "@/lib/constants";
 import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { resolveShipping } from "@/lib/shiprocket";
 
@@ -92,6 +92,12 @@ export async function POST(request: Request) {
     const qty = Math.floor(Number(line.quantity));
     if (!Number.isFinite(qty) || qty < 1)
       return badRequest("Invalid item quantity.");
+    // Independently re-enforce the per-line cap. The client reducer already
+    // bounds this, but a crafted request can send any quantity straight to
+    // this route — so the server must reject it too (stock is also checked
+    // below, but this guards orders for out-of-stock-but-cap-busting amounts).
+    if (qty > MAX_QTY_PER_ITEM)
+      return badRequest(`You can order at most ${MAX_QTY_PER_ITEM} of a single item.`);
 
     const variant = bySku.get(line.sku);
     if (!variant)
@@ -153,6 +159,15 @@ export async function POST(request: Request) {
   if (!isCod && totalPaise > MAX_ORDER_PAISE) {
     return badRequest(
       `Online payment is limited to ${formatINR(MAX_ORDER_PAISE)} per order. Please reduce some quantities, or contact us for a large order.`,
+    );
+  }
+
+  // Cap the cash exposure on a COD order. Only the delivery fee is prepaid, so
+  // the goods (subtotalPaise) are collected as cash at the door — an order that
+  // can be refused. Above the cap, ask the customer to pay online instead.
+  if (isCod && subtotalPaise > MAX_COD_ORDER_PAISE) {
+    return badRequest(
+      `Cash on Delivery is limited to ${formatINR(MAX_COD_ORDER_PAISE)} of goods per order. Please reduce some quantities, or pay online for a larger order.`,
     );
   }
 

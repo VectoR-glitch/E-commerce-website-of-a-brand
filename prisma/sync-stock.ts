@@ -12,7 +12,8 @@ const STOCK: Record<string, number> = {
   // Floor Cleaner — Jasmine
   "000011": 1054, // 500ml
   "000017": 98, //   1L
-  "000019": 8, //    2L
+  "000019": 2000, // 2L — physically RESTOCKED 0→2000 after the May report; this
+  //                  overrides the xlsx BALANCE STOCK of 8 (confirmed 2026-06-28).
   // Floor Cleaner — Lavender
   "000012": 328, //  500ml
   "000018": 68, //   1L

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { getProduct } from "@/lib/products";
 import { ProductDetail } from "@/components/product-detail";
 import { SITE_URL } from "@/lib/constants";
+import { jsonLdHtml } from "@/lib/json-ld";
 import type { Product } from "@/lib/catalog";
 
 export const dynamic = "force-dynamic";
@@ -66,7 +67,7 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
     <section className="mx-auto max-w-6xl px-8 py-20">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd(product)) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(productJsonLd(product)) }}
       />
       <Link href="/shop" className="smallcaps text-ink/70 hover:text-forest">
         ← Back to shop

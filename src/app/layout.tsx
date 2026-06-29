@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter } from "next/font/google";
 import { SITE_URL } from "@/lib/constants";
+import { jsonLdHtml } from "@/lib/json-ld";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -66,7 +67,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col">
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
+          dangerouslySetInnerHTML={{ __html: jsonLdHtml(orgJsonLd) }}
         />
         {children}
       </body>

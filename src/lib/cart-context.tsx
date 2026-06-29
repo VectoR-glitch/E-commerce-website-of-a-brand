@@ -7,6 +7,7 @@ import {
   useMemo,
   useReducer,
 } from "react";
+import { MAX_QTY_PER_ITEM } from "@/lib/constants";
 
 export type CartItem = {
   sku: string;
@@ -32,8 +33,11 @@ const STORAGE_KEY = "klenich.cart.v1";
 
 // Hard cap per line item — enforced HERE in the reducer so every path (+/−
 // buttons, manual entry, repeated add-to-cart) is bound by it, with no UI
-// workaround. Real stock is still re-validated server-side at checkout.
-export const MAX_QTY_PER_ITEM = 999;
+// workaround. Real stock is still re-validated server-side at checkout, and
+// the server independently re-enforces this same cap (canonical value lives in
+// constants.ts so both sides share one source of truth). Re-exported here so
+// existing client consumers (cart, quantity-stepper) keep their import path.
+export { MAX_QTY_PER_ITEM };
 
 function reducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {

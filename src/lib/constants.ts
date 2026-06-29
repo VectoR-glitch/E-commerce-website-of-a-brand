@@ -7,6 +7,18 @@
 // accept larger single orders (and confirm your Razorpay limit allows it).
 export const MAX_ORDER_PAISE = 50000000; // ₹5,00,000
 
+// Hard cap on the quantity of a single line item. The canonical source of
+// truth for BOTH the client cart reducer (re-exported from cart-context) and
+// the server checkout route — a crafted request bypasses the client cap, so
+// the server must enforce the same bound independently.
+export const MAX_QTY_PER_ITEM = 999;
+
+// Ceiling on the GOODS value of a Cash-on-Delivery order, in paise. COD only
+// prepays the delivery fee, so the goods total is our cash exposure on an order
+// that may be refused at the door — cap it to limit that risk. Online orders
+// are unaffected (they're fully prepaid, bounded only by MAX_ORDER_PAISE).
+export const MAX_COD_ORDER_PAISE = 500000; // ₹5,000
+
 // Flat, state-based delivery charge in paise, applied to EVERY order (online
 // and COD alike) — there is no free-shipping threshold. West Bengal (our home
 // state) is the regional rate; everywhere else is the national rate.

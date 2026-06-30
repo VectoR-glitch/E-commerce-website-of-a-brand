@@ -6,6 +6,7 @@
 //   RESEND_FROM     — sender; defaults to the test sender until klenich.com is
 //                     verified, then set to "Klenich <orders@klenich.com>"
 //   ADMIN_EMAIL     — where order notifications land (your inbox)
+import type { OrderStatus } from "@prisma/client";
 import { Resend } from "resend";
 import { formatINR } from "@/lib/catalog";
 import { SITE_URL } from "@/lib/constants";
@@ -225,6 +226,108 @@ export async function sendOrderEmails(order: OrderForEmail): Promise<void> {
       "New order",
       `New ${isCod ? "COD " : ""}order ${order.orderNumber}`,
       `<p style="color:${C.muted};font-size:14px;margin:0 0 18px;">Customer: <strong style="color:${C.ink};">${escapeHtml(order.shipName)}</strong> · ${escapeHtml(order.email)}</p>${isCod ? `<p style="margin:0 0 18px;font-size:14px;color:${C.ink};"><strong>COD</strong> — delivery fee ${formatINR(order.amountPaidPaise)} prepaid online. Collect <strong>${formatINR(codDuePaise)}</strong> in cash on delivery.</p>` : ""}${summary}`,
+    ),
+  });
+}
+
+// ── Order status-change emails (sent from the admin panel) ──────────────────
+type StatusCopy = { heading: string; intro: string; note?: string };
+
+// Customer-facing copy per fulfilment status. Statuses NOT listed here (e.g.
+// PENDING) send no email — there's nothing useful to tell the customer yet.
+const STATUS_EMAILS: Partial<Record<OrderStatus, StatusCopy>> = {
+  CONFIRMED: {
+    heading: "Order confirmed",
+    intro: "Your order is confirmed.",
+    note: "We're getting it ready for dispatch — we'll email you again when it ships.",
+  },
+  PACKED: {
+    heading: "Packed",
+    intro: "Your order is packed and ready to ship.",
+    note: "It'll be handed to the courier shortly.",
+  },
+  SHIPPED: {
+    heading: "On its way",
+    intro: "Your order has shipped.",
+    note: "It's now with the courier and on its way to you.",
+  },
+  DELIVERED: {
+    heading: "Delivered",
+    intro: "Your order has been delivered.",
+    note: "We hope you love it. If anything isn't right, just reply to this email.",
+  },
+  ON_HOLD: {
+    heading: "Order on hold",
+    intro: "Your order is temporarily on hold.",
+    note: "Our team is reviewing it and will be in touch shortly.",
+  },
+  CANCELLED: {
+    heading: "Order cancelled",
+    intro: "Your order has been cancelled.",
+    note: "If a payment was made, any refund will be processed to your original payment method.",
+  },
+  RETURNED: {
+    heading: "Return processed",
+    intro: "Your return has been processed.",
+    note: "Any eligible refund will follow to your original payment method.",
+  },
+};
+
+/** True when a status change should notify the customer by email. */
+export function statusEmailsCustomer(status: OrderStatus): boolean {
+  return status in STATUS_EMAILS;
+}
+
+// Plain-text counterpart of the status email (deliverability + text clients).
+function statusText(order: OrderForEmail, copy: StatusCopy): string {
+  const lines: string[] = [];
+  lines.push(`Klenich order ${order.orderNumber} — ${copy.heading}`);
+  lines.push("");
+  lines.push(copy.intro);
+  if (copy.note) {
+    lines.push("");
+    lines.push(copy.note);
+  }
+  lines.push("");
+  lines.push("Items:");
+  for (const it of order.items) {
+    const variant = [it.fragrance, it.size].filter(Boolean).join(" · ");
+    lines.push(`  - ${it.productName}${variant ? ` (${variant})` : ""} × ${it.quantity} — ${formatINR(it.linePaise)}`);
+  }
+  lines.push("");
+  lines.push(`Total: ${formatINR(order.totalPaise)}`);
+  lines.push("");
+  lines.push("Questions? Just reply to this email.");
+  lines.push("");
+  lines.push("Klenich · Plant-powered home care, made in India");
+  lines.push(SITE_URL);
+  return lines.join("\n");
+}
+
+/**
+ * Emails the customer when their order's fulfilment status changes. Best-effort:
+ * the caller swallows throws so email never blocks or breaks the status update.
+ * No-ops for statuses with no customer-facing copy (and when no API key is set).
+ */
+export async function sendOrderStatusEmail(order: OrderForEmail, status: OrderStatus): Promise<void> {
+  if (!resend) return; // no key → safe no-op until configured
+  const copy = STATUS_EMAILS[status];
+  if (!copy) return; // status the customer doesn't need an email for
+
+  const noteHtml = copy.note
+    ? `<p style="margin:0 0 18px;padding:12px 14px;background:${C.bone};border:1px solid ${C.line};border-radius:4px;font-size:14px;color:${C.ink};">${copy.note}</p>`
+    : "";
+
+  await resend.emails.send({
+    from: FROM,
+    to: order.email,
+    replyTo: ADMIN_EMAIL,
+    subject: `Your Klenich order ${order.orderNumber} — ${copy.heading}`,
+    text: statusText(order, copy),
+    html: shell(
+      copy.heading,
+      copy.intro,
+      `<p style="color:${C.muted};font-size:14px;margin:0 0 18px;">Order <strong style="color:${C.ink};">${order.orderNumber}</strong></p>${noteHtml}${summaryBlock(order)}`,
     ),
   });
 }

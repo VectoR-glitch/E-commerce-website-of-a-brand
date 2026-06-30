@@ -72,7 +72,11 @@ export default async function OrderDetail(props: { params: Promise<{ id: string 
             <p className="mt-1 text-xs text-ink/55">Cancelling/returning a committed order restocks its items.</p>
             <form action={updateOrderStatus} className="mt-3 flex gap-2">
               <input type="hidden" name="orderId" value={order.id} />
-              <select name="status" defaultValue={order.status} className={`${fieldCls} flex-1`}>
+              {/* key forces a remount when the saved status changes, so the
+                  select re-syncs to it (React 19 resets uncontrolled fields to
+                  their defaultValue after a server action, otherwise reverting
+                  the dropdown to its pre-save value). */}
+              <select key={order.status} name="status" defaultValue={order.status} className={`${fieldCls} flex-1`}>
                 {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
               <button className="smallcaps bg-forest px-4 py-2 text-bone btn-fill-forest">Save</button>
@@ -84,7 +88,7 @@ export default async function OrderDetail(props: { params: Promise<{ id: string 
             <p className="mt-1 text-xs text-ink/55">{order.paymentMethod} · e.g. mark COD goods collected as PAID, or REFUNDED.</p>
             <form action={updatePaymentStatus} className="mt-3 flex gap-2">
               <input type="hidden" name="orderId" value={order.id} />
-              <select name="paymentStatus" defaultValue={order.paymentStatus} className={`${fieldCls} flex-1`}>
+              <select key={order.paymentStatus} name="paymentStatus" defaultValue={order.paymentStatus} className={`${fieldCls} flex-1`}>
                 {PAYMENT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
               <button className="smallcaps bg-forest px-4 py-2 text-bone btn-fill-forest">Save</button>

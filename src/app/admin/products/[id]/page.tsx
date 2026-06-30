@@ -10,6 +10,7 @@ import {
   deleteProductImage,
   setPrimaryImage,
 } from "@/app/admin/actions";
+import { SkuEditor } from "@/components/sku-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +38,11 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
       {/* Product fields + editorial content */}
       <div className="mt-6 max-w-2xl border border-line bg-paper p-5">
         <h2 className="smallcaps text-brass-deep">Product &amp; content</h2>
-        <form action={updateProduct} className="mt-3 space-y-4">
+        {/* key on updatedAt remounts the form after each save so its fields
+            re-sync to the saved values — React 19 resets uncontrolled fields to
+            their defaultValue after a server action, which otherwise reverts
+            them to the pre-save values. */}
+        <form key={product.updatedAt.toISOString()} action={updateProduct} className="mt-3 space-y-4">
           <input type="hidden" name="productId" value={product.id} />
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -154,33 +159,37 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
       <h2 className="mt-10 smallcaps text-brass-deep">Variants</h2>
       <div className="mt-3 space-y-3">
         {product.variants.map((v) => (
-          <form key={v.id} action={updateVariant} className="flex flex-wrap items-end gap-3 border border-line bg-paper p-4">
-            <input type="hidden" name="variantId" value={v.id} />
-            <div>
-              <label className="smallcaps mb-1 block text-brass-deep">SKU</label>
-              <input value={v.sku || "—"} disabled className={`${fieldCls} w-24 bg-bone/50 text-ink/50`} />
-            </div>
-            <div>
-              <label className="smallcaps mb-1 block text-brass-deep">Fragrance</label>
-              <input name="fragrance" defaultValue={v.fragrance ?? ""} placeholder="(none)" className={`${fieldCls} w-28`} />
-            </div>
-            <div>
-              <label className="smallcaps mb-1 block text-brass-deep">Size</label>
-              <input name="size" defaultValue={v.size} required className={`${fieldCls} w-20`} />
-            </div>
-            <div>
-              <label className="smallcaps mb-1 block text-brass-deep">Price ₹</label>
-              <input name="priceRupees" type="number" step="0.01" min={0} defaultValue={rupees(v.pricePaise)} required className={`${fieldCls} w-24`} />
-            </div>
-            <div>
-              <label className="smallcaps mb-1 block text-brass-deep">Weight g</label>
-              <input name="weightGrams" type="number" min={0} defaultValue={v.weightGrams ?? ""} placeholder="—" className={`${fieldCls} w-20`} />
-            </div>
-            <label className="flex items-center gap-1.5 pb-1.5 text-sm">
-              <input type="checkbox" name="active" defaultChecked={v.active} /> Active
-            </label>
-            <button className="smallcaps border border-line px-4 py-1.5 text-ink/70 hover:border-forest hover:text-forest">Save</button>
-          </form>
+          <div key={v.id} className="border border-line bg-paper p-4">
+            <form key={`${v.id}-${v.updatedAt.getTime()}`} action={updateVariant} className="flex flex-wrap items-end gap-3">
+              <input type="hidden" name="variantId" value={v.id} />
+              <div>
+                <label className="smallcaps mb-1 block text-brass-deep">SKU</label>
+                {/* Read-only here — SKU is edited via the gated control below. */}
+                <input value={v.sku || "—"} disabled className={`${fieldCls} w-24 bg-bone/50 text-ink/50`} />
+              </div>
+              <div>
+                <label className="smallcaps mb-1 block text-brass-deep">Fragrance</label>
+                <input name="fragrance" defaultValue={v.fragrance ?? ""} placeholder="(none)" className={`${fieldCls} w-28`} />
+              </div>
+              <div>
+                <label className="smallcaps mb-1 block text-brass-deep">Size</label>
+                <input name="size" defaultValue={v.size} required className={`${fieldCls} w-20`} />
+              </div>
+              <div>
+                <label className="smallcaps mb-1 block text-brass-deep">Price ₹</label>
+                <input name="priceRupees" type="number" step="0.01" min={0} defaultValue={rupees(v.pricePaise)} required className={`${fieldCls} w-24`} />
+              </div>
+              <div>
+                <label className="smallcaps mb-1 block text-brass-deep">Weight g</label>
+                <input name="weightGrams" type="number" min={0} defaultValue={v.weightGrams ?? ""} placeholder="—" className={`${fieldCls} w-20`} />
+              </div>
+              <label className="flex items-center gap-1.5 pb-1.5 text-sm">
+                <input type="checkbox" name="active" defaultChecked={v.active} /> Active
+              </label>
+              <button className="smallcaps border border-line px-4 py-1.5 text-ink/70 hover:border-forest hover:text-forest">Save</button>
+            </form>
+            <SkuEditor variantId={v.id} currentSku={v.sku} />
+          </div>
         ))}
         {product.variants.length === 0 && <p className="text-sm text-ink/50">No variants yet.</p>}
       </div>

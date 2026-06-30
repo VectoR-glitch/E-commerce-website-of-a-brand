@@ -54,7 +54,11 @@ export default async function StockPage() {
                   <td className="px-3 py-2">
                     <form action={updateStock} className="flex gap-2">
                       <input type="hidden" name="variantId" value={v.id} />
+                      {/* key on the saved stock remounts the input after a save
+                          so it shows the new value (React 19 resets uncontrolled
+                          fields to defaultValue after a server action). */}
                       <input
+                        key={v.stock}
                         name="stock"
                         type="number"
                         min={0}

@@ -2,9 +2,10 @@
 // Admin mutations. Server Actions are reachable by direct POST, so EVERY one
 // re-checks requireAdmin() — the UI gate alone is not a security boundary.
 import { revalidatePath } from "next/cache";
-import { OrderStatus, PaymentStatus } from "@prisma/client";
+import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
+import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
 
 const ORDER_STATUSES = Object.values(OrderStatus);
 const PAYMENT_STATUSES = Object.values(PaymentStatus);
@@ -26,9 +27,11 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
   const status = String(formData.get("status") ?? "") as OrderStatus;
   if (!id || !ORDER_STATUSES.includes(status)) return;
 
-  await prisma.$transaction(async (tx) => {
+  // Returns the order snapshot when the status actually changed (null otherwise),
+  // so we only email the customer on a real transition.
+  const changed = await prisma.$transaction(async (tx) => {
     const order = await tx.order.findUnique({ where: { id }, include: { items: true } });
-    if (!order || order.status === status) return;
+    if (!order || order.status === status) return null;
 
     // Restock when leaving a stock-committed status for CANCELLED/RETURNED, so
     // inventory reflects the freed units. (Re-confirming a cancelled order does
@@ -46,11 +49,49 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
       }
     }
     await tx.order.update({ where: { id }, data: { status } });
+    return order; // pre-update snapshot — items/ship/totals are unchanged by this
   });
 
   revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/admin/orders");
   revalidatePath("/admin");
+
+  // Notify the customer of the new status. Best-effort: never let an email
+  // failure surface as a failed status update (the change is already committed).
+  if (changed) {
+    try {
+      await sendOrderStatusEmail(toOrderForEmail(changed), status);
+    } catch (err) {
+      console.error(`status email failed for order ${id}:`, err);
+    }
+  }
+}
+
+// Maps an order row (with items) to the shape the email templates expect.
+type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
+function toOrderForEmail(order: OrderWithItems): OrderForEmail {
+  return {
+    orderNumber: order.orderNumber,
+    email: order.email,
+    shipName: order.shipName,
+    shipLine1: order.shipLine1,
+    shipLine2: order.shipLine2,
+    shipCity: order.shipCity,
+    shipState: order.shipState,
+    shipPincode: order.shipPincode,
+    subtotalPaise: order.subtotalPaise,
+    shippingPaise: order.shippingPaise,
+    totalPaise: order.totalPaise,
+    amountPaidPaise: order.amountPaidPaise,
+    paymentMethod: order.paymentMethod,
+    items: order.items.map((it) => ({
+      productName: it.productName,
+      fragrance: it.fragrance,
+      size: it.size,
+      quantity: it.quantity,
+      linePaise: it.linePaise,
+    })),
+  };
 }
 
 export async function updatePaymentStatus(formData: FormData): Promise<void> {
@@ -145,7 +186,47 @@ export async function updateVariant(formData: FormData): Promise<void> {
   revalidatePath("/admin/stock");
 }
 
-// ── Product images (Cloudflare R2) ──────────────────────────────────────────
+// SKU is the live identity key for the cart and checkout (both resolve variants
+// `where: { sku }`), so editing it is gated behind a deliberate, double-confirmed
+// flow — type it twice + acknowledge — and ALL of that is re-checked here, since
+// a Server Action is reachable by direct POST and the UI gate is not a boundary.
+export type SkuUpdateState = { error?: string; ok?: boolean };
+const SKU_RE = /^[A-Za-z0-9-]{1,32}$/;
+
+export async function updateVariantSku(
+  _prev: SkuUpdateState | undefined,
+  formData: FormData,
+): Promise<SkuUpdateState> {
+  await requireAdmin();
+  const variantId = String(formData.get("variantId") ?? "");
+  const newSku = String(formData.get("newSku") ?? "").trim();
+  const confirmSku = String(formData.get("confirmSku") ?? "").trim();
+  const ack = formData.get("ack") === "on";
+
+  if (!variantId) return { error: "Missing variant." };
+  if (!newSku) return { error: "Enter a new SKU." };
+  if (!SKU_RE.test(newSku)) return { error: "SKU may only contain letters, numbers and hyphens (max 32)." };
+  if (newSku !== confirmSku) return { error: "The two SKU entries don't match." };
+  if (!ack) return { error: "Please tick the box to confirm you understand the change." };
+
+  const variant = await prisma.variant.findUnique({
+    where: { id: variantId },
+    select: { sku: true, productId: true },
+  });
+  if (!variant) return { error: "Variant not found." };
+  if (variant.sku === newSku) return { error: "That is already this variant's SKU." };
+
+  // Unique constraint guard — bail with a clear message rather than throwing.
+  const clash = await prisma.variant.findUnique({ where: { sku: newSku }, select: { id: true } });
+  if (clash) return { error: `SKU "${newSku}" is already used by another variant.` };
+
+  await prisma.variant.update({ where: { id: variantId }, data: { sku: newSku } });
+  revalidatePath(`/admin/products/${variant.productId}`);
+  revalidatePath("/admin/stock");
+  return { ok: true };
+}
+
+// ── Product images (stored as bytes in Postgres) ────────────────────────────
 export async function uploadProductImage(formData: FormData): Promise<void> {
   await requireAdmin();
   const productId = String(formData.get("productId") ?? "");

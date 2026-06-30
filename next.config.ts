@@ -6,9 +6,9 @@ import type { NextConfig } from "next";
 //
 // NOT included yet: a restrictive Content-Security-Policy `script-src`/
 // `default-src`. A real CSP must allowlist Razorpay's checkout.js + frames,
-// Google Fonts, the Sanity image CDN, and Next's inline bootstrap — get that
-// wrong and checkout silently breaks. Build + verify it against the live
-// payment flow in staging, then tighten the CSP below.
+// Google Fonts, and Next's inline bootstrap — get that wrong and checkout
+// silently breaks. Build + verify it against the live payment flow in
+// staging, then tighten the CSP below.
 const securityHeaders = [
   // Force HTTPS for 2 years (Vercel serves everything over TLS).
   {
@@ -37,11 +37,6 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  // Sanity Studio relies on styled-components; this transform fixes the
-  // React context interop under Turbopack.
-  compiler: {
-    styledComponents: true,
-  },
   // Allow phones/other devices on the LAN to load the dev server's /_next
   // resources (JS chunks, HMR). Without this, Next 16 blocks them cross-origin
   // and the page can't hydrate. Dev-only; ignored in production builds.

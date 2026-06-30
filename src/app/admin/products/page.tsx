@@ -51,7 +51,7 @@ export default async function ProductsPage() {
         <form action={createProduct} className="mt-3 space-y-3">
           <input name="name" placeholder="Name (e.g. Glass Cleaner)" required className={`${fieldCls} w-full`} />
           <input name="slug" placeholder="slug (e.g. glass-cleaner)" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" className={`${fieldCls} w-full`} />
-          <p className="text-xs text-ink/55">Lowercase letters, numbers and hyphens. Must match the storefront route + Sanity slug.</p>
+          <p className="text-xs text-ink/55">Lowercase letters, numbers and hyphens. Becomes the storefront route (/product/&lt;slug&gt;).</p>
           <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Create</button>
         </form>
       </div>

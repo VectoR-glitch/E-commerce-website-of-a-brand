@@ -5,10 +5,16 @@ import { revalidatePath } from "next/cache";
 import { OrderStatus, PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { uploadToR2, deleteFromR2, isAllowedImage } from "@/lib/r2";
 
 const ORDER_STATUSES = Object.values(OrderStatus);
 const PAYMENT_STATUSES = Object.values(PaymentStatus);
+
+// Image upload constraints — stored directly in Postgres, so keep them small.
+const ALLOWED_IMAGE_TYPES = ["image/webp", "image/jpeg", "image/png", "image/avif"];
+const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
+function isAllowedImage(type: string, size: number): boolean {
+  return ALLOWED_IMAGE_TYPES.includes(type) && size > 0 && size <= MAX_IMAGE_BYTES;
+}
 
 // Statuses where stock has been committed (decremented at settlement). Moving
 // from one of these INTO a cancelled/returned state returns the units.
@@ -149,18 +155,21 @@ export async function uploadProductImage(formData: FormData): Promise<void> {
   const alt = String(formData.get("alt") ?? "").trim() || null;
   if (!productId || !(file instanceof File) || !isAllowedImage(file.type, file.size)) return;
 
-  const body = Buffer.from(await file.arrayBuffer());
-  const url = await uploadToR2({
-    prefix: `products/${productId}`,
-    filename: file.name,
-    body,
-    contentType: file.type,
-  });
+  const data = Buffer.from(await file.arrayBuffer());
 
   // First image for a product becomes the primary (card/PDP default).
   const count = await prisma.productImage.count({ where: { productId } });
   await prisma.productImage.create({
-    data: { productId, url, alt, fragrance, size, isPrimary: count === 0, sortOrder: count },
+    data: {
+      productId,
+      data,
+      contentType: file.type,
+      alt,
+      fragrance,
+      size,
+      isPrimary: count === 0,
+      sortOrder: count,
+    },
   });
   revalidatePath(`/admin/products/${productId}`);
 }
@@ -169,10 +178,11 @@ export async function deleteProductImage(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("imageId") ?? "");
   if (!id) return;
-  const img = await prisma.productImage.findUnique({ where: { id } });
+  const img = await prisma.productImage.findUnique({
+    where: { id },
+    select: { productId: true },
+  });
   if (!img) return;
-  // Remove the object best-effort, but drop the DB row regardless.
-  await deleteFromR2(img.url).catch(() => {});
   await prisma.productImage.delete({ where: { id } });
   revalidatePath(`/admin/products/${img.productId}`);
 }

@@ -2,12 +2,35 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { products as presentation, type Product, type ClaimTone } from "@/lib/catalog";
 
-// Authoritative price + stock + editorial content (tagline, claim, description,
-// benefits, howToUse, safety) all come from Postgres now — the admin owns them.
-// catalog.ts still supplies images + display order (images move to R2 next).
-// Merge happens by `slug` / fragrance+size.
+// Price, stock, editorial content AND images all come from Postgres now — the
+// admin owns them. Images live in the DB (served via /api/product-image/[id]);
+// catalog.ts only supplies display order + fallbacks. Merge happens by `slug`.
 
-type DbProduct = Prisma.ProductGetPayload<{ include: { variants: true } }>;
+// Select (NOT include) so we never load image binaries on storefront pages —
+// only the id + scoping metadata needed to build URLs.
+const productSelect = {
+  id: true,
+  slug: true,
+  name: true,
+  active: true,
+  tagline: true,
+  claim: true,
+  claimTone: true,
+  description: true,
+  benefits: true,
+  howToUse: true,
+  safety: true,
+  placeholder: true,
+  variants: true,
+  images: {
+    select: { id: true, fragrance: true, size: true, isPrimary: true },
+    orderBy: [{ isPrimary: "desc" as const }, { sortOrder: "asc" as const }],
+  },
+} satisfies Prisma.ProductSelect;
+
+type DbProduct = Prisma.ProductGetPayload<{ select: typeof productSelect }>;
+
+const imageUrl = (id: string) => `/api/product-image/${id}`;
 
 function hydrate(meta: Product, db: DbProduct): Product {
   const variants = db.variants
@@ -27,8 +50,19 @@ function hydrate(meta: Product, db: DbProduct): Product {
   );
   const dbSizes = new Set(variants.map((v) => v.size));
 
+  // Rebuild the image maps from DB rows: default (primary), per-fragrance, and
+  // per-variant. Fall back to the catalog /public paths if a product has no DB
+  // images yet, so the storefront never renders a broken image.
+  const primary = db.images.find((i) => i.isPrimary) ?? db.images[0];
+  const fragranceImages: Record<string, string> = {};
+  const variantImages: Record<string, string> = {};
+  for (const im of db.images) {
+    if (im.fragrance && im.size) variantImages[`${im.fragrance}|${im.size}`] = imageUrl(im.id);
+    else if (im.fragrance) fragranceImages[im.fragrance] = imageUrl(im.id);
+  }
+
   return {
-    ...meta, // images (image, fragranceImages, variantImages) + slug from catalog
+    ...meta, // slug + any fallback fields from catalog
     name: db.name,
     // Editorial content from the DB; fall back to catalog if a field is unset.
     tagline: db.tagline ?? meta.tagline,
@@ -39,6 +73,10 @@ function hydrate(meta: Product, db: DbProduct): Product {
     howToUse: db.howToUse.length ? db.howToUse : meta.howToUse,
     safety: db.safety ?? meta.safety,
     placeholder: db.placeholder ?? meta.placeholder,
+    // Images from the DB, with catalog /public as the fallback.
+    image: primary ? imageUrl(primary.id) : meta.image,
+    fragranceImages: Object.keys(fragranceImages).length ? fragranceImages : meta.fragranceImages,
+    variantImages: Object.keys(variantImages).length ? variantImages : meta.variantImages,
     fragrances: meta.fragrances.filter((f) => dbFragrances.has(f)),
     sizes: meta.sizes.filter((s) => dbSizes.has(s)),
     variants,
@@ -48,7 +86,7 @@ function hydrate(meta: Product, db: DbProduct): Product {
 export async function getProducts(): Promise<Product[]> {
   const dbProducts = await prisma.product.findMany({
     where: { active: true },
-    include: { variants: true },
+    select: productSelect,
   });
   const bySlug = new Map(dbProducts.map((p) => [p.slug, p]));
 
@@ -64,7 +102,7 @@ export async function getProducts(): Promise<Product[]> {
 export async function getProduct(slug: string): Promise<Product | undefined> {
   const db = await prisma.product.findUnique({
     where: { slug },
-    include: { variants: true },
+    select: productSelect,
   });
   if (!db || !db.active) return undefined;
 

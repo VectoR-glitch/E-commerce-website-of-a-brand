@@ -101,7 +101,7 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
           {product.images.map((img) => (
             <div key={img.id} className="border border-line bg-paper p-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={img.url} alt={img.alt ?? ""} className="aspect-square w-full bg-bone object-contain" />
+              <img src={`/api/product-image/${img.id}`} alt={img.alt ?? ""} className="aspect-square w-full bg-bone object-contain" />
               <div className="mt-1 text-xs text-ink/60">
                 {[img.fragrance, img.size].filter(Boolean).join(" · ") || "default"}
                 {img.isPrimary && <span className="ml-1 text-brass-deep">★ primary</span>}

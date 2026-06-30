@@ -34,20 +34,23 @@ model Product {
   updatedAt DateTime  @updatedAt
 }
 
-/// A product image stored in object storage (Cloudflare R2); the DB holds only
-/// the URL + metadata, never the binary. `fragrance`/`size` scope an image to a
-/// specific variant axis (null = the product-level default).
+/// A product image stored directly in Postgres (self-owned, no object storage).
+/// `data` holds the binary; it's served via /api/product-image/[id] with
+/// immutable caching (a new upload = a new id, so the URL is stable to cache).
+/// `fragrance`/`size` scope an image to a specific variant axis (null = the
+/// product-level default).
 model ProductImage {
-  id        String  @id @default(cuid())
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  productId String
-  url       String // public R2 URL
-  alt       String?
-  fragrance String? // null = applies regardless of fragrance
-  size      String? // null = applies regardless of size
-  isPrimary Boolean @default(false) // the card/PDP default
-  sortOrder Int     @default(0)
-  createdAt DateTime @default(now())
+  id          String  @id @default(cuid())
+  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId   String
+  data        Bytes // the image binary (bytea)
+  contentType String // e.g. image/webp
+  alt         String?
+  fragrance   String? // null = applies regardless of fragrance
+  size        String? // null = applies regardless of size
+  isPrimary   Boolean @default(false) // the card/PDP default
+  sortOrder   Int     @default(0)
+  createdAt   DateTime @default(now())
 
   @@index([productId])
 }

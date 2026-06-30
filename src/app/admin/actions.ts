@@ -81,7 +81,7 @@ export async function createProduct(formData: FormData): Promise<void> {
   await requireAdmin();
   const name = String(formData.get("name") ?? "").trim();
   const slug = String(formData.get("slug") ?? "").trim().toLowerCase();
-  // slug must match the storefront route segment + Sanity convention.
+  // slug becomes the storefront route segment (/product/<slug>).
   if (!name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return;
 
   const clash = await prisma.product.findUnique({ where: { slug } });

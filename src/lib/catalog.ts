@@ -1,10 +1,10 @@
 /**
- * KLENICH catalog — single source of truth for the storefront (temporary).
- * Mirrors the locked Pillar 2 SKU architecture.
+ * KLENICH catalog — fallback presentation data + the shared Product type.
  *
- * Later: marketing fields (name, description, images, fragrances) move to Sanity;
- * price + inventory become the source of truth in Postgres, snapshotted into the
- * order at checkout. Keep that split in mind when wiring real data.
+ * Price, stock, editorial content (tagline/claim/description/benefits/howToUse/
+ * safety) and images all live in Postgres now and are merged in by products.ts;
+ * the values here are only fallbacks + display ordering. The `Product` type and
+ * helpers (formatINR, FRAGRANCE_HEX) remain the storefront's shared contract.
  */
 
 export type ClaimTone = "gentle" | "fresh" | "tough";

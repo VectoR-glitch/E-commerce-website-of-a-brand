@@ -12,20 +12,14 @@
   "dependencies": {
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@sanity/icons": "^3.7.4",
-    "@sanity/image-url": "^2.1.1",
-    "@sanity/vision": "^6.1.0",
     "dotenv": "^17.4.2",
     "next": "16.2.9",
-    "next-sanity": "^13.1.1",
     "pg": "^8.22.0",
     "razorpay": "^2.9.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "resend": "^6.14.0",
-    "sanity": "^6.1.0",
-    "server-only": "^0.0.1",
-    "styled-components": "^6.4.2"
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

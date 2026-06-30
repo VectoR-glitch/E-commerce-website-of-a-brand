@@ -36,12 +36,27 @@ const securityHeaders = [
   },
 ];
 
+// Allow next/image to optimize product images served from the R2 public bucket.
+// Driven by R2_PUBLIC_URL so there's no hardcoded host; absent until R2 is
+// configured (storefront still uses /public images until then).
+function r2ImageHost(): string | null {
+  try {
+    return process.env.R2_PUBLIC_URL ? new URL(process.env.R2_PUBLIC_URL).hostname : null;
+  } catch {
+    return null;
+  }
+}
+const r2Host = r2ImageHost();
+
 const nextConfig: NextConfig = {
   // Sanity Studio relies on styled-components; this transform fixes the
   // React context interop under Turbopack.
   compiler: {
     styledComponents: true,
   },
+  ...(r2Host
+    ? { images: { remotePatterns: [{ protocol: "https" as const, hostname: r2Host }] } }
+    : {}),
   // Allow phones/other devices on the LAN to load the dev server's /_next
   // resources (JS chunks, HMR). Without this, Next 16 blocks them cross-origin
   // and the page can't hydrate. Dev-only; ignored in production builds.

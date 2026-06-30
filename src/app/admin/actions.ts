@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { OrderStatus, PaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
+import { uploadToR2, deleteFromR2, isAllowedImage } from "@/lib/r2";
 
 const ORDER_STATUSES = Object.values(OrderStatus);
 const PAYMENT_STATUSES = Object.values(PaymentStatus);
@@ -136,6 +137,57 @@ export async function updateVariant(formData: FormData): Promise<void> {
   });
   revalidatePath("/admin/products");
   revalidatePath("/admin/stock");
+}
+
+// ── Product images (Cloudflare R2) ──────────────────────────────────────────
+export async function uploadProductImage(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const productId = String(formData.get("productId") ?? "");
+  const file = formData.get("file");
+  const fragrance = String(formData.get("fragrance") ?? "").trim() || null;
+  const size = String(formData.get("size") ?? "").trim() || null;
+  const alt = String(formData.get("alt") ?? "").trim() || null;
+  if (!productId || !(file instanceof File) || !isAllowedImage(file.type, file.size)) return;
+
+  const body = Buffer.from(await file.arrayBuffer());
+  const url = await uploadToR2({
+    prefix: `products/${productId}`,
+    filename: file.name,
+    body,
+    contentType: file.type,
+  });
+
+  // First image for a product becomes the primary (card/PDP default).
+  const count = await prisma.productImage.count({ where: { productId } });
+  await prisma.productImage.create({
+    data: { productId, url, alt, fragrance, size, isPrimary: count === 0, sortOrder: count },
+  });
+  revalidatePath(`/admin/products/${productId}`);
+}
+
+export async function deleteProductImage(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("imageId") ?? "");
+  if (!id) return;
+  const img = await prisma.productImage.findUnique({ where: { id } });
+  if (!img) return;
+  // Remove the object best-effort, but drop the DB row regardless.
+  await deleteFromR2(img.url).catch(() => {});
+  await prisma.productImage.delete({ where: { id } });
+  revalidatePath(`/admin/products/${img.productId}`);
+}
+
+export async function setPrimaryImage(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("imageId") ?? "");
+  if (!id) return;
+  const img = await prisma.productImage.findUnique({ where: { id } });
+  if (!img) return;
+  await prisma.$transaction([
+    prisma.productImage.updateMany({ where: { productId: img.productId }, data: { isPrimary: false } }),
+    prisma.productImage.update({ where: { id }, data: { isPrimary: true } }),
+  ]);
+  revalidatePath(`/admin/products/${img.productId}`);
 }
 
 export async function createVariant(formData: FormData): Promise<void> {

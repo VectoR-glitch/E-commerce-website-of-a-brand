@@ -2,7 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { updateProduct, updateVariant, createVariant } from "@/app/admin/actions";
+import {
+  updateProduct,
+  updateVariant,
+  createVariant,
+  uploadProductImage,
+  deleteProductImage,
+  setPrimaryImage,
+} from "@/app/admin/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +22,10 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
 
   const product = await prisma.product.findUnique({
     where: { id },
-    include: { variants: { orderBy: [{ fragrance: "asc" }, { size: "asc" }] } },
+    include: {
+      variants: { orderBy: [{ fragrance: "asc" }, { size: "asc" }] },
+      images: { orderBy: [{ isPrimary: "desc" }, { sortOrder: "asc" }] },
+    },
   });
   if (!product) notFound();
 
@@ -82,6 +92,62 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
           <p className="text-xs text-ink/55">Slug <span className="font-mono">{product.slug}</span> is fixed (changing it would break links).</p>
           <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Save product</button>
         </form>
+      </div>
+
+      {/* Images (Cloudflare R2) */}
+      <h2 className="mt-10 smallcaps text-brass-deep">Images</h2>
+      {product.images.length > 0 ? (
+        <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
+          {product.images.map((img) => (
+            <div key={img.id} className="border border-line bg-paper p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={img.url} alt={img.alt ?? ""} className="aspect-square w-full bg-bone object-contain" />
+              <div className="mt-1 text-xs text-ink/60">
+                {[img.fragrance, img.size].filter(Boolean).join(" · ") || "default"}
+                {img.isPrimary && <span className="ml-1 text-brass-deep">★ primary</span>}
+              </div>
+              <div className="mt-1.5 flex gap-2">
+                {!img.isPrimary && (
+                  <form action={setPrimaryImage}>
+                    <input type="hidden" name="imageId" value={img.id} />
+                    <button className="text-xs text-forest hover:underline">Make primary</button>
+                  </form>
+                )}
+                <form action={deleteProductImage}>
+                  <input type="hidden" name="imageId" value={img.id} />
+                  <button className="text-xs text-red-600 hover:underline">Delete</button>
+                </form>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-ink/50">No images yet.</p>
+      )}
+
+      <div className="mt-4 max-w-2xl border border-line bg-paper p-5">
+        <h3 className="smallcaps text-brass-deep">Upload image</h3>
+        <form action={uploadProductImage} className="mt-3 flex flex-wrap items-end gap-3">
+          <input type="hidden" name="productId" value={product.id} />
+          <div>
+            <label className="smallcaps mb-1 block text-brass-deep">File</label>
+            <input name="file" type="file" accept="image/webp,image/jpeg,image/png,image/avif" required className="text-sm" />
+          </div>
+          <div>
+            <label className="smallcaps mb-1 block text-brass-deep">Fragrance</label>
+            <input name="fragrance" placeholder="(any)" className={`${fieldCls} w-28`} />
+          </div>
+          <div>
+            <label className="smallcaps mb-1 block text-brass-deep">Size</label>
+            <input name="size" placeholder="(any)" className={`${fieldCls} w-20`} />
+          </div>
+          <div>
+            <label className="smallcaps mb-1 block text-brass-deep">Alt text</label>
+            <input name="alt" className={`${fieldCls} w-40`} />
+          </div>
+          <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Upload</button>
+        </form>
+        <p className="mt-2 text-xs text-ink/55">WebP/JPEG/PNG/AVIF, up to 5 MB. Leave fragrance/size blank for a product-wide image. First upload becomes the primary.</p>
       </div>
 
       {/* Variants */}

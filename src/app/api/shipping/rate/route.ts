@@ -8,7 +8,7 @@ import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 // we deliver there at all. Pricing is recomputed authoritatively at /api/checkout
 // — this endpoint is purely for display, so it stays read-only.
 
-type IncomingItem = { sku: string; quantity: number };
+type IncomingItem = { variantId: string; quantity: number };
 
 export async function POST(request: Request) {
   // Generous limit: a shopper may re-quote a few times while editing the form,
@@ -36,20 +36,21 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Cart is empty." }, { status: 400 });
   }
 
-  // Re-read the cart against the DB for authoritative weight + value.
-  const skus = [...new Set(items.map((i) => i.sku))];
+  // Re-read the cart against the DB for authoritative weight + value. Keyed by
+  // the immutable variant id (not SKU), so SKU edits don't drop cart lines.
+  const variantIds = [...new Set(items.map((i) => i.variantId))];
   const variants = await prisma.variant.findMany({
-    where: { sku: { in: skus }, active: true },
-    select: { sku: true, pricePaise: true, weightGrams: true },
+    where: { id: { in: variantIds }, active: true },
+    select: { id: true, pricePaise: true, weightGrams: true },
   });
-  const bySku = new Map(variants.map((v) => [v.sku, v]));
+  const byId = new Map(variants.map((v) => [v.id, v]));
 
   let declaredValuePaise = 0;
   let weightGrams: number | null = 0;
   for (const line of items) {
     const qty = Math.floor(Number(line.quantity));
     if (!Number.isFinite(qty) || qty < 1) continue;
-    const v = bySku.get(line.sku);
+    const v = byId.get(line.variantId);
     if (!v) continue;
     declaredValuePaise += v.pricePaise * qty;
     // A missing weight poisons the whole quote → null signals "fall back to flat".

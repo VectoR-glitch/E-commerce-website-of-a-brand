@@ -137,9 +137,10 @@ export function ProductDetail({
   }, [zoomed]);
 
   function addToCart(source: HTMLElement | null) {
-    if (!selected || outOfStock) return;
+    if (!selected || outOfStock || !selected.id) return;
     flyToCart(source, image);
     addItem({
+      variantId: selected.id,
       sku: selected.sku,
       productSlug: product.slug,
       name: product.name,

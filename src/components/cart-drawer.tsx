@@ -100,7 +100,7 @@ export function CartDrawer() {
             {/* Line items */}
             <div className="flex-1 overflow-y-auto px-6">
               {items.map((item) => (
-                <div key={item.sku} className="flex gap-4 border-b border-line py-5">
+                <div key={item.variantId} className="flex gap-4 border-b border-line py-5">
                   <Link
                     href={`/product/${item.productSlug}`}
                     onClick={() => setOpen(false)}
@@ -133,11 +133,11 @@ export function CartDrawer() {
                     <div className="mt-auto flex items-center justify-between pt-3">
                       <QuantityStepper
                         value={item.quantity}
-                        onChange={(n) => setQuantity(item.sku, n)}
+                        onChange={(n) => setQuantity(item.variantId, n)}
                       />
                       <button
                         type="button"
-                        onClick={() => removeItem(item.sku)}
+                        onClick={() => removeItem(item.variantId)}
                         className="smallcaps text-ink/45 hover:text-forest"
                       >
                         Remove

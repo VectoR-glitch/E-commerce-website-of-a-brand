@@ -247,7 +247,7 @@ export default function CheckoutPage() {
   }, [form.city, form.state]);
 
   // Stable cart signature so the rate effect only re-runs when the cart changes.
-  const itemsKey = items.map((i) => `${i.sku}:${i.quantity}`).join(",");
+  const itemsKey = items.map((i) => `${i.variantId}:${i.quantity}`).join(",");
 
   // Fetch the live delivery quote whenever the pincode (or cart/state) settles.
   // Debounced + abortable so editing the pincode doesn't spam Shiprocket.
@@ -264,7 +264,7 @@ export default function CheckoutPage() {
         body: JSON.stringify({
           pincode: form.pincode,
           state: form.state,
-          items: items.map((i) => ({ sku: i.sku, quantity: i.quantity })),
+          items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
         }),
         signal: controller.signal,
       })
@@ -365,7 +365,7 @@ export default function CheckoutPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          items: items.map((i) => ({ sku: i.sku, quantity: i.quantity })),
+          items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
           shipping: form,
           paymentMethod: method,
         }),
@@ -600,7 +600,7 @@ export default function CheckoutPage() {
           <p className="smallcaps text-brass-deep">Your Order</p>
           <ul className="mt-5 space-y-3 text-sm">
             {items.map((item) => (
-              <li key={item.sku} className="flex justify-between gap-3">
+              <li key={item.variantId} className="flex justify-between gap-3">
                 <span className="text-ink/70">
                   {item.name}
                   <span className="text-ink/45">

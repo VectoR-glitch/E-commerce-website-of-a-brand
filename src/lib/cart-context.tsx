@@ -10,7 +10,13 @@ import {
 import { MAX_QTY_PER_ITEM } from "@/lib/constants";
 
 export type CartItem = {
-  sku: string;
+  /**
+   * Stable variant id (Postgres cuid) — the cart's identity key. SKU is a
+   * mutable human label, so keying on it would orphan an item the moment an
+   * admin re-labels the SKU; keying on the immutable id keeps carts intact.
+   */
+  variantId: string;
+  sku: string; // display-only snapshot of the SKU at add-to-cart time
   productSlug: string;
   name: string;
   fragrance?: string;
@@ -24,12 +30,14 @@ type CartState = { items: CartItem[] };
 
 type CartAction =
   | { type: "ADD"; item: Omit<CartItem, "quantity">; quantity?: number }
-  | { type: "SET_QTY"; sku: string; quantity: number }
-  | { type: "REMOVE"; sku: string }
+  | { type: "SET_QTY"; variantId: string; quantity: number }
+  | { type: "REMOVE"; variantId: string }
   | { type: "CLEAR" }
   | { type: "HYDRATE"; state: CartState };
 
-const STORAGE_KEY = "klenich.cart.v1";
+// v2: cart items are now keyed by variantId (was sku in v1). Bumping the key
+// drops any stale v1 cart cleanly rather than half-migrating its shape.
+const STORAGE_KEY = "klenich.cart.v2";
 
 // Hard cap per line item — enforced HERE in the reducer so every path (+/−
 // buttons, manual entry, repeated add-to-cart) is bound by it, with no UI
@@ -43,11 +51,11 @@ function reducer(state: CartState, action: CartAction): CartState {
   switch (action.type) {
     case "ADD": {
       const qty = action.quantity ?? 1;
-      const existing = state.items.find((i) => i.sku === action.item.sku);
+      const existing = state.items.find((i) => i.variantId === action.item.variantId);
       if (existing) {
         return {
           items: state.items.map((i) =>
-            i.sku === action.item.sku
+            i.variantId === action.item.variantId
               ? {
                   ...i,
                   quantity: Math.min(i.quantity + qty, MAX_QTY_PER_ITEM),
@@ -65,17 +73,17 @@ function reducer(state: CartState, action: CartAction): CartState {
     }
     case "SET_QTY": {
       if (action.quantity <= 0) {
-        return { items: state.items.filter((i) => i.sku !== action.sku) };
+        return { items: state.items.filter((i) => i.variantId !== action.variantId) };
       }
       const quantity = Math.min(action.quantity, MAX_QTY_PER_ITEM);
       return {
         items: state.items.map((i) =>
-          i.sku === action.sku ? { ...i, quantity } : i,
+          i.variantId === action.variantId ? { ...i, quantity } : i,
         ),
       };
     }
     case "REMOVE":
-      return { items: state.items.filter((i) => i.sku !== action.sku) };
+      return { items: state.items.filter((i) => i.variantId !== action.variantId) };
     case "CLEAR":
       return { items: [] };
     case "HYDRATE":
@@ -90,8 +98,8 @@ type CartContextValue = {
   count: number;
   subtotalPaise: number;
   addItem: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
-  setQuantity: (sku: string, quantity: number) => void;
-  removeItem: (sku: string) => void;
+  setQuantity: (variantId: string, quantity: number) => void;
+  removeItem: (variantId: string) => void;
   clear: () => void;
 };
 
@@ -130,9 +138,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       count,
       subtotalPaise,
       addItem: (item, quantity) => dispatch({ type: "ADD", item, quantity }),
-      setQuantity: (sku, quantity) =>
-        dispatch({ type: "SET_QTY", sku, quantity }),
-      removeItem: (sku) => dispatch({ type: "REMOVE", sku }),
+      setQuantity: (variantId, quantity) =>
+        dispatch({ type: "SET_QTY", variantId, quantity }),
+      removeItem: (variantId) => dispatch({ type: "REMOVE", variantId }),
       clear: () => dispatch({ type: "CLEAR" }),
     };
   }, [state]);

@@ -1,4 +1,5 @@
 import { SiteHeader } from "@/components/site-header";
+import { HeaderAdminLink } from "@/components/header-admin-link";
 import { SiteFooter } from "@/components/site-footer";
 import { CleaningFact } from "@/components/cleaning-fact";
 import { ScrollProgress } from "@/components/scroll-progress";
@@ -21,7 +22,7 @@ export default function SiteLayout({
         Skip to content
       </a>
       <ScrollProgress />
-      <SiteHeader />
+      <SiteHeader adminSlot={<HeaderAdminLink />} />
       <main id="main" tabIndex={-1} className="flex-1 outline-none">
         {children}
       </main>

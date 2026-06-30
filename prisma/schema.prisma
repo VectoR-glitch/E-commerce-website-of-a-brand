@@ -13,12 +13,43 @@ datasource db {
 /// A product line (e.g. Floor Cleaner). Marketing content keyed by `slug` in Sanity.
 model Product {
   id        String    @id @default(cuid())
-  slug      String    @unique // matches Sanity product.slug.current
+  slug      String    @unique // storefront route segment
   name      String
   active    Boolean   @default(true)
+
+  // Marketing/editorial content — moved off the static catalog into the DB so
+  // the admin owns it (replaces Sanity). Nullable during migration backfill.
+  tagline     String? // short card/PDP line
+  claim       String? // tiered, compliance-safe claim
+  claimTone   String? // "gentle" | "fresh" | "tough" (drives PDP accent)
+  description String? // editorial PDP paragraph
+  benefits    String[] @default([]) // bullet list
+  howToUse    String[] @default([]) // ordered steps
+  safety      String? // caution note (e.g. acidic cleaners)
+  placeholder String? // emoji fallback when an image is missing
+
   variants  Variant[]
+  images    ProductImage[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+}
+
+/// A product image stored in object storage (Cloudflare R2); the DB holds only
+/// the URL + metadata, never the binary. `fragrance`/`size` scope an image to a
+/// specific variant axis (null = the product-level default).
+model ProductImage {
+  id        String  @id @default(cuid())
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  url       String // public R2 URL
+  alt       String?
+  fragrance String? // null = applies regardless of fragrance
+  size      String? // null = applies regardless of size
+  isPrimary Boolean @default(false) // the card/PDP default
+  sortOrder Int     @default(0)
+  createdAt DateTime @default(now())
+
+  @@index([productId])
 }
 
 /// A buyable SKU (fragrance + size). Price & stock are the source of truth here.

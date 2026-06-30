@@ -1,10 +1,11 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { products as presentation, type Product } from "@/lib/catalog";
+import { products as presentation, type Product, type ClaimTone } from "@/lib/catalog";
 
-// Authoritative price + stock come from Postgres; marketing copy (tagline,
-// claim, placeholder, display order) comes from the presentation catalog until
-// Sanity content is wired. Merge happens by `slug` / fragrance+size.
+// Authoritative price + stock + editorial content (tagline, claim, description,
+// benefits, howToUse, safety) all come from Postgres now — the admin owns them.
+// catalog.ts still supplies images + display order (images move to R2 next).
+// Merge happens by `slug` / fragrance+size.
 
 type DbProduct = Prisma.ProductGetPayload<{ include: { variants: true } }>;
 
@@ -27,7 +28,17 @@ function hydrate(meta: Product, db: DbProduct): Product {
   const dbSizes = new Set(variants.map((v) => v.size));
 
   return {
-    ...meta,
+    ...meta, // images (image, fragranceImages, variantImages) + slug from catalog
+    name: db.name,
+    // Editorial content from the DB; fall back to catalog if a field is unset.
+    tagline: db.tagline ?? meta.tagline,
+    claim: db.claim ?? meta.claim,
+    claimTone: (db.claimTone as ClaimTone | null) ?? meta.claimTone,
+    description: db.description ?? meta.description,
+    benefits: db.benefits.length ? db.benefits : meta.benefits,
+    howToUse: db.howToUse.length ? db.howToUse : meta.howToUse,
+    safety: db.safety ?? meta.safety,
+    placeholder: db.placeholder ?? meta.placeholder,
     fragrances: meta.fragrances.filter((f) => dbFragrances.has(f)),
     sizes: meta.sizes.filter((s) => dbSizes.has(s)),
     variants,

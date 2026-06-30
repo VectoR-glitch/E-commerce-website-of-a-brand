@@ -91,7 +91,26 @@ export async function updateProduct(formData: FormData): Promise<void> {
   const active = formData.get("active") === "on";
   if (!id || !name) return;
 
-  await prisma.product.update({ where: { id }, data: { name, active } });
+  // Empty text → null; one item per line for the list fields.
+  const text = (k: string) => String(formData.get(k) ?? "").trim() || null;
+  const lines = (k: string) =>
+    String(formData.get(k) ?? "").split("\n").map((s) => s.trim()).filter(Boolean);
+
+  await prisma.product.update({
+    where: { id },
+    data: {
+      name,
+      active,
+      tagline: text("tagline"),
+      claim: text("claim"),
+      claimTone: text("claimTone"),
+      description: text("description"),
+      safety: text("safety"),
+      placeholder: text("placeholder"),
+      benefits: lines("benefits"),
+      howToUse: lines("howToUse"),
+    },
+  });
   revalidatePath("/admin/products");
   revalidatePath(`/admin/products/${id}`);
 }

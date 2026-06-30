@@ -87,8 +87,9 @@ export function VariantSelector({ product }: { product: Product }) {
           type="button"
           disabled={!selected || outOfStock}
           onClick={() => {
-            if (!selected || outOfStock) return;
+            if (!selected || outOfStock || !selected.id) return;
             addItem({
+              variantId: selected.id,
               sku: selected.sku,
               productSlug: product.slug,
               name: product.name,

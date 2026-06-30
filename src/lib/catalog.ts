@@ -10,11 +10,18 @@
 export type ClaimTone = "gentle" | "fresh" | "tough";
 
 export type Variant = {
+  /**
+   * Stable Postgres id (cuid) — the immutable identity the cart & checkout key
+   * on, so a SKU can be re-labelled without breaking in-progress carts. Present
+   * on every DB-hydrated variant; undefined only on the static fallback catalog.
+   */
+  id?: string;
   /** undefined when the product has no fragrance axis */
   fragrance?: string;
   size: string;
   /** price in paise to avoid float issues (₹199 = 19900) */
   pricePaise: number;
+  /** human-facing stock-keeping label; unique, but editable (not an identity) */
   sku: string;
   /** live stock from Postgres; undefined when using static catalog */
   stock?: number;

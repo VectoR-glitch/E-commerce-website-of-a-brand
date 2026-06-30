@@ -7,7 +7,7 @@ import { MAX_ORDER_PAISE, MAX_QTY_PER_ITEM, MAX_COD_ORDER_PAISE } from "@/lib/co
 import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { resolveShipping } from "@/lib/shiprocket";
 
-type IncomingItem = { sku: string; quantity: number };
+type IncomingItem = { variantId: string; quantity: number };
 type IncomingShipping = {
   fullName: string;
   email: string;
@@ -74,13 +74,15 @@ export async function POST(request: Request) {
   if (!/^\d{6}$/.test(ship.pincode ?? ""))
     return badRequest("A valid 6-digit pincode is required.");
 
-  // Re-price against the database — the cart's prices are display-only.
-  const skus = [...new Set(items.map((i) => i.sku))];
+  // Re-price against the database — the cart's prices are display-only. Items
+  // are keyed by the immutable variant id (not SKU), so a re-labelled SKU never
+  // orphans a cart line here.
+  const variantIds = [...new Set(items.map((i) => i.variantId))];
   const variants = await prisma.variant.findMany({
-    where: { sku: { in: skus }, active: true },
+    where: { id: { in: variantIds }, active: true },
     include: { product: true },
   });
-  const bySku = new Map(variants.map((v) => [v.sku, v]));
+  const byId = new Map(variants.map((v) => [v.id, v]));
 
   const orderItems = [];
   let subtotalPaise = 0;
@@ -99,7 +101,7 @@ export async function POST(request: Request) {
     if (qty > MAX_QTY_PER_ITEM)
       return badRequest(`You can order at most ${MAX_QTY_PER_ITEM} of a single item.`);
 
-    const variant = bySku.get(line.sku);
+    const variant = byId.get(line.variantId);
     if (!variant)
       return badRequest(`An item in your cart is no longer available.`);
     if (variant.stock < qty) {

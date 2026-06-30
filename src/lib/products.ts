@@ -36,6 +36,7 @@ function hydrate(meta: Product, db: DbProduct): Product {
   const variants = db.variants
     .filter((v) => v.active)
     .map((v) => ({
+      id: v.id, // stable identity for the cart/checkout (survives SKU edits)
       fragrance: v.fragrance ?? undefined,
       size: v.size,
       pricePaise: v.pricePaise,

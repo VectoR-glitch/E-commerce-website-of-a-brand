@@ -47,7 +47,7 @@ export default function CartPage() {
         <div className="border-t border-line">
           {items.map((item, i) => (
             <Reveal
-              key={item.sku}
+              key={item.variantId}
               delay={100 + i * 70}
               className="flex gap-5 border-b border-line py-6"
             >
@@ -83,11 +83,11 @@ export default function CartPage() {
                 <div className="mt-auto flex items-center justify-between pt-4">
                   <QuantityStepper
                     value={item.quantity}
-                    onChange={(n) => setQuantity(item.sku, n)}
+                    onChange={(n) => setQuantity(item.variantId, n)}
                   />
                   <button
                     type="button"
-                    onClick={() => removeItem(item.sku)}
+                    onClick={() => removeItem(item.variantId)}
                     className="smallcaps text-ink/45 hover:text-forest"
                   >
                     Remove

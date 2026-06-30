@@ -70,6 +70,20 @@ export async function updateStock(formData: FormData): Promise<void> {
 }
 
 // ── Products & variants ─────────────────────────────────────────────────────
+export async function createProduct(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim();
+  const slug = String(formData.get("slug") ?? "").trim().toLowerCase();
+  // slug must match the storefront route segment + Sanity convention.
+  if (!name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return;
+
+  const clash = await prisma.product.findUnique({ where: { slug } });
+  if (clash) return; // unique slug — bail quietly
+
+  await prisma.product.create({ data: { name, slug } });
+  revalidatePath("/admin/products");
+}
+
 export async function updateProduct(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("productId") ?? "");

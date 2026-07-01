@@ -3,10 +3,23 @@ import "server-only";
 //   1. Password hashing (scrypt, per-user salt) — for login credentials.
 //   2. Stateless session tokens (HMAC-signed, tamper-proof) — for the cookie.
 // Both use node:crypto; this module is server-only and never reaches the browser.
-import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 export const SESSION_COOKIE = "klenich_session";
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+// ── One-time tokens (email verification, password reset) ─────────────────────
+// The raw token goes in the emailed link; only its SHA-256 hash is stored, so a
+// leaked DB row can't be replayed as a valid link. Lookups hash the incoming
+// token and match on the stored hash.
+export function generateToken(): { token: string; tokenHash: string } {
+  const token = randomBytes(32).toString("base64url");
+  return { token, tokenHash: hashToken(token) };
+}
+
+export function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
 
 export type Role = "CUSTOMER" | "STAFF" | "ADMIN";
 export type SessionPayload = {

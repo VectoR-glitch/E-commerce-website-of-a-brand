@@ -48,3 +48,13 @@ export async function requireAdmin(): Promise<SessionPayload> {
   }
   return session;
 }
+
+// Any-signed-in-user gate for the customer account area. Redirects guests to
+// login with a return path so they land back where they were headed.
+export async function requireSession(next = "/account"): Promise<SessionPayload> {
+  const session = await getSession();
+  if (!session) {
+    redirect(`/login?next=${encodeURIComponent(next)}`);
+  }
+  return session;
+}

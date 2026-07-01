@@ -72,6 +72,7 @@ model Variant {
   weightGrams Int?
   active     Boolean     @default(true) // inactive variants never show on the site
   orderItems OrderItem[]
+  cartItems  CartItem[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
@@ -88,8 +89,14 @@ model Customer {
   // ops console — only ADMIN reaches /admin.
   passwordHash String?
   role         Role    @default(CUSTOMER)
+  // Set when the customer confirms their email via the verification link.
+  // Null = unverified (account created but email not yet confirmed).
+  emailVerified DateTime?
   orders    Order[]
   addresses Address[]
+  cart      Cart?
+  verificationTokens  VerificationToken[]
+  passwordResetTokens PasswordResetToken[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 }
@@ -108,6 +115,56 @@ model Address {
   createdAt  DateTime @default(now())
 
   @@index([customerId])
+}
+
+// One-time email-verification tokens (hashed). A customer may have several
+// outstanding at once (e.g. after a resend); any unexpired one confirms.
+model VerificationToken {
+  id         String   @id @default(cuid())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  @@index([customerId])
+}
+
+// One-time password-reset tokens (hashed). usedAt marks a token spent so the
+// link can't be replayed after a successful reset.
+model PasswordResetToken {
+  id         String    @id @default(cuid())
+  customer   Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String
+  tokenHash  String    @unique
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([customerId])
+}
+
+// Server-side cart for signed-in customers (cross-device). The guest cart lives
+// in localStorage; on login it merges into this, which becomes authoritative.
+model Cart {
+  id         String     @id @default(cuid())
+  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String     @unique
+  items      CartItem[]
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model CartItem {
+  id        String  @id @default(cuid())
+  cart      Cart    @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  cartId    String
+  variant   Variant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId String
+  quantity  Int
+
+  @@unique([cartId, variantId])
+  @@index([cartId])
 }
 
 /// An order. All address/price fields are SNAPSHOTTED at checkout so later

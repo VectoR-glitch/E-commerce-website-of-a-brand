@@ -10,11 +10,11 @@ const navLinks = [
   { href: "/help", label: "Help" },
 ];
 
-// `adminSlot` is an optional server-rendered node (the admin link, which reads
-// the session). It's passed in as a prop so this component stays free of
+// `accountSlot` is an optional server-rendered node (the account control, which
+// reads the session). It's passed in as a prop so this component stays free of
 // server-only imports and can still be rendered inside the client error/404
 // boundaries, which pass no slot.
-export function SiteHeader({ adminSlot }: { adminSlot?: React.ReactNode }) {
+export function SiteHeader({ accountSlot }: { accountSlot?: React.ReactNode }) {
   return (
     <header className="sticky top-0 z-30 border-b border-line bg-bone/90 backdrop-blur">
       <div className="bg-ink text-bone">
@@ -45,7 +45,7 @@ export function SiteHeader({ adminSlot }: { adminSlot?: React.ReactNode }) {
           ))}
         </nav>
         <div className="flex items-center gap-3">
-          {adminSlot}
+          {accountSlot}
           <CartCount />
           <MobileNav />
         </div>

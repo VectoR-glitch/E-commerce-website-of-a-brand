@@ -332,6 +332,80 @@ export async function sendOrderStatusEmail(order: OrderForEmail, status: OrderSt
   });
 }
 
+// ── Account emails (verification, password reset) ───────────────────────────
+// Branded call-to-action button for links in transactional email.
+function ctaButton(href: string, label: string): string {
+  return `<a href="${href}" style="display:inline-block;margin:4px 0 22px;background:${C.forest};color:${C.bone};text-decoration:none;padding:13px 26px;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;">${label}</a>`;
+}
+
+/** Sends the email-confirmation link for a new (or re-sent) account. */
+export async function sendVerificationEmail(
+  to: string,
+  name: string | null,
+  verifyUrl: string,
+): Promise<void> {
+  if (!resend) return; // no key → safe no-op until configured
+  const hi = name ? `Hi ${escapeHtml(name)},` : "Welcome,";
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: "Verify your email for Klenich",
+    text: [
+      name ? `Hi ${name},` : "Welcome,",
+      "",
+      "Confirm your email address to activate your Klenich account:",
+      verifyUrl,
+      "",
+      "This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.",
+      "",
+      "Klenich · Plant-powered home care, made in India",
+      SITE_URL,
+    ].join("\n"),
+    html: shell(
+      "Verify your email",
+      "Confirm your email",
+      `<p style="color:${C.ink};font-size:15px;margin:0 0 14px;">${hi}</p>
+       <p style="color:${C.muted};font-size:14px;line-height:1.6;margin:0 0 20px;">Confirm your email address to activate your Klenich account.</p>
+       ${ctaButton(verifyUrl, "Verify email")}
+       <p style="color:${C.muted};font-size:13px;line-height:1.6;margin:0;">This link expires in 24 hours. If you didn't create an account, you can safely ignore this email.</p>`,
+    ),
+  });
+}
+
+/** Sends a password-reset link. Only ever emailed to a real, matching account. */
+export async function sendPasswordResetEmail(
+  to: string,
+  name: string | null,
+  resetUrl: string,
+): Promise<void> {
+  if (!resend) return;
+  const hi = name ? `Hi ${escapeHtml(name)},` : "Hi,";
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: "Reset your Klenich password",
+    text: [
+      name ? `Hi ${name},` : "Hi,",
+      "",
+      "We received a request to reset your Klenich password. Use the link below to choose a new one:",
+      resetUrl,
+      "",
+      "This link expires in 1 hour and can be used once. If you didn't request this, you can safely ignore this email — your password won't change.",
+      "",
+      "Klenich · Plant-powered home care, made in India",
+      SITE_URL,
+    ].join("\n"),
+    html: shell(
+      "Password reset",
+      "Reset your password",
+      `<p style="color:${C.ink};font-size:15px;margin:0 0 14px;">${hi}</p>
+       <p style="color:${C.muted};font-size:14px;line-height:1.6;margin:0 0 20px;">We received a request to reset your Klenich password. Choose a new one below.</p>
+       ${ctaButton(resetUrl, "Reset password")}
+       <p style="color:${C.muted};font-size:13px;line-height:1.6;margin:0;">This link expires in 1 hour and can be used once. If you didn't request this, you can safely ignore this email — your password won't change.</p>`,
+    ),
+  });
+}
+
 export type ContactMessage = {
   name: string;
   email: string;

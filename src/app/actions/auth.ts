@@ -6,7 +6,9 @@ import { verifyPassword } from "@/lib/auth";
 import { setSessionCookie, clearSessionCookie } from "@/lib/session";
 import { rateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
 
-export type LoginState = { error?: string } | undefined;
+// `unverified` lets the login form offer a "resend verification" action for a
+// correct-but-unconfirmed customer account (carrying the email it was for).
+export type LoginState = { error?: string; unverified?: boolean; email?: string } | undefined;
 
 // Only allow same-origin internal redirect targets (prevents open-redirect via
 // a crafted ?next=https://evil.com).
@@ -35,6 +37,16 @@ export async function loginAction(
   // Generic message — never reveal whether an email is registered.
   if (!user || !verifyPassword(password, user.passwordHash)) {
     return { error: "Invalid email or password." };
+  }
+
+  // Customers must confirm their email before signing in. Staff/admin accounts
+  // are provisioned internally (seed), so they're exempt from this gate.
+  if (user.role === "CUSTOMER" && !user.emailVerified) {
+    return {
+      error: "Please verify your email before signing in — check your inbox for the link.",
+      unverified: true,
+      email,
+    };
   }
 
   await setSessionCookie({ sub: user.id, role: user.role, email: user.email });

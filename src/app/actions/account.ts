@@ -1,0 +1,119 @@
+"use server";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/prisma";
+import { hashPassword, generateToken } from "@/lib/auth";
+import { getSession } from "@/lib/session";
+import { rateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
+import { sendVerificationEmail } from "@/lib/email";
+
+const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+export type RegisterState = { error?: string } | undefined;
+export type ResendState = { ok?: boolean; error?: string } | undefined;
+export type ProfileState = { ok?: boolean; error?: string } | undefined;
+
+// Builds an absolute URL on the CURRENT origin (localhost in dev, the real host
+// in prod) so emailed links always point at the right place — NEVER the static
+// SITE_URL default, which would break dev verification links.
+async function originFromHeaders(): Promise<string> {
+  const h = await headers();
+  const host = h.get("host") ?? "localhost:3000";
+  const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
+  return `${proto}://${host}`;
+}
+
+// Issues a fresh verification token and emails the link. Old tokens are left in
+// place (they simply expire) so a resend never invalidates a link already sent.
+async function issueVerification(customerId: string, email: string, name: string | null): Promise<void> {
+  const { token, tokenHash } = generateToken();
+  await prisma.verificationToken.create({
+    data: { customerId, tokenHash, expiresAt: new Date(Date.now() + VERIFY_TTL_MS) },
+  });
+  const origin = await originFromHeaders();
+  const link = `${origin}/verify-email?token=${token}`;
+  await sendVerificationEmail(email, name, link);
+  // Dev convenience: with no Resend key the email can't send, so surface the
+  // link in the server log to complete the flow locally.
+  if (process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY) {
+    console.log(`[dev] Verification link for ${email}: ${link}`);
+  }
+}
+
+export async function registerAction(_prev: RegisterState, formData: FormData): Promise<RegisterState> {
+  const rl = await rateLimit(`register:${getClientIpFromHeaders(await headers())}`, {
+    limit: 5,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!rl.ok) return { error: "Too many attempts. Please wait a few minutes and try again." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const password = String(formData.get("password") ?? "");
+
+  if (!name) return { error: "Please enter your name." };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a valid email address." };
+  if (password.length < 8) return { error: "Password must be at least 8 characters." };
+
+  const existing = await prisma.customer.findUnique({ where: { email } });
+  if (existing?.passwordHash) {
+    // Already a login account — don't create a second. (Generic-ish, but a
+    // duplicate email is not a secret, and this is more helpful than failing.)
+    return { error: "An account with this email already exists. Try signing in instead." };
+  }
+
+  const passwordHash = hashPassword(password);
+  const customer = existing
+    ? // A guest/order-only row for this email exists → upgrade it to a login
+      // account, preserving any orders already attached to it.
+      await prisma.customer.update({
+        where: { id: existing.id },
+        data: { name, passwordHash, role: "CUSTOMER" },
+      })
+    : await prisma.customer.create({
+        data: { name, email, passwordHash, role: "CUSTOMER" },
+      });
+
+  await issueVerification(customer.id, email, name);
+
+  // Not signed in yet — email must be confirmed first. Send them to login with
+  // a "check your inbox" notice.
+  redirect("/login?notice=verify-sent");
+}
+
+export async function resendVerificationAction(_prev: ResendState, formData: FormData): Promise<ResendState> {
+  const rl = await rateLimit(`resend-verify:${getClientIpFromHeaders(await headers())}`, {
+    limit: 5,
+    windowMs: 10 * 60 * 1000,
+  });
+  if (!rl.ok) return { error: "Too many requests. Please wait a few minutes and try again." };
+
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const customer = await prisma.customer.findUnique({ where: { email } });
+  // Only (re)send for an unverified customer login account. Always report the
+  // same success — never reveal whether an email is registered/verified.
+  if (customer && customer.passwordHash && customer.role === "CUSTOMER" && !customer.emailVerified) {
+    await issueVerification(customer.id, email, customer.name);
+  }
+  return { ok: true };
+}
+
+// Updates the signed-in customer's profile (name + phone). Email is the login
+// identity and isn't editable here. Authorizes via the session (server actions
+// are POST-reachable, so this can't rely on the page guard alone).
+export async function updateProfileAction(_prev: ProfileState, formData: FormData): Promise<ProfileState> {
+  const session = await getSession();
+  if (!session) return { error: "You're not signed in." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim() || null;
+  if (!name) return { error: "Name can't be empty." };
+  if (phone && !/^[6-9]\d{9}$/.test(phone)) {
+    return { error: "Enter a valid 10-digit mobile, or leave it blank." };
+  }
+
+  await prisma.customer.update({ where: { id: session.sub }, data: { name, phone } });
+  revalidatePath("/account");
+  return { ok: true };
+}

@@ -6,6 +6,7 @@ import { formatINR } from "@/lib/catalog";
 import { MAX_ORDER_PAISE, MAX_QTY_PER_ITEM, MAX_COD_ORDER_PAISE } from "@/lib/constants";
 import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { resolveShipping } from "@/lib/shiprocket";
+import { getSession } from "@/lib/session";
 
 type IncomingItem = { variantId: string; quantity: number };
 type IncomingShipping = {
@@ -204,11 +205,16 @@ export async function POST(request: Request) {
     );
   }
 
+  // Attribute the order to the signed-in customer (if any) so it appears in
+  // their account history. Guest checkout leaves customerId null.
+  const session = await getSession();
+
   // Persist a PENDING order with the snapshotted shipping + line items.
   // amountPaidPaise stays 0 until settlement records what Razorpay captured.
   const order = await prisma.order.create({
     data: {
       orderNumber,
+      customerId: session?.sub ?? null,
       email: ship.email,
       phone: ship.phone,
       shipName: ship.fullName,

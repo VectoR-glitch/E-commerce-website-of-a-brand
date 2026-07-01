@@ -6,8 +6,11 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
+  useState,
 } from "react";
 import { MAX_QTY_PER_ITEM } from "@/lib/constants";
+import { persistCart, syncGuestCart } from "@/app/actions/cart";
 
 export type CartItem = {
   /**
@@ -105,27 +108,88 @@ type CartContextValue = {
 
 const CartContext = createContext<CartContextValue | null>(null);
 
-export function CartProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, { items: [] });
+export function CartProvider({
+  children,
+  authenticated = false,
+  initialItems = [],
+}: {
+  children: React.ReactNode;
+  /** true when a customer is signed in — the server cart is then authoritative */
+  authenticated?: boolean;
+  /** the signed-in customer's server cart, hydrated on the server */
+  initialItems?: CartItem[];
+}) {
+  // Signed in → seed from the server cart; guest → empty until localStorage loads.
+  const [state, dispatch] = useReducer(reducer, {
+    items: authenticated ? initialItems : [],
+  });
+  // Gates server write-through until the initial login merge/load has completed,
+  // so we never clobber the server cart with a half-initialized client state.
+  const [synced, setSynced] = useState(false);
+  // True once the user actually changes the cart — so the initial server-seed /
+  // login-merge doesn't trigger a redundant write-back on every page load.
+  const dirty = useRef(false);
 
-  // Hydrate from localStorage on mount.
+  // Guest: hydrate from localStorage on mount.
   useEffect(() => {
+    if (authenticated) return;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) dispatch({ type: "HYDRATE", state: JSON.parse(raw) });
     } catch {
       // ignore corrupt storage
     }
-  }, []);
+  }, [authenticated]);
 
-  // Persist on change.
+  // Signed in: one-time — merge any leftover guest cart into the server cart,
+  // adopt the (authoritative) result, and clear the guest storage.
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      // ignore quota errors
+    if (!authenticated) return;
+    let cancelled = false;
+    (async () => {
+      let guest: { variantId: string; quantity: number }[] = [];
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as CartState;
+          guest = (parsed.items ?? []).map((i) => ({ variantId: i.variantId, quantity: i.quantity }));
+        }
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {
+        // ignore corrupt storage
+      }
+      if (guest.length) {
+        try {
+          const merged = await syncGuestCart(guest);
+          if (!cancelled) dispatch({ type: "HYDRATE", state: { items: merged } });
+        } catch {
+          // keep the server-seeded state on failure
+        }
+      }
+      if (!cancelled) setSynced(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [authenticated]);
+
+  // Persist on change: localStorage for guests; write-through to the server
+  // (debounced) for signed-in customers, once the initial sync has run.
+  useEffect(() => {
+    if (!authenticated) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch {
+        // ignore quota errors
+      }
+      return;
     }
-  }, [state]);
+    if (!synced || !dirty.current) return;
+    const t = setTimeout(() => {
+      persistCart(state.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity }))).catch(() => {});
+    }, 500);
+    return () => clearTimeout(t);
+  }, [state, authenticated, synced]);
 
   const value = useMemo<CartContextValue>(() => {
     const count = state.items.reduce((n, i) => n + i.quantity, 0);
@@ -137,11 +201,22 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       items: state.items,
       count,
       subtotalPaise,
-      addItem: (item, quantity) => dispatch({ type: "ADD", item, quantity }),
-      setQuantity: (variantId, quantity) =>
-        dispatch({ type: "SET_QTY", variantId, quantity }),
-      removeItem: (variantId) => dispatch({ type: "REMOVE", variantId }),
-      clear: () => dispatch({ type: "CLEAR" }),
+      addItem: (item, quantity) => {
+        dirty.current = true;
+        dispatch({ type: "ADD", item, quantity });
+      },
+      setQuantity: (variantId, quantity) => {
+        dirty.current = true;
+        dispatch({ type: "SET_QTY", variantId, quantity });
+      },
+      removeItem: (variantId) => {
+        dirty.current = true;
+        dispatch({ type: "REMOVE", variantId });
+      },
+      clear: () => {
+        dirty.current = true;
+        dispatch({ type: "CLEAR" });
+      },
     };
   }, [state]);
 

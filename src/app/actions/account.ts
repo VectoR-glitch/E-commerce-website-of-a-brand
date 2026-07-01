@@ -7,12 +7,14 @@ import { hashPassword, generateToken } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { rateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
 import { sendVerificationEmail } from "@/lib/email";
+import { INDIAN_STATES } from "@/lib/constants";
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export type RegisterState = { error?: string } | undefined;
 export type ResendState = { ok?: boolean; error?: string } | undefined;
 export type ProfileState = { ok?: boolean; error?: string } | undefined;
+export type AddressState = { ok?: boolean; error?: string } | undefined;
 
 // Builds an absolute URL on the CURRENT origin (localhost in dev, the real host
 // in prod) so emailed links always point at the right place — NEVER the static
@@ -114,6 +116,49 @@ export async function updateProfileAction(_prev: ProfileState, formData: FormDat
   }
 
   await prisma.customer.update({ where: { id: session.sub }, data: { name, phone } });
+  revalidatePath("/account");
+  return { ok: true };
+}
+
+// Saves the signed-in customer's default shipping address (one box on /account).
+// Upserts the single default row: updates it if present, otherwise creates it.
+// Authorizes via the session — server actions are POST-reachable, so the page
+// guard alone is not a boundary.
+export async function saveAddressAction(_prev: AddressState, formData: FormData): Promise<AddressState> {
+  const session = await getSession();
+  if (!session) return { error: "You're not signed in." };
+
+  const line1 = String(formData.get("line1") ?? "").trim();
+  const line2 = String(formData.get("line2") ?? "").trim() || null;
+  const city = String(formData.get("city") ?? "").trim();
+  const state = String(formData.get("state") ?? "").trim();
+  const pincode = String(formData.get("pincode") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim() || null;
+
+  if (!line1) return { error: "Enter your address (line 1)." };
+  if (!city) return { error: "Enter your city / town." };
+  if (!INDIAN_STATES.includes(state)) return { error: "Select a valid state." };
+  if (!/^\d{6}$/.test(pincode)) return { error: "Enter a valid 6-digit pincode." };
+  if (phone && !/^[6-9]\d{9}$/.test(phone)) {
+    return { error: "Enter a valid 10-digit mobile, or leave it blank." };
+  }
+
+  const existing = await prisma.address.findFirst({
+    where: { customerId: session.sub, isDefault: true },
+    select: { id: true },
+  });
+
+  if (existing) {
+    await prisma.address.update({
+      where: { id: existing.id },
+      data: { line1, line2, city, state, pincode, phone },
+    });
+  } else {
+    await prisma.address.create({
+      data: { customerId: session.sub, line1, line2, city, state, pincode, phone, isDefault: true },
+    });
+  }
+
   revalidatePath("/account");
   return { ok: true };
 }

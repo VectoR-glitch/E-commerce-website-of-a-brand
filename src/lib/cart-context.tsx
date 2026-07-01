@@ -100,6 +100,8 @@ type CartContextValue = {
   items: CartItem[];
   count: number;
   subtotalPaise: number;
+  /** true when a customer is signed in — lets the UI prompt guests to log in */
+  authenticated: boolean;
   addItem: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
   setQuantity: (variantId: string, quantity: number) => void;
   removeItem: (variantId: string) => void;
@@ -201,6 +203,7 @@ export function CartProvider({
       items: state.items,
       count,
       subtotalPaise,
+      authenticated,
       addItem: (item, quantity) => {
         dirty.current = true;
         dispatch({ type: "ADD", item, quantity });
@@ -218,7 +221,7 @@ export function CartProvider({
         dispatch({ type: "CLEAR" });
       },
     };
-  }, [state]);
+  }, [state, authenticated]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

@@ -25,6 +25,20 @@ export const MAX_COD_ORDER_PAISE = 500000; // ₹5,000
 export const DELIVERY_FEE_WB_PAISE = 6400; // ₹64 — within West Bengal
 export const DELIVERY_FEE_NATIONAL_PAISE = 16000; // ₹160 — rest of India
 
+// Canonical list of Indian states + union territories — the single source for
+// every address dropdown (checkout + account). Keep values exact so the
+// case-insensitive delivery-fee/pincode matching stays reliable.
+export const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
+  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
+  "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
+  "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
+  "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
+  "Andaman & Nicobar Islands", "Chandigarh",
+  "Dadra & Nagar Haveli and Daman & Diu", "Delhi", "Jammu & Kashmir", "Ladakh",
+  "Lakshadweep", "Puducherry",
+];
+
 // The delivery charge for a destination state. `state` is one of the fixed
 // INDIAN_STATES dropdown values, so an exact, case-insensitive match is reliable.
 export function deliveryFeePaise(state: string): number {

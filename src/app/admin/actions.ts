@@ -27,30 +27,40 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
   const status = String(formData.get("status") ?? "") as OrderStatus;
   if (!id || !ORDER_STATUSES.includes(status)) return;
 
-  // Returns the order snapshot when the status actually changed (null otherwise),
-  // so we only email the customer on a real transition.
-  const changed = await prisma.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({ where: { id }, include: { items: true } });
-    if (!order || order.status === status) return null;
+  // Read the current order OUTSIDE any transaction — keeping the read out of the
+  // transaction means we only ever open one for the writes, which pooled Postgres
+  // connections (Neon/pgBouncer) handle far more reliably than a long-lived
+  // interactive transaction (the cause of "Unable to start a transaction in time").
+  const order = await prisma.order.findUnique({ where: { id }, include: { items: true } });
+  // `changed` holds the pre-update snapshot only on a real transition, so we email
+  // the customer just once when the status actually moves.
+  const changed = !order || order.status === status ? null : order;
 
+  if (changed) {
     // Restock when leaving a stock-committed status for CANCELLED/RETURNED, so
     // inventory reflects the freed units. (Re-confirming a cancelled order does
     // NOT auto-decrement again — the admin should verify stock in that case.)
-    const wasCommitted = STOCK_COMMITTED.includes(order.status);
+    const wasCommitted = STOCK_COMMITTED.includes(changed.status);
     const nowFreed = status === "CANCELLED" || status === "RETURNED";
-    if (wasCommitted && nowFreed) {
-      for (const it of order.items) {
-        if (it.variantId) {
-          await tx.variant.update({
-            where: { id: it.variantId },
-            data: { stock: { increment: it.quantity } },
-          });
-        }
-      }
-    }
-    await tx.order.update({ where: { id }, data: { status } });
-    return order; // pre-update snapshot — items/ship/totals are unchanged by this
-  });
+    const restock =
+      wasCommitted && nowFreed
+        ? changed.items
+            .filter((it) => it.variantId)
+            .map((it) =>
+              prisma.variant.update({
+                where: { id: it.variantId! },
+                data: { stock: { increment: it.quantity } },
+              }),
+            )
+        : [];
+
+    // Batch all writes into a single short-lived transaction — restock (if any)
+    // and the status update commit together, atomically.
+    await prisma.$transaction([
+      ...restock,
+      prisma.order.update({ where: { id }, data: { status } }),
+    ]);
+  }
 
   revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/admin/orders");

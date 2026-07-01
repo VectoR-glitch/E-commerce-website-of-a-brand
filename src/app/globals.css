@@ -278,9 +278,10 @@ p {
   border-radius: 2px;
 }
 
-/* Button hover: a solid ink fill sweeps in from the left; text flips to bone. */
+/* Button hover: a solid forest fill sweeps in from the left; text flips to bone.
+   (Uses the brand green rather than ink so outline buttons match the theme.) */
 .btn-fill {
-  background-image: linear-gradient(var(--color-ink), var(--color-ink));
+  background-image: linear-gradient(var(--color-forest), var(--color-forest));
   background-size: 0% 100%;
   background-position: left center;
   background-repeat: no-repeat;

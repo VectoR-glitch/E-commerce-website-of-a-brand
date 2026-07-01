@@ -57,7 +57,7 @@ export function AccountMenu({ isAdmin, email }: { isAdmin: boolean; email: strin
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center justify-center border border-ink p-2.5 text-ink transition-colors hover:border-forest hover:text-forest"
+        className="btn-fill inline-flex items-center justify-center border border-ink p-2.5 text-ink"
       >
         <UserIcon />
       </button>

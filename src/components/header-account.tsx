@@ -16,7 +16,7 @@ export async function HeaderAccount() {
       <Link
         href="/login"
         aria-label="Sign in"
-        className="inline-flex items-center justify-center border border-ink p-2.5 text-ink transition-colors hover:border-forest hover:text-forest"
+        className="btn-fill inline-flex items-center justify-center border border-ink p-2.5 text-ink"
       >
         <svg
           viewBox="0 0 24 24"

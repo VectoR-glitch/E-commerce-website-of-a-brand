@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/catalog";
+import { INDIAN_STATES } from "@/lib/constants";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
 
@@ -64,16 +65,6 @@ function loadRazorpay(): Promise<boolean> {
   });
 }
 
-const INDIAN_STATES = [
-  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
-  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
-  "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
-  "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
-  "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
-  "Andaman & Nicobar Islands", "Chandigarh",
-  "Dadra & Nagar Haveli and Daman & Diu", "Delhi", "Jammu & Kashmir", "Ladakh",
-  "Lakshadweep", "Puducherry",
-];
 
 type FormState = {
   fullName: string;
@@ -128,7 +119,10 @@ function validate(
 }
 
 export default function CheckoutPage() {
-  const { items, subtotalPaise, clear } = useCart();
+  const { items, subtotalPaise, clear, authenticated } = useCart();
+  // Guests are prompted to log in / sign up before checking out. They can still
+  // continue as a guest (dismissing the prompt) — guest checkout stays supported.
+  const [guestDismissed, setGuestDismissed] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY);
   const [method, setMethod] = useState<"ONLINE" | "COD">("ONLINE");
   const [errors, setErrors] = useState<Errors>({});
@@ -160,6 +154,26 @@ export default function CheckoutPage() {
   const [quoteStatus, setQuoteStatus] = useState<
     "idle" | "loading" | "done" | "error"
   >("idle");
+  // A signed-in customer's saved address (null for guests / no saved address).
+  // When present we prompt "Deliver to your saved address?" so they can fill the
+  // whole form in one tap. `prefillDone` hides the prompt once used or dismissed.
+  const [prefill, setPrefill] = useState<FormState | null>(null);
+  const [prefillDone, setPrefillDone] = useState(false);
+
+  // On mount, ask the server for the signed-in customer's saved address. Fails
+  // silently — a guest (or no saved address) simply gets no prompt.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/account/prefill")
+      .then((r) => r.json())
+      .then((data) => {
+        if (!cancelled && data?.prefill) setPrefill(data.prefill as FormState);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Resolve a 6-digit pincode via India Post's free API, then reconcile the
   // address: the pincode is authoritative for the STATE (it sets the delivery
@@ -320,6 +334,9 @@ export default function CheckoutPage() {
     shippingPaise == null ? subtotalPaise : subtotalPaise + shippingPaise;
   // Can we take payment? Need a serviceable quote with a usable charge.
   const canPay = serviceable && shippingPaise != null;
+  // Guests must make a choice first — either sign in or explicitly opt to
+  // continue as a guest — before the pay button unlocks.
+  const accountChosen = authenticated || guestDismissed;
 
   const set = (key: keyof FormState) => (
     ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>,
@@ -335,6 +352,21 @@ export default function CheckoutPage() {
     setPinInfo(null);
     setPinStatus(valid ? "loading" : "idle");
     // Invalidate the previous delivery quote until the new pincode resolves.
+    setQuote(null);
+    setQuoteStatus(valid ? "loading" : "idle");
+  }
+
+  // Fills the whole form from the saved address and kicks off the pincode
+  // lookup + delivery quote (the effects key on form.pincode, but we flip the
+  // statuses here so the UI shows "verifying" immediately).
+  function applyPrefill() {
+    if (!prefill) return;
+    setForm(prefill);
+    setPrefillDone(true);
+    setErrors({});
+    const valid = /^\d{6}$/.test(prefill.pincode);
+    setPinInfo(null);
+    setPinStatus(valid ? "loading" : "idle");
     setQuote(null);
     setQuoteStatus(valid ? "loading" : "idle");
   }
@@ -518,6 +550,65 @@ export default function CheckoutPage() {
         <h1 className="mt-4 font-serif text-4xl">Shipping details</h1>
         <Ornament align="left" className="mt-5" />
       </Reveal>
+
+      {!authenticated && !guestDismissed && (
+        <div className="fade-in mt-8 border border-forest/30 bg-forest/5 p-6">
+          <p className="smallcaps text-forest">Log in to check out faster</p>
+          <p className="mt-1 text-sm text-ink/70">
+            Sign in or create an account to save your address, track this order, and
+            keep your cart across devices.
+          </p>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Link
+              href="/login?next=/checkout"
+              className="smallcaps bg-forest px-6 py-2.5 text-bone btn-fill-forest"
+            >
+              Log in
+            </Link>
+            <Link
+              href="/register?next=/checkout"
+              className="smallcaps border border-forest px-6 py-2.5 text-forest btn-fill"
+            >
+              Sign up
+            </Link>
+            <button
+              type="button"
+              onClick={() => setGuestDismissed(true)}
+              className="smallcaps link-underline self-center py-2.5 text-ink/55 transition-colors hover:text-forest"
+            >
+              Continue as guest
+            </button>
+          </div>
+        </div>
+      )}
+
+      {prefill && !prefillDone && (
+        <div className="fade-in mt-8 flex flex-wrap items-center justify-between gap-4 border border-forest/30 bg-forest/5 p-5">
+          <div>
+            <p className="smallcaps text-forest">Deliver to your saved address?</p>
+            <p className="mt-1 text-sm text-ink/70">
+              {prefill.line1}
+              {prefill.line2 ? `, ${prefill.line2}` : ""}, {prefill.city}, {prefill.state} — {prefill.pincode}
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-3">
+            <button
+              type="button"
+              onClick={applyPrefill}
+              className="smallcaps bg-forest px-5 py-2.5 text-bone btn-fill-forest"
+            >
+              Use this address
+            </button>
+            <button
+              type="button"
+              onClick={() => setPrefillDone(true)}
+              className="smallcaps px-4 py-2.5 text-ink/55 transition-colors hover:text-forest"
+            >
+              Enter a new one
+            </button>
+          </div>
+        </div>
+      )}
 
       <form
         onSubmit={onSubmit}
@@ -705,16 +796,18 @@ export default function CheckoutPage() {
           )}
           <button
             type="submit"
-            disabled={submitting || !canPay}
+            disabled={submitting || !canPay || !accountChosen}
             className="smallcaps mt-7 block w-full bg-forest px-6 py-4 text-center text-bone btn-fill-forest disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting
               ? "Processing…"
-              : !canPay
-                ? "Enter a deliverable pincode"
-                : method === "COD"
-                  ? `Pay ${formatINR(shippingPaise!)} & place order`
-                  : `Pay ${formatINR(totalPaise)}`}
+              : !accountChosen
+                ? "Log in or continue as guest"
+                : !canPay
+                  ? "Enter a deliverable pincode"
+                  : method === "COD"
+                    ? `Pay ${formatINR(shippingPaise!)} & place order`
+                    : `Pay ${formatINR(totalPaise)}`}
           </button>
           {payError && (
             <p className="mt-3 text-center text-xs text-[#b3402f]">{payError}</p>

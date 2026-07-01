@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import { logoutAction } from "@/app/actions/auth";
 import { ProfileForm } from "@/components/account/profile-form";
+import { AddressForm } from "@/components/account/address-form";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,10 @@ export default async function AccountPage() {
   if (!customer) notFound();
 
   const isAdmin = customer.role === "ADMIN";
+
+  const address = await prisma.address.findFirst({
+    where: { customerId: customer.id, isDefault: true },
+  });
 
   return (
     <div className="mx-auto max-w-2xl px-8 py-16">
@@ -65,6 +70,26 @@ export default async function AccountPage() {
             name={customer.name ?? ""}
             phone={customer.phone ?? ""}
             email={customer.email}
+          />
+        </div>
+      </section>
+
+      {/* Default shipping address */}
+      <section className="mt-10">
+        <h2 className="smallcaps text-brass-deep">Shipping address</h2>
+        <p className="mt-1 text-sm text-ink/55">
+          Your default delivery address. We&rsquo;ll use it to speed up checkout.
+        </p>
+        <div className="mt-4 border border-line bg-paper p-6">
+          <AddressForm
+            address={{
+              line1: address?.line1 ?? "",
+              line2: address?.line2 ?? "",
+              city: address?.city ?? "",
+              state: address?.state ?? "",
+              pincode: address?.pincode ?? "",
+              phone: address?.phone ?? "",
+            }}
           />
         </div>
       </section>

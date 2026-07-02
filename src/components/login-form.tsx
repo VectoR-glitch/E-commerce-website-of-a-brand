@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import { loginAction, type LoginState } from "@/app/actions/auth";
 import { resendVerificationAction, type ResendState } from "@/app/actions/account";
 import { PasswordInput } from "@/components/password-input";
@@ -15,20 +15,41 @@ export function LoginForm({ next }: { next: string }) {
     undefined,
   );
 
+  // Start every visit with empty credentials. Browsers otherwise repopulate
+  // these from form-history or the back/forward cache (bfcache) — so a previous
+  // session's email/password can linger after logout. Clear on mount and again
+  // when the page is restored from bfcache (which doesn't remount React).
+  const formRef = useRef<HTMLFormElement>(null);
+  useEffect(() => {
+    const clear = () => {
+      const f = formRef.current;
+      const email = f?.elements.namedItem("email") as HTMLInputElement | null;
+      const password = f?.elements.namedItem("password") as HTMLInputElement | null;
+      if (email) email.value = "";
+      if (password) password.value = "";
+    };
+    clear();
+    const onShow = (e: PageTransitionEvent) => {
+      if (e.persisted) clear();
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
+
   return (
     <>
-      <form action={action} className="mt-10 space-y-5">
+      <form ref={formRef} action={action} autoComplete="off" className="mt-10 space-y-5">
         <input type="hidden" name="next" value={next} />
         <div>
           <label htmlFor="email" className="smallcaps text-brass-deep">Email</label>
-          <input id="email" name="email" type="email" autoComplete="email" required className={field} />
+          <input id="email" name="email" type="email" autoComplete="off" required className={field} />
         </div>
         <div>
           <label htmlFor="password" className="smallcaps text-brass-deep">Password</label>
           <PasswordInput
             id="password"
             name="password"
-            autoComplete="current-password"
+            autoComplete="off"
             required
             className={field}
           />

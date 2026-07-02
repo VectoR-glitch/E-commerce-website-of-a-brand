@@ -107,6 +107,9 @@ export function ProductDetail({
     product.variantImages?.[`${fragrance ?? ""}|${size}`] ||
     (fragrance ? product.fragranceImages?.[fragrance] : undefined) ||
     product.image;
+  // A newly-added product may have no image yet — fall back to the emoji
+  // placeholder rather than rendering <Image src="">.
+  const hasImage = Boolean(image);
 
   // Reveal the mobile sticky bar once the main add-to-cart row scrolls off-screen.
   useEffect(() => {
@@ -161,30 +164,38 @@ export function ProductDetail({
         ref={imageRef}
         className="relative min-h-[460px] overflow-hidden border border-line bg-paper"
       >
-        <Image
-          key={image}
-          src={image}
-          alt={`${product.name}${fragrance ? ` — ${fragrance}` : ""}`}
-          fill
-          sizes="(max-width: 768px) 100vw, 600px"
-          className="object-contain variant-in"
-          priority
-        />
-        {/* Tap/click to enlarge — full-cover button keeps it keyboard-accessible. */}
-        <button
-          type="button"
-          onClick={() => setZoomed(true)}
-          aria-label="Zoom image"
-          className="group absolute inset-0 cursor-zoom-in"
-        >
-          <span className="smallcaps absolute bottom-3 right-3 flex items-center gap-1.5 border border-line bg-bone/85 px-2.5 py-1 text-ink/70 opacity-100 backdrop-blur transition-opacity md:opacity-0 md:group-hover:opacity-100">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.2" />
-              <path d="M7.6 7.6L10.5 10.5M5 3.5v3M3.5 5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
-            </svg>
-            Zoom
-          </span>
-        </button>
+        {hasImage ? (
+          <>
+            <Image
+              key={image}
+              src={image}
+              alt={`${product.name}${fragrance ? ` — ${fragrance}` : ""}`}
+              fill
+              sizes="(max-width: 768px) 100vw, 600px"
+              className="object-contain variant-in"
+              priority
+            />
+            {/* Tap/click to enlarge — full-cover button keeps it keyboard-accessible. */}
+            <button
+              type="button"
+              onClick={() => setZoomed(true)}
+              aria-label="Zoom image"
+              className="group absolute inset-0 cursor-zoom-in"
+            >
+              <span className="smallcaps absolute bottom-3 right-3 flex items-center gap-1.5 border border-line bg-bone/85 px-2.5 py-1 text-ink/70 opacity-100 backdrop-blur transition-opacity md:opacity-0 md:group-hover:opacity-100">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <circle cx="5" cy="5" r="3.5" stroke="currentColor" strokeWidth="1.2" />
+                  <path d="M7.6 7.6L10.5 10.5M5 3.5v3M3.5 5h3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                </svg>
+                Zoom
+              </span>
+            </button>
+          </>
+        ) : (
+          <div className="flex h-full items-center justify-center text-8xl">
+            <span aria-hidden>{product.placeholder}</span>
+          </div>
+        )}
       </div>
 
       {/* Details */}
@@ -388,7 +399,7 @@ export function ProductDetail({
     </div>
 
     {/* Image lightbox */}
-    {zoomed && (
+    {zoomed && hasImage && (
       <div
         role="dialog"
         aria-modal="true"

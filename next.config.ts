@@ -41,6 +41,13 @@ const nextConfig: NextConfig = {
   // resources (JS chunks, HMR). Without this, Next 16 blocks them cross-origin
   // and the page can't hydrate. Dev-only; ignored in production builds.
   allowedDevOrigins: ["192.168.1.24"],
+  experimental: {
+    // Image uploads (product + kit photos) go through Server Actions, which
+    // default to a 1 MB body limit. We accept images up to 5 MB (see
+    // MAX_IMAGE_BYTES) — allow headroom for multipart overhead so a 5 MB file
+    // isn't rejected with a "Failed to fetch".
+    serverActions: { bodySizeLimit: "6mb" },
+  },
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },

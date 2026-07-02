@@ -1,6 +1,6 @@
 "use client";
 import Link from "next/link";
-import { useActionState, useEffect, useRef } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { loginAction, type LoginState } from "@/app/actions/auth";
 import { resendVerificationAction, type ResendState } from "@/app/actions/account";
 import { PasswordInput } from "@/components/password-input";
@@ -15,10 +15,13 @@ export function LoginForm({ next }: { next: string }) {
     undefined,
   );
 
-  // Start every visit with empty credentials. Browsers otherwise repopulate
-  // these from form-history or the back/forward cache (bfcache) — so a previous
-  // session's email/password can linger after logout. Clear on mount and again
-  // when the page is restored from bfcache (which doesn't remount React).
+  // Block the browser from auto-populating a saved login on page load. Chrome
+  // ignores autocomplete="off" for credentials, but it will NOT autofill a
+  // read-only field — so the inputs render read-only and unlock on first focus
+  // (i.e. when the user actually starts typing). Combined with clearing on
+  // mount / bfcache restore, a previous session's credentials never linger.
+  const [locked, setLocked] = useState(true);
+  const unlock = () => setLocked(false);
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     const clear = () => {
@@ -42,14 +45,25 @@ export function LoginForm({ next }: { next: string }) {
         <input type="hidden" name="next" value={next} />
         <div>
           <label htmlFor="email" className="smallcaps text-brass-deep">Email</label>
-          <input id="email" name="email" type="email" autoComplete="off" required className={field} />
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="off"
+            readOnly={locked}
+            onFocus={unlock}
+            required
+            className={field}
+          />
         </div>
         <div>
           <label htmlFor="password" className="smallcaps text-brass-deep">Password</label>
           <PasswordInput
             id="password"
             name="password"
-            autoComplete="off"
+            autoComplete="new-password"
+            readOnly={locked}
+            onFocus={unlock}
             required
             className={field}
           />

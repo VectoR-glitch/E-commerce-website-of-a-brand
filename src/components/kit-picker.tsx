@@ -1,7 +1,8 @@
 "use client";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/catalog";
+import { flyToCart } from "@/lib/fly-to-cart";
 import type { BundleSlot } from "@/lib/bundles";
 
 // "Add kit to cart" stashes the kit's coupon so checkout auto-applies the
@@ -13,13 +14,16 @@ export function KitPicker({
   discountType,
   discountValue,
   couponCode,
+  imageUrl,
 }: {
   slots: BundleSlot[];
   discountType: "PERCENT" | "FIXED";
   discountValue: number;
   couponCode: string;
+  imageUrl?: string | null;
 }) {
   const { addItem } = useCart();
+  const btnRef = useRef<HTMLButtonElement>(null);
   // For each product slot, the chosen variantId (defaults to the first option).
   const [choice, setChoice] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
@@ -65,6 +69,8 @@ export function KitPicker({
     } catch {
       // ignore storage errors — the code can still be entered manually
     }
+    // Arc a clone of the kit photo into the header cart (matches the PDP).
+    flyToCart(btnRef.current, imageUrl ?? undefined);
     setAdded(true);
     setTimeout(() => setAdded(false), 1800);
   }
@@ -114,6 +120,7 @@ export function KitPicker({
           )}
         </div>
         <button
+          ref={btnRef}
           type="button"
           onClick={addKit}
           disabled={!allChosen}

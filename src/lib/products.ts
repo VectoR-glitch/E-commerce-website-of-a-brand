@@ -32,7 +32,7 @@ type DbProduct = Prisma.ProductGetPayload<{ select: typeof productSelect }>;
 
 const imageUrl = (id: string) => `/api/product-image/${id}`;
 
-function hydrate(meta: Product, db: DbProduct): Product {
+function hydrate(meta: Product | undefined, db: DbProduct): Product {
   const variants = db.variants
     .filter((v) => v.active)
     .map((v) => ({
@@ -44,12 +44,24 @@ function hydrate(meta: Product, db: DbProduct): Product {
       stock: v.stock,
     }));
 
-  // Preserve the curated display order from the presentation catalog, but only
-  // surface fragrances/sizes that actually exist as active variants in the DB.
+  // The DB is the source of truth for which fragrances/sizes exist. We honour
+  // the catalog's curated order for known values, then APPEND any DB-only ones
+  // (a newly-added fragrance/size the static catalog doesn't know about) so
+  // every active variant is selectable on the PDP — not silently dropped.
   const dbFragrances = new Set(
     variants.map((v) => v.fragrance).filter((f): f is string => Boolean(f)),
   );
   const dbSizes = new Set(variants.map((v) => v.size));
+  const metaFragrances = meta?.fragrances ?? [];
+  const metaSizes = meta?.sizes ?? [];
+  const fragrances = [
+    ...metaFragrances.filter((f) => dbFragrances.has(f)),
+    ...[...dbFragrances].filter((f) => !metaFragrances.includes(f)),
+  ];
+  const sizes = [
+    ...metaSizes.filter((s) => dbSizes.has(s)),
+    ...[...dbSizes].filter((s) => !metaSizes.includes(s)),
+  ];
 
   // Rebuild the image maps from DB rows: default (primary), per-fragrance, and
   // per-variant. Fall back to the catalog /public paths if a product has no DB
@@ -63,23 +75,24 @@ function hydrate(meta: Product, db: DbProduct): Product {
   }
 
   return {
-    ...meta, // slug + any fallback fields from catalog
+    slug: db.slug,
     name: db.name,
     // Editorial content from the DB; fall back to catalog if a field is unset.
-    tagline: db.tagline ?? meta.tagline,
-    claim: db.claim ?? meta.claim,
-    claimTone: (db.claimTone as ClaimTone | null) ?? meta.claimTone,
-    description: db.description ?? meta.description,
-    benefits: db.benefits.length ? db.benefits : meta.benefits,
-    howToUse: db.howToUse.length ? db.howToUse : meta.howToUse,
-    safety: db.safety ?? meta.safety,
-    placeholder: db.placeholder ?? meta.placeholder,
+    // A DB-only product (no catalog meta) uses safe defaults.
+    tagline: db.tagline ?? meta?.tagline ?? "",
+    claim: db.claim ?? meta?.claim ?? "",
+    claimTone: (db.claimTone as ClaimTone | null) ?? meta?.claimTone ?? "fresh",
+    description: db.description ?? meta?.description,
+    benefits: db.benefits.length ? db.benefits : meta?.benefits,
+    howToUse: db.howToUse.length ? db.howToUse : meta?.howToUse,
+    safety: db.safety ?? meta?.safety,
+    placeholder: db.placeholder ?? meta?.placeholder ?? "🧴",
     // Images from the DB, with catalog /public as the fallback.
-    image: primary ? imageUrl(primary.id) : meta.image,
-    fragranceImages: Object.keys(fragranceImages).length ? fragranceImages : meta.fragranceImages,
-    variantImages: Object.keys(variantImages).length ? variantImages : meta.variantImages,
-    fragrances: meta.fragrances.filter((f) => dbFragrances.has(f)),
-    sizes: meta.sizes.filter((s) => dbSizes.has(s)),
+    image: primary ? imageUrl(primary.id) : (meta?.image ?? ""),
+    fragranceImages: Object.keys(fragranceImages).length ? fragranceImages : meta?.fragranceImages,
+    variantImages: Object.keys(variantImages).length ? variantImages : meta?.variantImages,
+    fragrances,
+    sizes,
     variants,
   };
 }
@@ -90,14 +103,21 @@ export async function getProducts(): Promise<Product[]> {
     select: productSelect,
   });
   const bySlug = new Map(dbProducts.map((p) => [p.slug, p]));
+  const inCatalog = new Set(presentation.map((m) => m.slug));
 
-  // Iterate presentation order so the storefront ordering stays intentional.
-  return presentation
+  // Curated catalog first (keeps the intentional storefront ordering), then any
+  // DB-only products (added via admin, not in the static catalog) appended so
+  // new products actually appear on the storefront.
+  const curated = presentation
     .map((meta) => {
       const db = bySlug.get(meta.slug);
       return db ? hydrate(meta, db) : null;
     })
     .filter((p): p is Product => p !== null);
+  const extras = dbProducts
+    .filter((db) => !inCatalog.has(db.slug))
+    .map((db) => hydrate(undefined, db));
+  return [...curated, ...extras];
 }
 
 export async function getProduct(slug: string): Promise<Product | undefined> {
@@ -107,8 +127,8 @@ export async function getProduct(slug: string): Promise<Product | undefined> {
   });
   if (!db || !db.active) return undefined;
 
+  // A DB-only product (no static catalog entry) is still valid — hydrate falls
+  // back to safe defaults when there's no meta.
   const meta = presentation.find((p) => p.slug === slug);
-  if (!meta) return undefined;
-
   return hydrate(meta, db);
 }

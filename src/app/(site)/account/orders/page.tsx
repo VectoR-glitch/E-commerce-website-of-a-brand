@@ -22,7 +22,7 @@ export default async function AccountOrdersPage() {
 
       {orders.length === 0 ? (
         <div className="mt-10 border border-line bg-paper p-8 text-center">
-          <p className="text-ink/60">You haven't placed any orders yet.</p>
+          <p className="text-ink/60">You haven&rsquo;t placed any orders yet.</p>
           <Link
             href="/shop"
             className="smallcaps mt-5 inline-block bg-forest px-6 py-2.5 text-bone btn-fill-forest"

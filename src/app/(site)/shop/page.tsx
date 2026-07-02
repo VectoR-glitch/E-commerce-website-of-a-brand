@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { getProducts } from "@/lib/products";
+import { getActiveBundles } from "@/lib/bundles";
 import { ProductCard } from "@/components/product-card";
+import { BundleCard } from "@/components/bundle-card";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
 
@@ -13,7 +15,7 @@ export const metadata: Metadata = {
 };
 
 export default async function ShopPage() {
-  const products = await getProducts();
+  const [products, bundles] = await Promise.all([getProducts(), getActiveBundles()]);
 
   // Surface each fragrance of a multi-fragrance product as its own card.
   const cards = products.flatMap((product) =>
@@ -44,6 +46,26 @@ export default async function ShopPage() {
           ))}
         </div>
       </Reveal>
+
+      {bundles.length > 0 && (
+        <div className="mt-24">
+          <Reveal className="mb-12 text-center">
+            <span className="smallcaps text-brass-deep">Curated Kits</span>
+            <h2 className="mt-4 font-serif text-4xl">Save more, together</h2>
+            <p className="mx-auto mt-4 max-w-md text-ink/70">
+              Our essentials, bundled — one tap adds the kit and applies the saving at checkout.
+            </p>
+            <Ornament className="mt-6" />
+          </Reveal>
+          <Reveal delay={120}>
+            <div className="grid gap-px border border-line bg-line md:grid-cols-2">
+              {bundles.map((b) => (
+                <BundleCard key={b.id} bundle={b} />
+              ))}
+            </div>
+          </Reveal>
+        </div>
+      )}
     </section>
   );
 }

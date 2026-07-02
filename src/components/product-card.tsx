@@ -49,7 +49,7 @@ export function ProductCard({
       <div className="relative h-80 overflow-hidden border-b border-line">
         {variantSlides.length >= 1 ? (
           <CardMedia slides={variantSlides} name={product.name} />
-        ) : (
+        ) : image ? (
           <Image
             src={image}
             alt={fragrance ? `${product.name} — ${fragrance}` : product.name}
@@ -57,6 +57,12 @@ export function ProductCard({
             sizes="(max-width: 768px) 100vw, 400px"
             className="object-contain transition-transform duration-300 group-hover:scale-105"
           />
+        ) : (
+          // No image uploaded yet (e.g. a newly-added DB product) — show the
+          // emoji placeholder instead of an empty <Image src="">.
+          <div className="flex h-full items-center justify-center bg-bone text-7xl">
+            <span aria-hidden>{product.placeholder}</span>
+          </div>
         )}
       </div>
       <div className="flex flex-1 flex-col items-center px-8 py-11 text-center">

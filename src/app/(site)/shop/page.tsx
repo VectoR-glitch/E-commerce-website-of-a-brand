@@ -58,7 +58,7 @@ export default async function ShopPage() {
             <Ornament className="mt-6" />
           </Reveal>
           <Reveal delay={120}>
-            <div className="grid gap-px border border-line bg-line md:grid-cols-2">
+            <div className="grid gap-px border border-line bg-line">
               {bundles.map((b) => (
                 <BundleCard key={b.id} bundle={b} />
               ))}

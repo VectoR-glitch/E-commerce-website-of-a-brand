@@ -117,9 +117,11 @@ export function KitPicker({
           type="button"
           onClick={addKit}
           disabled={!allChosen}
-          className="smallcaps mt-4 w-full bg-forest px-6 py-3 text-center text-bone btn-fill-forest disabled:cursor-not-allowed disabled:opacity-60"
+          className={`smallcaps mt-4 w-full bg-forest px-6 py-3 text-center text-bone btn-fill-forest transition-transform duration-150 ease-out hover:-translate-y-0.5 active:translate-y-0 active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0 ${added ? "scale-[1.02]" : ""}`}
         >
-          {added ? "Added ✓" : "Add kit to cart"}
+          <span className={`inline-block transition-transform ${added ? "animate-[kit-pop_0.35s_ease-out]" : ""}`}>
+            {added ? "Added ✓" : "Add kit to cart"}
+          </span>
         </button>
       </div>
     </div>

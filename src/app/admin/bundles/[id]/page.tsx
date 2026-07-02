@@ -9,10 +9,10 @@ import {
   deleteBundle,
   addBundleItem,
   removeBundleItem,
-  uploadBundleImage,
   removeBundleImage,
 } from "@/app/admin/actions";
 import { ConfirmSubmit } from "@/components/confirm-submit";
+import { KitImageUpload } from "@/components/kit-image-upload";
 
 export const dynamic = "force-dynamic";
 
@@ -136,16 +136,7 @@ export default async function BundleEdit(props: { params: Promise<{ id: string }
         ) : (
           <p className="mt-2 text-sm text-ink/50">No photo yet.</p>
         )}
-        <form action={uploadBundleImage} className="mt-3 flex flex-wrap items-end gap-3">
-          <input type="hidden" name="bundleId" value={bundle.id} />
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">
-              {bundle.imageType ? "Replace photo" : "Upload photo"}
-            </label>
-            <input name="file" type="file" accept="image/webp,image/jpeg,image/png,image/avif" required className="text-sm" />
-          </div>
-          <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Upload</button>
-        </form>
+        <KitImageUpload bundleId={bundle.id} hasImage={!!bundle.imageType} />
         <p className="mt-2 text-xs text-ink/55">WebP/JPEG/PNG/AVIF, up to 5 MB. Shown on the kit card in the shop.</p>
       </div>
 

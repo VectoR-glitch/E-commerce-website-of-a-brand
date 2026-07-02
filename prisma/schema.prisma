@@ -218,6 +218,7 @@ model Order {
   subtotalPaise Int
   shippingPaise Int @default(0)
   discountPaise Int @default(0)
+  couponCode    String? // the coupon applied to this order, if any (uppercase)
   totalPaise    Int
   // Amount actually collected via Razorpay. ONLINE = totalPaise; COD = the
   // delivery fee prepaid up front (goods are paid in cash on delivery, so the
@@ -255,6 +256,28 @@ model OrderItem {
   linePaise   Int
 
   @@index([orderId])
+}
+
+/// A discount code applied at checkout. `value` is a percentage (1–100) when
+/// type is PERCENT, otherwise a flat amount in paise. usedCount is incremented
+/// once per order at payment settlement (idempotent), and maxUses caps it.
+model Coupon {
+  id            String       @id @default(cuid())
+  code          String       @unique // stored uppercase; compared case-insensitively
+  type          DiscountType
+  value         Int
+  minOrderPaise Int          @default(0) // minimum cart subtotal to qualify
+  maxUses       Int? // null = unlimited total redemptions
+  usedCount     Int          @default(0)
+  active        Boolean      @default(true)
+  expiresAt     DateTime? // null = never expires
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+enum DiscountType {
+  PERCENT
+  FIXED
 }
 
 enum Role {

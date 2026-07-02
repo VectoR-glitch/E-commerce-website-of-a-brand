@@ -47,6 +47,8 @@ export type OrderForEmail = {
   shipPincode: string;
   subtotalPaise: number;
   shippingPaise: number;
+  discountPaise: number;
+  couponCode: string | null;
   totalPaise: number;
   amountPaidPaise: number;
   paymentMethod: "ONLINE" | "COD";
@@ -85,6 +87,7 @@ function summaryBlock(order: OrderForEmail): string {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
       ${itemsRows(order.items)}
       <tr><td style="padding:12px 0 4px;color:${C.muted};">Subtotal</td><td style="padding:12px 0 4px;text-align:right;color:${C.ink};">${formatINR(order.subtotalPaise)}</td></tr>
+      ${order.discountPaise > 0 ? `<tr><td style="padding:4px 0;color:${C.forest};">Discount</td><td style="padding:4px 0;text-align:right;color:${C.forest};">−${formatINR(order.discountPaise)}</td></tr>` : ""}
       <tr><td style="padding:4px 0;color:${C.muted};">${order.paymentMethod === "COD" ? "Delivery (paid online)" : "Shipping"}</td><td style="padding:4px 0;text-align:right;color:${C.ink};">${order.shippingPaise === 0 ? "Free" : formatINR(order.shippingPaise)}</td></tr>
       <tr><td style="padding:12px 0 0;border-top:1px solid ${C.line};font-family:Georgia,serif;font-size:18px;color:${C.ink};">Total</td><td style="padding:12px 0 0;border-top:1px solid ${C.line};text-align:right;font-family:Georgia,serif;font-size:18px;color:${C.ink};">${formatINR(order.totalPaise)}</td></tr>
       ${
@@ -161,6 +164,7 @@ function orderText(order: OrderForEmail, opts: { admin: boolean }): string {
   lines.push("");
 
   lines.push(`Subtotal: ${formatINR(order.subtotalPaise)}`);
+  if (order.discountPaise > 0) lines.push(`Discount: −${formatINR(order.discountPaise)}`);
   lines.push(
     `${isCod ? "Delivery (paid online)" : "Shipping"}: ${order.shippingPaise === 0 ? "Free" : formatINR(order.shippingPaise)}`,
   );
@@ -295,6 +299,9 @@ function statusText(order: OrderForEmail, copy: StatusCopy): string {
     lines.push(`  - ${it.productName}${variant ? ` (${variant})` : ""} × ${it.quantity} — ${formatINR(it.linePaise)}`);
   }
   lines.push("");
+  if (order.discountPaise > 0) {
+    lines.push(`Discount (${order.couponCode ?? "coupon"}): −${formatINR(order.discountPaise)}`);
+  }
   lines.push(`Total: ${formatINR(order.totalPaise)}`);
   lines.push("");
   lines.push("Questions? Just reply to this email.");

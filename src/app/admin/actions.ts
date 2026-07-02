@@ -3,7 +3,7 @@
 // re-checks requireAdmin() — the UI gate alone is not a security boundary.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
+import { OrderStatus, PaymentStatus, DiscountType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
@@ -95,6 +95,8 @@ function toOrderForEmail(order: OrderWithItems): OrderForEmail {
     shipPincode: order.shipPincode,
     subtotalPaise: order.subtotalPaise,
     shippingPaise: order.shippingPaise,
+    discountPaise: order.discountPaise,
+    couponCode: order.couponCode,
     totalPaise: order.totalPaise,
     amountPaidPaise: order.amountPaidPaise,
     paymentMethod: order.paymentMethod,
@@ -379,4 +381,56 @@ export async function deleteReview(formData: FormData): Promise<void> {
   await prisma.review.delete({ where: { id } });
   revalidatePath("/admin/reviews");
   revalidatePath(`/product/${review.product.slug}`);
+}
+
+// ── Coupons ─────────────────────────────────────────────────────────────────
+const COUPON_CODE_RE = /^[A-Z0-9][A-Z0-9-]{1,23}$/;
+
+export async function createCoupon(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const code = String(formData.get("code") ?? "").trim().toUpperCase();
+  const type = String(formData.get("type") ?? "") as DiscountType;
+  const valueRaw = Number(formData.get("value"));
+  const minRupees = Number(formData.get("minOrderRupees")) || 0;
+  const maxUsesRaw = String(formData.get("maxUses") ?? "").trim();
+  const expiresRaw = String(formData.get("expiresAt") ?? "").trim();
+
+  if (!COUPON_CODE_RE.test(code)) return; // letters/numbers/hyphens, 2–24 chars
+  if (type !== "PERCENT" && type !== "FIXED") return;
+  if (!Number.isFinite(valueRaw) || valueRaw <= 0) return;
+  if (type === "PERCENT" && valueRaw > 100) return;
+
+  // PERCENT stores a whole percent; FIXED stores paise.
+  const value = type === "PERCENT" ? Math.round(valueRaw) : Math.round(valueRaw * 100);
+  const minOrderPaise = Math.max(0, Math.round(minRupees * 100));
+  const maxUses = maxUsesRaw ? Math.max(1, Math.floor(Number(maxUsesRaw))) : null;
+  if (maxUses !== null && !Number.isFinite(maxUses)) return;
+  const expiresAt = expiresRaw ? new Date(expiresRaw) : null;
+  if (expiresAt && Number.isNaN(expiresAt.getTime())) return;
+
+  const clash = await prisma.coupon.findUnique({ where: { code } });
+  if (clash) return; // unique code — bail quietly
+
+  await prisma.coupon.create({
+    data: { code, type, value, minOrderPaise, maxUses, expiresAt },
+  });
+  revalidatePath("/admin/coupons");
+}
+
+export async function toggleCoupon(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("couponId") ?? "");
+  if (!id) return;
+  const c = await prisma.coupon.findUnique({ where: { id }, select: { active: true } });
+  if (!c) return;
+  await prisma.coupon.update({ where: { id }, data: { active: !c.active } });
+  revalidatePath("/admin/coupons");
+}
+
+export async function deleteCoupon(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("couponId") ?? "");
+  if (!id) return;
+  await prisma.coupon.delete({ where: { id } });
+  revalidatePath("/admin/coupons");
 }

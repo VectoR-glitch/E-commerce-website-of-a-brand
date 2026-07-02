@@ -154,6 +154,12 @@ export default function CheckoutPage() {
   const [quoteStatus, setQuoteStatus] = useState<
     "idle" | "loading" | "done" | "error"
   >("idle");
+  // Coupon: the text input, the applied result (re-validated server-side at pay),
+  // and inline status. Discount always applies to the goods subtotal.
+  const [couponInput, setCouponInput] = useState("");
+  const [coupon, setCoupon] = useState<{ code: string; discountPaise: number; label: string } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [couponChecking, setCouponChecking] = useState(false);
   // A signed-in customer's saved address (null for guests / no saved address).
   // When present we prompt "Deliver to your saved address?" so they can fill the
   // whole form in one tap. `prefillDone` hides the prompt once used or dismissed.
@@ -305,6 +311,34 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.pincode, form.state, itemsKey]);
 
+  // If the cart subtotal changes after a coupon is applied (e.g. a percentage
+  // discount, or the subtotal drops below the minimum), silently re-validate so
+  // the displayed discount always matches what the server will charge.
+  useEffect(() => {
+    if (!coupon) return;
+    let cancelled = false;
+    fetch("/api/coupon/validate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: coupon.code, subtotalPaise }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (cancelled) return;
+        if (data?.ok) {
+          setCoupon({ code: data.code, discountPaise: data.discountPaise, label: data.label });
+        } else {
+          setCoupon(null);
+          setCouponError(data?.error ?? "This code is no longer valid for your cart.");
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotalPaise]);
+
   if (items.length === 0 && !placed) {
     return (
       <section className="mx-auto max-w-3xl px-8 py-24 text-center">
@@ -330,8 +364,10 @@ export default function CheckoutPage() {
     : method === "COD"
       ? (quote?.codPaise ?? null)
       : (quote?.prepaidPaise ?? null);
+  // Coupon discount, capped at the subtotal (never discounts shipping).
+  const discountPaise = Math.min(coupon?.discountPaise ?? 0, subtotalPaise);
   const totalPaise =
-    shippingPaise == null ? subtotalPaise : subtotalPaise + shippingPaise;
+    (shippingPaise == null ? subtotalPaise : subtotalPaise + shippingPaise) - discountPaise;
   // Can we take payment? Need a serviceable quote with a usable charge.
   const canPay = serviceable && shippingPaise != null;
   // Guests must make a choice first — either sign in or explicitly opt to
@@ -371,6 +407,40 @@ export default function CheckoutPage() {
     setQuoteStatus(valid ? "loading" : "idle");
   }
 
+  // Validate + apply a coupon against the current subtotal. The checkout route
+  // re-validates authoritatively at pay time; this is the instant preview.
+  async function applyCoupon(code: string) {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    setCouponChecking(true);
+    setCouponError(null);
+    try {
+      const res = await fetch("/api/coupon/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: trimmed, subtotalPaise }),
+      });
+      const data = await res.json();
+      if (data?.ok) {
+        setCoupon({ code: data.code, discountPaise: data.discountPaise, label: data.label });
+        setCouponError(null);
+      } else {
+        setCoupon(null);
+        setCouponError(data?.error ?? "This code isn’t valid.");
+      }
+    } catch {
+      setCouponError("Couldn’t check that code. Please try again.");
+    } finally {
+      setCouponChecking(false);
+    }
+  }
+
+  function removeCoupon() {
+    setCoupon(null);
+    setCouponInput("");
+    setCouponError(null);
+  }
+
   // Live cross-checks for inline feedback (validate() enforces them on submit).
   const stateMatches =
     pinStatus === "done" && !!pinInfo?.state && form.state === pinInfo.state;
@@ -400,6 +470,7 @@ export default function CheckoutPage() {
           items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
           shipping: form,
           paymentMethod: method,
+          couponCode: coupon?.code,
         }),
       });
       const data = await res.json();
@@ -773,7 +844,58 @@ export default function CheckoutPage() {
                       : "Enter pincode"}
               </dd>
             </div>
+            {discountPaise > 0 && (
+              <div className="flex justify-between text-forest">
+                <dt>Discount{coupon ? ` (${coupon.code})` : ""}</dt>
+                <dd>−{formatINR(discountPaise)}</dd>
+              </div>
+            )}
           </dl>
+
+          {/* Coupon */}
+          <div className="mt-4">
+            {coupon ? (
+              <div className="flex items-center justify-between gap-3 border border-forest/30 bg-forest/5 px-3 py-2 text-sm">
+                <span className="text-forest">
+                  <strong>{coupon.code}</strong> applied · {coupon.label}
+                </span>
+                <button
+                  type="button"
+                  onClick={removeCoupon}
+                  className="smallcaps text-xs text-ink/55 transition-colors hover:text-forest"
+                >
+                  Remove
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  <input
+                    value={couponInput}
+                    onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        applyCoupon(couponInput);
+                      }
+                    }}
+                    placeholder="Discount code"
+                    className="w-full border border-line bg-white px-3 py-2 text-sm uppercase outline-none focus:border-forest"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => applyCoupon(couponInput)}
+                    disabled={couponChecking || !couponInput.trim()}
+                    className="smallcaps shrink-0 border border-forest px-4 py-2 text-forest btn-fill disabled:opacity-50"
+                  >
+                    {couponChecking ? "…" : "Apply"}
+                  </button>
+                </div>
+                {couponError && <p className="mt-1 text-xs text-[#b3402f]">{couponError}</p>}
+              </>
+            )}
+          </div>
+
           <div className="mt-5 flex justify-between border-t border-line pt-5 font-serif text-xl">
             <span>Total</span>
             <span>{shippingPaise == null ? "—" : formatINR(totalPaise)}</span>
@@ -781,7 +903,7 @@ export default function CheckoutPage() {
           {method === "COD" && shippingPaise != null && (
             <p className="mt-2 text-xs text-ink/55">
               Pay <strong>{formatINR(shippingPaise)}</strong> now to confirm —{" "}
-              <strong>{formatINR(subtotalPaise)}</strong> in cash on delivery.
+              <strong>{formatINR(subtotalPaise - discountPaise)}</strong> in cash on delivery.
             </p>
           )}
           {quoteStatus === "done" && quote?.serviceable === false && (

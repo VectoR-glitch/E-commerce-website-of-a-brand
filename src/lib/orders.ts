@@ -96,6 +96,15 @@ export async function settleOrderPaid(params: {
       data: { status: shortfall ? "ON_HOLD" : "CONFIRMED" },
     });
 
+    // Count the coupon redemption exactly once, here in the winning claim, so a
+    // concurrent verify+webhook can't double-count it.
+    if (existing.couponCode) {
+      await tx.coupon.updateMany({
+        where: { code: existing.couponCode },
+        data: { usedCount: { increment: 1 } },
+      });
+    }
+
     // Re-read so the returned order (used for the confirmation email) reflects
     // the settled status + amountPaidPaise we just wrote.
     const order = await tx.order.findUnique({

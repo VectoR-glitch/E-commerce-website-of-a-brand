@@ -21,7 +21,7 @@ export default function TermsPage() {
           By using klenich.com and placing an order, you agree to these terms.
           The store is operated by Bharat Bliss Pvt Ltd, 91, Bus Route, beside
           Scale Karkhana, Rajarhat, Kanjialpara, Kolkata, West Bengal 700135.
-          GSTIN: 19AANCB7497G1ZY.
+          GSTIN: <span className="text-brass-deep underline">19AANCB7497G1ZY</span>.
         </Section>
         <Section title="2. Products & pricing">
           We aim to describe products accurately. Prices are in INR and inclusive

@@ -113,6 +113,11 @@ model Bundle {
   active        Boolean      @default(true)
   discountType  DiscountType
   discountValue Int // percent (1–100) or paise off, mirrored into the coupon
+  // Optional kit photo stored inline (one per bundle). Served via
+  // /api/bundle-image/[id]; queries omit `imageData` so the storefront list
+  // never loads the blob. `imageType` (small) signals whether a photo exists.
+  imageData     Bytes?
+  imageType     String?
   items         BundleItem[]
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt

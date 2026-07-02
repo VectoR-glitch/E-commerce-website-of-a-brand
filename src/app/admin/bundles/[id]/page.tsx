@@ -4,7 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
 import { bundleCouponCode } from "@/lib/bundles";
-import { updateBundle, deleteBundle, addBundleItem, removeBundleItem } from "@/app/admin/actions";
+import {
+  updateBundle,
+  deleteBundle,
+  addBundleItem,
+  removeBundleItem,
+  uploadBundleImage,
+  removeBundleImage,
+} from "@/app/admin/actions";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +24,7 @@ export default async function BundleEdit(props: { params: Promise<{ id: string }
 
   const bundle = await prisma.bundle.findUnique({
     where: { id },
+    omit: { imageData: true }, // don't pull the blob into the page
     include: {
       items: {
         include: {
@@ -107,6 +115,38 @@ export default async function BundleEdit(props: { params: Promise<{ id: string }
           </p>
           <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Save kit</button>
         </form>
+      </div>
+
+      {/* Image */}
+      <div className="mt-6 max-w-2xl border border-line bg-paper p-5">
+        <h2 className="smallcaps text-brass-deep">Kit photo</h2>
+        {bundle.imageType ? (
+          <div className="mt-3 flex flex-wrap items-center gap-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={`/api/bundle-image/${bundle.id}?v=${bundle.updatedAt.getTime()}`}
+              alt={bundle.name}
+              className="h-28 w-28 border border-line bg-bone object-contain"
+            />
+            <form action={removeBundleImage}>
+              <input type="hidden" name="bundleId" value={bundle.id} />
+              <button className="text-xs text-red-600 hover:underline">Remove photo</button>
+            </form>
+          </div>
+        ) : (
+          <p className="mt-2 text-sm text-ink/50">No photo yet.</p>
+        )}
+        <form action={uploadBundleImage} className="mt-3 flex flex-wrap items-end gap-3">
+          <input type="hidden" name="bundleId" value={bundle.id} />
+          <div>
+            <label className="smallcaps mb-1 block text-brass-deep">
+              {bundle.imageType ? "Replace photo" : "Upload photo"}
+            </label>
+            <input name="file" type="file" accept="image/webp,image/jpeg,image/png,image/avif" required className="text-sm" />
+          </div>
+          <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Upload</button>
+        </form>
+        <p className="mt-2 text-xs text-ink/55">WebP/JPEG/PNG/AVIF, up to 5 MB. Shown on the kit card in the shop.</p>
       </div>
 
       {/* Items */}

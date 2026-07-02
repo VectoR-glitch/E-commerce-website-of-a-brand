@@ -49,6 +49,7 @@ export type BundleView = {
   slug: string;
   name: string;
   description: string | null;
+  imageUrl: string | null;
   couponCode: string;
   discountType: "PERCENT" | "FIXED";
   discountValue: number; // percent, or paise
@@ -87,6 +88,7 @@ export async function getActiveBundles(): Promise<BundleView[]> {
   const bundles = await prisma.bundle.findMany({
     where: { active: true },
     orderBy: { createdAt: "asc" },
+    omit: { imageData: true }, // never load the blob on the storefront list
     include: {
       items: {
         include: {
@@ -150,6 +152,8 @@ export async function getActiveBundles(): Promise<BundleView[]> {
         slug: b.slug,
         name: b.name,
         description: b.description,
+        // Version the URL by updatedAt so a replaced image busts the cache.
+        imageUrl: b.imageType ? `/api/bundle-image/${b.id}?v=${b.updatedAt.getTime()}` : null,
         couponCode: bundleCouponCode(b.slug),
         discountType,
         discountValue: b.discountValue,

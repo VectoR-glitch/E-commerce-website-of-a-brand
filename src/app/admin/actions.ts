@@ -543,3 +543,30 @@ export async function removeBundleItem(formData: FormData): Promise<void> {
   if (bundleId) revalidatePath(`/admin/bundles/${bundleId}`);
   revalidatePath("/shop");
 }
+
+export async function uploadBundleImage(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const bundleId = String(formData.get("bundleId") ?? "");
+  const file = formData.get("file");
+  if (!bundleId || !(file instanceof File) || !isAllowedImage(file.type, file.size)) return;
+
+  const data = Buffer.from(await file.arrayBuffer());
+  await prisma.bundle.update({
+    where: { id: bundleId },
+    data: { imageData: data, imageType: file.type },
+  });
+  revalidatePath(`/admin/bundles/${bundleId}`);
+  revalidatePath("/shop");
+}
+
+export async function removeBundleImage(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const bundleId = String(formData.get("bundleId") ?? "");
+  if (!bundleId) return;
+  await prisma.bundle.update({
+    where: { id: bundleId },
+    data: { imageData: null, imageType: null },
+  });
+  revalidatePath(`/admin/bundles/${bundleId}`);
+  revalidatePath("/shop");
+}

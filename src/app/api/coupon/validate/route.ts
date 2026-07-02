@@ -12,7 +12,11 @@ export async function POST(request: Request) {
   });
   if (!rl.ok) return tooManyRequests(rl.retryAfter, "Too many attempts. Please wait a moment.");
 
-  let body: { code?: string; subtotalPaise?: number };
+  let body: {
+    code?: string;
+    subtotalPaise?: number;
+    items?: { variantId?: string; quantity?: number }[];
+  };
   try {
     body = await request.json();
   } catch {
@@ -20,6 +24,9 @@ export async function POST(request: Request) {
   }
 
   const subtotalPaise = Math.max(0, Math.floor(Number(body.subtotalPaise) || 0));
-  const result = await validateCoupon(String(body.code ?? ""), subtotalPaise);
+  const cart = (body.items ?? [])
+    .map((i) => ({ variantId: String(i.variantId ?? ""), quantity: Math.floor(Number(i.quantity) || 0) }))
+    .filter((i) => i.variantId && i.quantity > 0);
+  const result = await validateCoupon(String(body.code ?? ""), subtotalPaise, cart);
   return NextResponse.json(result);
 }

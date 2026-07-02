@@ -7,6 +7,7 @@ import { OrderStatus, PaymentStatus, DiscountType, Prisma } from "@prisma/client
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
+import { bundleCouponCode } from "@/lib/bundles";
 
 const ORDER_STATUSES = Object.values(OrderStatus);
 const PAYMENT_STATUSES = Object.values(PaymentStatus);
@@ -433,4 +434,106 @@ export async function deleteCoupon(formData: FormData): Promise<void> {
   if (!id) return;
   await prisma.coupon.delete({ where: { id } });
   revalidatePath("/admin/coupons");
+}
+
+// ── Bundles (curated kits) ──────────────────────────────────────────────────
+// A bundle's discount is realised through a mirrored coupon (code KIT-<slug>),
+// so every bundle write keeps that coupon in sync.
+async function syncBundleCoupon(
+  slug: string,
+  type: DiscountType,
+  value: number,
+  active: boolean,
+): Promise<void> {
+  const code = bundleCouponCode(slug);
+  await prisma.coupon.upsert({
+    where: { code },
+    create: { code, type, value, minOrderPaise: 0, active },
+    update: { type, value, active },
+  });
+}
+
+export async function createBundle(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim();
+  const slug = String(formData.get("slug") ?? "").trim().toLowerCase();
+  const type = String(formData.get("discountType") ?? "") as DiscountType;
+  const valueRaw = Number(formData.get("discountValue"));
+  if (!name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return;
+  if (type !== "PERCENT" && type !== "FIXED") return;
+  if (!Number.isFinite(valueRaw) || valueRaw <= 0) return;
+  if (type === "PERCENT" && valueRaw > 100) return;
+  const discountValue = type === "PERCENT" ? Math.round(valueRaw) : Math.round(valueRaw * 100);
+
+  const clash = await prisma.bundle.findUnique({ where: { slug } });
+  if (clash) return;
+
+  await prisma.bundle.create({ data: { name, slug, discountType: type, discountValue } });
+  await syncBundleCoupon(slug, type, discountValue, true);
+  revalidatePath("/admin/bundles");
+  revalidatePath("/shop");
+}
+
+export async function updateBundle(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("bundleId") ?? "");
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  const type = String(formData.get("discountType") ?? "") as DiscountType;
+  const valueRaw = Number(formData.get("discountValue"));
+  const active = formData.get("active") === "on";
+  if (!id || !name) return;
+  if (type !== "PERCENT" && type !== "FIXED") return;
+  if (!Number.isFinite(valueRaw) || valueRaw <= 0) return;
+  if (type === "PERCENT" && valueRaw > 100) return;
+  const discountValue = type === "PERCENT" ? Math.round(valueRaw) : Math.round(valueRaw * 100);
+
+  const bundle = await prisma.bundle.update({
+    where: { id },
+    data: { name, description, discountType: type, discountValue, active },
+    select: { slug: true },
+  });
+  await syncBundleCoupon(bundle.slug, type, discountValue, active);
+  revalidatePath("/admin/bundles");
+  revalidatePath(`/admin/bundles/${id}`);
+  revalidatePath("/shop");
+}
+
+export async function deleteBundle(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("bundleId") ?? "");
+  if (!id) return;
+  const bundle = await prisma.bundle.findUnique({ where: { id }, select: { slug: true } });
+  if (!bundle) return;
+  await prisma.bundle.delete({ where: { id } }); // items cascade
+  await prisma.coupon.deleteMany({ where: { code: bundleCouponCode(bundle.slug) } });
+  revalidatePath("/admin/bundles");
+  revalidatePath("/shop");
+  redirect("/admin/bundles");
+}
+
+export async function addBundleItem(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const bundleId = String(formData.get("bundleId") ?? "");
+  const variantId = String(formData.get("variantId") ?? "");
+  const quantity = Math.max(1, Math.floor(Number(formData.get("quantity")) || 1));
+  if (!bundleId || !variantId) return;
+  // Upsert so re-adding the same variant just updates its quantity.
+  await prisma.bundleItem.upsert({
+    where: { bundleId_variantId: { bundleId, variantId } },
+    create: { bundleId, variantId, quantity },
+    update: { quantity },
+  });
+  revalidatePath(`/admin/bundles/${bundleId}`);
+  revalidatePath("/shop");
+}
+
+export async function removeBundleItem(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("bundleItemId") ?? "");
+  const bundleId = String(formData.get("bundleId") ?? "");
+  if (!id) return;
+  await prisma.bundleItem.delete({ where: { id } });
+  if (bundleId) revalidatePath(`/admin/bundles/${bundleId}`);
+  revalidatePath("/shop");
 }

@@ -94,10 +94,39 @@ model Variant {
   active     Boolean     @default(true) // inactive variants never show on the site
   orderItems OrderItem[]
   cartItems  CartItem[]
+  bundleItems BundleItem[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
   @@index([productId])
+}
+
+/// A curated kit — a set of variants sold together at a discount to cross-sell
+/// the range. The saving is realised by a mirrored coupon (code KIT-<slug>) so
+/// the whole checkout/settlement/receipt discount pipeline is reused unchanged.
+model Bundle {
+  id            String       @id @default(cuid())
+  slug          String       @unique // storefront + coupon key
+  name          String
+  description   String?
+  active        Boolean      @default(true)
+  discountType  DiscountType
+  discountValue Int // percent (1–100) or paise off, mirrored into the coupon
+  items         BundleItem[]
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+}
+
+model BundleItem {
+  id        String  @id @default(cuid())
+  bundle    Bundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  bundleId  String
+  variant   Variant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId String
+  quantity  Int     @default(1)
+
+  @@unique([bundleId, variantId])
+  @@index([bundleId])
 }
 
 model Customer {

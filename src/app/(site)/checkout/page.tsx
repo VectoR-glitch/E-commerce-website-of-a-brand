@@ -7,6 +7,7 @@ import { formatINR } from "@/lib/catalog";
 import { INDIAN_STATES } from "@/lib/constants";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
+import { PENDING_COUPON_KEY } from "@/components/add-bundle-button";
 
 
 // Minimal shape of the Razorpay Checkout we use.
@@ -339,6 +340,20 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subtotalPaise]);
 
+  // "Add kit to cart" stashes the bundle's coupon code; apply it once on arrival
+  // at checkout, then clear it so a later manual visit isn't re-couponed.
+  useEffect(() => {
+    let code: string | null = null;
+    try {
+      code = sessionStorage.getItem(PENDING_COUPON_KEY);
+      if (code) sessionStorage.removeItem(PENDING_COUPON_KEY);
+    } catch {
+      // ignore storage errors
+    }
+    if (code) applyCoupon(code);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (items.length === 0 && !placed) {
     return (
       <section className="mx-auto max-w-3xl px-8 py-24 text-center">
@@ -412,6 +427,7 @@ export default function CheckoutPage() {
   async function applyCoupon(code: string) {
     const trimmed = code.trim();
     if (!trimmed) return;
+    setCouponInput(trimmed);
     setCouponChecking(true);
     setCouponError(null);
     try {

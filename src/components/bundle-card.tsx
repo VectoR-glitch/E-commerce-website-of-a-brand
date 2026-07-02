@@ -25,6 +25,7 @@ export function BundleCard({ bundle }: { bundle: BundleView }) {
             discountType={bundle.discountType}
             discountValue={bundle.discountValue}
             couponCode={bundle.couponCode}
+            imageUrl={bundle.imageUrl}
           />
         </div>
       </div>

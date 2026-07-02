@@ -19,15 +19,32 @@ async function bundleGate(code: string, cart: CartLine[]): Promise<string | null
   const slug = code.slice(4).toLowerCase();
   const bundle = await prisma.bundle.findUnique({
     where: { slug },
-    include: { items: true },
+    include: { items: { include: { product: { include: { variants: true } } } } },
   });
   if (!bundle) return null; // orphan KIT- code (no bundle) → treat as a normal coupon
   if (!bundle.active) return "This kit is no longer available.";
 
   const have = new Map(cart.map((l) => [l.variantId, l.quantity]));
-  const missing = bundle.items.some((it) => (have.get(it.variantId) ?? 0) < it.quantity);
-  if (missing) {
-    return "This code only applies when the kit’s items are in your cart. Add the kit from the shop.";
+  const notMet = "This code only applies when the kit’s items are in your cart. Add the kit from the shop.";
+
+  for (const it of bundle.items) {
+    if (it.variantId) {
+      // Exact slot: that variant must be present in the required quantity.
+      if ((have.get(it.variantId) ?? 0) < it.quantity) return notMet;
+    } else if (it.productId && it.product) {
+      // Product slot: any of the product's variants (matching the size lock)
+      // must total at least the slot quantity.
+      const eligible = new Set(
+        it.product.variants
+          .filter((v) => v.active && (!it.size || v.size === it.size))
+          .map((v) => v.id),
+      );
+      let total = 0;
+      for (const [variantId, qty] of have) {
+        if (eligible.has(variantId)) total += qty;
+      }
+      if (total < it.quantity) return notMet;
+    }
   }
   return null;
 }

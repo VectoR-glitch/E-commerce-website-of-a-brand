@@ -132,14 +132,19 @@ export function CartProvider({
   // login-merge doesn't trigger a redundant write-back on every page load.
   const dirty = useRef(false);
 
-  // Guest: hydrate from localStorage on mount.
+  // Guest: reconcile the cart to localStorage. Runs on mount AND whenever we
+  // become a guest — including right after logout, when this provider (it lives
+  // in a persistent layout) keeps the previous session's in-memory items. Always
+  // adopt localStorage (empty → clear), so logging out empties the cart rather
+  // than leaving the signed-in items behind. The account's cart lives on the
+  // server and is restored on next login.
   useEffect(() => {
     if (authenticated) return;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) dispatch({ type: "HYDRATE", state: JSON.parse(raw) });
+      dispatch({ type: "HYDRATE", state: raw ? JSON.parse(raw) : { items: [] } });
     } catch {
-      // ignore corrupt storage
+      dispatch({ type: "HYDRATE", state: { items: [] } });
     }
   }, [authenticated]);
 

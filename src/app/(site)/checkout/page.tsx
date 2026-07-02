@@ -7,7 +7,7 @@ import { formatINR } from "@/lib/catalog";
 import { INDIAN_STATES } from "@/lib/constants";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
-import { PENDING_COUPON_KEY } from "@/components/add-bundle-button";
+import { PENDING_COUPON_KEY } from "@/components/kit-picker";
 
 
 // Minimal shape of the Razorpay Checkout we use.

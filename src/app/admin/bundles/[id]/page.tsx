@@ -17,24 +17,45 @@ export default async function BundleEdit(props: { params: Promise<{ id: string }
 
   const bundle = await prisma.bundle.findUnique({
     where: { id },
-    include: { items: { include: { variant: { include: { product: true } } } } },
+    include: {
+      items: {
+        include: {
+          variant: { include: { product: true } },
+          product: true,
+        },
+      },
+    },
   });
   if (!bundle) notFound();
 
-  // All active variants, for the add-item dropdown.
+  // All active variants, for the exact-slot dropdown.
   const variants = await prisma.variant.findMany({
     where: { active: true },
     orderBy: [{ product: { name: "asc" } }, { size: "asc" }],
     include: { product: { select: { name: true } } },
   });
+  // Products + distinct sizes, for the flexible product-slot form.
+  const products = await prisma.product.findMany({
+    where: { active: true },
+    orderBy: { name: "asc" },
+    select: { id: true, name: true },
+  });
+  const sizes = [...new Set(variants.map((v) => v.size))].sort();
 
-  const label = (v: (typeof variants)[number]) =>
+  const variantLabel = (v: (typeof variants)[number]) =>
     `${v.product.name} · ${[v.fragrance, v.size].filter(Boolean).join(" · ")} — ${formatINR(v.pricePaise)}`;
 
-  const regularPaise = bundle.items.reduce(
-    (s, it) => s + it.variant.pricePaise * it.quantity,
-    0,
-  );
+  // Human description of a slot (exact or flexible product slot).
+  const slotLabel = (it: (typeof bundle.items)[number]): string => {
+    if (it.variant) {
+      return `${it.quantity}× ${it.variant.product.name} — ${[it.variant.fragrance, it.variant.size].filter(Boolean).join(" · ")}`;
+    }
+    if (it.product) {
+      const size = it.size ? ` · ${it.size}` : " · any size";
+      return `${it.quantity}× any ${it.product.name}${size} (customer picks)`;
+    }
+    return `${it.quantity}× (unavailable)`;
+  };
 
   return (
     <div>
@@ -82,7 +103,7 @@ export default async function BundleEdit(props: { params: Promise<{ id: string }
             </label>
           </div>
           <p className="text-xs text-ink/55">
-            Slug <span className="font-mono">{bundle.slug}</span> is fixed. Regular total of current items: {formatINR(regularPaise)}.
+            Slug <span className="font-mono">{bundle.slug}</span> is fixed.
           </p>
           <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Save kit</button>
         </form>
@@ -93,11 +114,7 @@ export default async function BundleEdit(props: { params: Promise<{ id: string }
       <div className="mt-3 space-y-2">
         {bundle.items.map((it) => (
           <div key={it.id} className="flex items-center justify-between border border-line bg-paper px-4 py-2.5 text-sm">
-            <span>
-              {it.quantity}× {it.variant.product.name}
-              <span className="text-ink/50"> — {[it.variant.fragrance, it.variant.size].filter(Boolean).join(" · ")}</span>
-              <span className="ml-2 text-ink/50">{formatINR(it.variant.pricePaise * it.quantity)}</span>
-            </span>
+            <span>{slotLabel(it)}</span>
             <form action={removeBundleItem}>
               <input type="hidden" name="bundleItemId" value={it.id} />
               <input type="hidden" name="bundleId" value={bundle.id} />
@@ -108,25 +125,61 @@ export default async function BundleEdit(props: { params: Promise<{ id: string }
         {bundle.items.length === 0 && <p className="text-sm text-ink/50">No items yet — add at least one.</p>}
       </div>
 
-      <div className="mt-4 max-w-2xl border border-line bg-paper p-5">
-        <h3 className="smallcaps text-brass-deep">Add item</h3>
-        <form action={addBundleItem} className="mt-3 flex flex-wrap items-end gap-3">
-          <input type="hidden" name="bundleId" value={bundle.id} />
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">Variant</label>
-            <select name="variantId" required className={`${fieldCls} min-w-[280px]`}>
-              <option value="">Select a variant…</option>
-              {variants.map((v) => (
-                <option key={v.id} value={v.id}>{label(v)}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">Qty</label>
-            <input name="quantity" type="number" min={1} defaultValue={1} className={`${fieldCls} w-16`} />
-          </div>
-          <button className="smallcaps bg-forest px-5 py-1.5 text-bone btn-fill-forest">Add</button>
-        </form>
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        {/* Exact variant slot */}
+        <div className="border border-line bg-paper p-5">
+          <h3 className="smallcaps text-brass-deep">Add a specific variant</h3>
+          <p className="mt-1 text-xs text-ink/55">A fixed item — e.g. Floor Cleaner, Lavender, 1L.</p>
+          <form action={addBundleItem} className="mt-3 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="bundleId" value={bundle.id} />
+            <div>
+              <label className="smallcaps mb-1 block text-brass-deep">Variant</label>
+              <select name="variantId" required className={`${fieldCls} min-w-[240px]`}>
+                <option value="">Select a variant…</option>
+                {variants.map((v) => (
+                  <option key={v.id} value={v.id}>{variantLabel(v)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="smallcaps mb-1 block text-brass-deep">Qty</label>
+              <input name="quantity" type="number" min={1} defaultValue={1} className={`${fieldCls} w-16`} />
+            </div>
+            <button className="smallcaps bg-forest px-5 py-1.5 text-bone btn-fill-forest">Add</button>
+          </form>
+        </div>
+
+        {/* Flexible product slot */}
+        <div className="border border-line bg-paper p-5">
+          <h3 className="smallcaps text-brass-deep">Add a “customer’s choice” slot</h3>
+          <p className="mt-1 text-xs text-ink/55">Any variant of a product — e.g. “any Floor Cleaner, 1L”. The shopper picks the fragrance.</p>
+          <form action={addBundleItem} className="mt-3 flex flex-wrap items-end gap-3">
+            <input type="hidden" name="bundleId" value={bundle.id} />
+            <div>
+              <label className="smallcaps mb-1 block text-brass-deep">Product</label>
+              <select name="productId" required className={`${fieldCls} min-w-[180px]`}>
+                <option value="">Select a product…</option>
+                {products.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="smallcaps mb-1 block text-brass-deep">Size</label>
+              <select name="size" className={fieldCls} defaultValue="">
+                <option value="">Any size</option>
+                {sizes.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="smallcaps mb-1 block text-brass-deep">Qty</label>
+              <input name="quantity" type="number" min={1} defaultValue={1} className={`${fieldCls} w-16`} />
+            </div>
+            <button className="smallcaps bg-forest px-5 py-1.5 text-bone btn-fill-forest">Add</button>
+          </form>
+        </div>
       </div>
 
       {/* Danger zone */}

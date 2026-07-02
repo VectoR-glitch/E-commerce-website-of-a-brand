@@ -28,11 +28,12 @@ model Product {
   safety      String? // caution note (e.g. acidic cleaners)
   placeholder String? // emoji fallback when an image is missing
 
-  variants  Variant[]
-  images    ProductImage[]
-  reviews   Review[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  variants    Variant[]
+  images      ProductImage[]
+  reviews     Review[]
+  bundleItems BundleItem[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 /// A customer review of a product. Only customers who bought the product may
@@ -118,14 +119,20 @@ model Bundle {
 }
 
 model BundleItem {
-  id        String  @id @default(cuid())
-  bundle    Bundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
-  bundleId  String
-  variant   Variant @relation(fields: [variantId], references: [id], onDelete: Cascade)
-  variantId String
-  quantity  Int     @default(1)
+  id       String @id @default(cuid())
+  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  bundleId String
+  // A slot is EITHER an exact variant OR a flexible product slot: any variant of
+  // `product`, optionally locked to `size` — the customer picks the specific
+  // variant (fragrance/size) when adding the kit. Exactly one of variantId /
+  // productId is set (enforced in the admin action).
+  variant   Variant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String?
+  size      String? // size lock for a product slot; null = any size
+  quantity  Int      @default(1)
 
-  @@unique([bundleId, variantId])
   @@index([bundleId])
 }
 

@@ -515,15 +515,21 @@ export async function deleteBundle(formData: FormData): Promise<void> {
 export async function addBundleItem(formData: FormData): Promise<void> {
   await requireAdmin();
   const bundleId = String(formData.get("bundleId") ?? "");
-  const variantId = String(formData.get("variantId") ?? "");
+  const variantId = String(formData.get("variantId") ?? "").trim() || null;
+  const productId = String(formData.get("productId") ?? "").trim() || null;
+  const size = String(formData.get("size") ?? "").trim() || null;
   const quantity = Math.max(1, Math.floor(Number(formData.get("quantity")) || 1));
-  if (!bundleId || !variantId) return;
-  // Upsert so re-adding the same variant just updates its quantity.
-  await prisma.bundleItem.upsert({
-    where: { bundleId_variantId: { bundleId, variantId } },
-    create: { bundleId, variantId, quantity },
-    update: { quantity },
-  });
+  if (!bundleId) return;
+
+  if (variantId) {
+    // Exact slot.
+    await prisma.bundleItem.create({ data: { bundleId, variantId, quantity } });
+  } else if (productId) {
+    // Flexible product slot (any variant of the product, optional size lock).
+    await prisma.bundleItem.create({ data: { bundleId, productId, size, quantity } });
+  } else {
+    return;
+  }
   revalidatePath(`/admin/bundles/${bundleId}`);
   revalidatePath("/shop");
 }

@@ -55,10 +55,13 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
         : [];
 
     // Batch all writes into a single short-lived transaction — restock (if any)
-    // and the status update commit together, atomically.
+    // and the status update commit together, atomically. The status write is
+    // guarded on the value we read (updateMany allows the non-unique `status`
+    // filter), so a concurrent admin transition can't re-write it — matches 0
+    // rows instead.
     await prisma.$transaction([
       ...restock,
-      prisma.order.update({ where: { id }, data: { status } }),
+      prisma.order.updateMany({ where: { id, status: changed.status }, data: { status } }),
     ]);
   }
 

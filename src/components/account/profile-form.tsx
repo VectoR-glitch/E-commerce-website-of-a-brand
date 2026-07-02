@@ -20,7 +20,7 @@ export function ProfileForm({ name, phone, email }: { name: string; phone: strin
       <div>
         <label className="smallcaps text-brass-deep">Email</label>
         <input value={email} disabled className={`${field} bg-bone/50 text-ink/50`} />
-        <p className="mt-1 text-xs text-ink/45">Email is your login and can't be changed here.</p>
+        <p className="mt-1 text-xs text-ink/45">Email is your login and can&rsquo;t be changed here.</p>
       </div>
       <div>
         <label htmlFor="phone" className="smallcaps text-brass-deep">Mobile</label>

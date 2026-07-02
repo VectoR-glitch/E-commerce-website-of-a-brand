@@ -77,6 +77,10 @@ export function ProductDetail({
   const [justAdded, setJustAdded] = useState(false);
   const [showSticky, setShowSticky] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+  // Hover-to-zoom: magnify the image toward the cursor on desktop. `null` while
+  // the pointer is away; otherwise the cursor position as 0–100% of the frame,
+  // used as the transform-origin so the area under the cursor scales up.
+  const [hoverZoom, setHoverZoom] = useState<{ x: number; y: number } | null>(null);
   const [fragrance, setFragrance] = useState<string | undefined>(
     hasFragrance
       ? initialFragrance && product.fragrances.includes(initialFragrance)
@@ -162,6 +166,18 @@ export function ProductDetail({
       {/* Visual — fragrance-aware */}
       <div
         ref={imageRef}
+        onMouseMove={
+          hasImage
+            ? (e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setHoverZoom({
+                  x: ((e.clientX - rect.left) / rect.width) * 100,
+                  y: ((e.clientY - rect.top) / rect.height) * 100,
+                });
+              }
+            : undefined
+        }
+        onMouseLeave={() => setHoverZoom(null)}
         className="relative min-h-[460px] overflow-hidden border border-line bg-paper"
       >
         {hasImage ? (
@@ -172,7 +188,15 @@ export function ProductDetail({
               alt={`${product.name}${fragrance ? ` — ${fragrance}` : ""}`}
               fill
               sizes="(max-width: 768px) 100vw, 600px"
-              className="object-contain variant-in"
+              style={
+                hoverZoom
+                  ? {
+                      transform: "scale(2)",
+                      transformOrigin: `${hoverZoom.x}% ${hoverZoom.y}%`,
+                    }
+                  : undefined
+              }
+              className="object-contain variant-in transition-transform duration-200 ease-out"
               priority
             />
             {/* Tap/click to enlarge — full-cover button keeps it keyboard-accessible. */}

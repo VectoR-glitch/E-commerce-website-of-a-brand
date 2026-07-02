@@ -2,6 +2,7 @@
 // Admin mutations. Server Actions are reachable by direct POST, so EVERY one
 // re-checks requireAdmin() — the UI gate alone is not a security boundary.
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { OrderStatus, PaymentStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
@@ -313,4 +314,41 @@ export async function createVariant(formData: FormData): Promise<void> {
   });
   revalidatePath(`/admin/products/${productId}`);
   revalidatePath("/admin/stock");
+}
+
+// Permanently remove a variant. Safe for order history: OrderItem.variantId is
+// optional (nulled on delete) and each OrderItem keeps its own snapshot (sku,
+// name, size, price); cart references cascade away. To just hide a variant from
+// the store without deleting, untick its "Active" box instead.
+export async function deleteVariant(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("variantId") ?? "");
+  if (!id) return;
+  const variant = await prisma.variant.findUnique({
+    where: { id },
+    select: { productId: true },
+  });
+  if (!variant) return;
+  await prisma.variant.delete({ where: { id } });
+  revalidatePath(`/admin/products/${variant.productId}`);
+  revalidatePath("/admin/stock");
+}
+
+// Permanently remove a product and all its variants + images. Product→Variant
+// is a required relation (Postgres would RESTRICT the delete), so drop the
+// variants first, then the product (images cascade). Order history survives via
+// the OrderItem snapshots. To just hide a product, untick "Active" instead.
+export async function deleteProduct(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("productId") ?? "");
+  if (!id) return;
+  const product = await prisma.product.findUnique({ where: { id }, select: { id: true } });
+  if (!product) return;
+  await prisma.$transaction([
+    prisma.variant.deleteMany({ where: { productId: id } }),
+    prisma.product.delete({ where: { id } }),
+  ]);
+  revalidatePath("/admin/products");
+  revalidatePath("/admin/stock");
+  redirect("/admin/products");
 }

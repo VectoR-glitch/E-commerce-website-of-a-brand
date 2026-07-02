@@ -1,6 +1,7 @@
 "use client";
 import { useActionState } from "react";
 import { resetPasswordAction, type ResetState } from "@/app/actions/password";
+import { PasswordInput } from "@/components/password-input";
 
 const field =
   "mt-2 w-full border border-line bg-white px-3.5 py-3 text-sm outline-none focus:border-forest";
@@ -16,10 +17,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
       <input type="hidden" name="token" value={token} />
       <div>
         <label htmlFor="newPassword" className="smallcaps text-brass-deep">New password</label>
-        <input
+        <PasswordInput
           id="newPassword"
           name="newPassword"
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}
@@ -29,10 +29,9 @@ export function ResetPasswordForm({ token }: { token: string }) {
       </div>
       <div>
         <label htmlFor="confirmPassword" className="smallcaps text-brass-deep">Confirm new password</label>
-        <input
+        <PasswordInput
           id="confirmPassword"
           name="confirmPassword"
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}

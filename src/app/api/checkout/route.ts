@@ -157,7 +157,12 @@ export async function POST(request: Request) {
   let discountPaise = 0;
   let couponCode: string | null = null;
   if (body.couponCode?.trim()) {
-    const result = await validateCoupon(body.couponCode, subtotalPaise);
+    // Pass the cart so a bundle (KIT-) code is gated on its items being present.
+    const result = await validateCoupon(
+      body.couponCode,
+      subtotalPaise,
+      items.map((i) => ({ variantId: i.variantId, quantity: Math.floor(Number(i.quantity)) })),
+    );
     if (!result.ok) return badRequest(result.error);
     discountPaise = result.discountPaise;
     couponCode = result.code;

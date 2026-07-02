@@ -321,7 +321,11 @@ export default function CheckoutPage() {
     fetch("/api/coupon/validate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ code: coupon.code, subtotalPaise }),
+      body: JSON.stringify({
+        code: coupon.code,
+        subtotalPaise,
+        items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+      }),
     })
       .then((r) => r.json())
       .then((data) => {
@@ -434,7 +438,11 @@ export default function CheckoutPage() {
       const res = await fetch("/api/coupon/validate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: trimmed, subtotalPaise }),
+        body: JSON.stringify({
+          code: trimmed,
+          subtotalPaise,
+          items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+        }),
       });
       const data = await res.json();
       if (data?.ok) {

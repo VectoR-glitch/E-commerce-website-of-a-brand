@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { formatINR } from "@/lib/catalog";
 import { KitPicker } from "@/components/kit-picker";
 import type { BundleView } from "@/lib/bundles";
@@ -9,22 +10,36 @@ export function BundleCard({ bundle }: { bundle: BundleView }) {
       : `Save ${formatINR(bundle.discountValue)}`;
 
   return (
-    <div className="flex flex-col bg-paper p-7">
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="font-serif text-2xl">{bundle.name}</h3>
-        <span className="smallcaps whitespace-nowrap bg-forest/10 px-2.5 py-1 text-xs text-forest">
-          {saveLabel}
-        </span>
-      </div>
-      {bundle.description && <p className="mt-2 text-sm text-ink/70">{bundle.description}</p>}
+    <div className="flex flex-col bg-paper">
+      {bundle.imageUrl && (
+        <div className="relative h-52 overflow-hidden border-b border-line bg-bone">
+          <Image
+            src={bundle.imageUrl}
+            alt={bundle.name}
+            fill
+            sizes="(max-width: 768px) 100vw, 500px"
+            className="object-contain"
+          />
+        </div>
+      )}
 
-      <div className="mt-5 flex flex-1 flex-col border-t border-line pt-4">
-        <KitPicker
-          slots={bundle.slots}
-          discountType={bundle.discountType}
-          discountValue={bundle.discountValue}
-          couponCode={bundle.couponCode}
-        />
+      <div className="flex flex-1 flex-col p-7">
+        <div className="flex items-baseline justify-between gap-3">
+          <h3 className="font-serif text-2xl">{bundle.name}</h3>
+          <span className="smallcaps whitespace-nowrap bg-forest/10 px-2.5 py-1 text-xs text-forest">
+            {saveLabel}
+          </span>
+        </div>
+        {bundle.description && <p className="mt-2 text-sm text-ink/70">{bundle.description}</p>}
+
+        <div className="mt-5 flex flex-1 flex-col border-t border-line pt-4">
+          <KitPicker
+            slots={bundle.slots}
+            discountType={bundle.discountType}
+            discountValue={bundle.discountValue}
+            couponCode={bundle.couponCode}
+          />
+        </div>
       </div>
     </div>
   );

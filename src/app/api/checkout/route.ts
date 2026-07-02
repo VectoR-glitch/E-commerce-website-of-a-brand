@@ -7,6 +7,7 @@ import { MAX_ORDER_PAISE, MAX_QTY_PER_ITEM, MAX_COD_ORDER_PAISE } from "@/lib/co
 import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { resolveShipping } from "@/lib/shiprocket";
 import { getSession } from "@/lib/session";
+import { validateCoupon } from "@/lib/coupons";
 
 type IncomingItem = { variantId: string; quantity: number };
 type IncomingShipping = {
@@ -50,6 +51,7 @@ export async function POST(request: Request) {
     items?: IncomingItem[];
     shipping?: IncomingShipping;
     paymentMethod?: "ONLINE" | "COD";
+    couponCode?: string;
   };
   try {
     body = await request.json();
@@ -149,10 +151,23 @@ export async function POST(request: Request) {
     return badRequest("Cash on Delivery isn't available for this pincode. Please pay online.");
   }
   const shippingPaise = isCod ? shipping.codPaise! : shipping.prepaidPaise;
-  const totalPaise = subtotalPaise + shippingPaise;
+
+  // Apply a coupon against the goods subtotal. Re-validated server-side (the
+  // client preview is advisory) so a tampered request can't fake a discount.
+  let discountPaise = 0;
+  let couponCode: string | null = null;
+  if (body.couponCode?.trim()) {
+    const result = await validateCoupon(body.couponCode, subtotalPaise);
+    if (!result.ok) return badRequest(result.error);
+    discountPaise = result.discountPaise;
+    couponCode = result.code;
+  }
+
+  const totalPaise = subtotalPaise + shippingPaise - discountPaise;
 
   // Both methods go through Razorpay, but COD only prepays the delivery fee —
-  // the goods are collected in cash on delivery. ONLINE pays the full total.
+  // the goods (net of discount) are collected in cash on delivery. ONLINE pays
+  // the full discounted total.
   const razorpayAmount = isCod ? shippingPaise : totalPaise;
 
   // Reject oversized orders up front (before hitting Razorpay) with a clear,
@@ -168,7 +183,7 @@ export async function POST(request: Request) {
   // Cap the cash exposure on a COD order. Only the delivery fee is prepaid, so
   // the goods (subtotalPaise) are collected as cash at the door — an order that
   // can be refused. Above the cap, ask the customer to pay online instead.
-  if (isCod && subtotalPaise > MAX_COD_ORDER_PAISE) {
+  if (isCod && subtotalPaise - discountPaise > MAX_COD_ORDER_PAISE) {
     return badRequest(
       `Cash on Delivery is limited to ${formatINR(MAX_COD_ORDER_PAISE)} of goods per order. Please reduce some quantities, or pay online for a larger order.`,
     );
@@ -226,6 +241,8 @@ export async function POST(request: Request) {
       paymentMethod: isCod ? "COD" : "ONLINE",
       subtotalPaise,
       shippingPaise,
+      discountPaise,
+      couponCode,
       totalPaise,
       razorpayOrderId: rzpOrder.id,
       items: { create: orderItems },
@@ -244,6 +261,8 @@ export async function POST(request: Request) {
     amount: razorpayAmount,
     subtotalPaise,
     shippingPaise,
+    discountPaise,
+    couponCode,
     totalPaise,
     currency: "INR",
     prefill: {

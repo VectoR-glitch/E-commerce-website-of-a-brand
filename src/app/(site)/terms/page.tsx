@@ -13,20 +13,15 @@ export default function TermsPage() {
       <h1 className="mt-3 font-serif text-4xl text-ink">Terms & Conditions</h1>
       <Ornament align="left" className="mt-4" />
       <p className="mt-2 text-sm text-ink/70">
-        Last updated: 19 June 2026 · Operated by Bharat Bliss Pvt Ltd
+        Last updated: 2 July 2026 · Operated by Bharat Bliss Pvt Ltd
       </p>
 
       <div className="mt-8 space-y-6 text-sm leading-relaxed">
-        <p className="rounded bg-brass/10 p-3 text-ink/70">
-          ⚠️ Template for review — have this checked by a professional before
-          launch and fill the [PLACEHOLDERS] (entity details, GSTIN, jurisdiction).
-        </p>
-
         <Section title="1. About these terms">
           By using klenich.com and placing an order, you agree to these terms.
           The store is operated by Bharat Bliss Pvt Ltd, 91, Bus Route, beside
           Scale Karkhana, Rajarhat, Kanjialpara, Kolkata, West Bengal 700135.
-          GSTIN: [GSTIN].
+          GSTIN: 19AANCB7497G1ZY.
         </Section>
         <Section title="2. Products & pricing">
           We aim to describe products accurately. Prices are in INR and inclusive

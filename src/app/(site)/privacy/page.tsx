@@ -13,15 +13,10 @@ export default function PrivacyPage() {
       <h1 className="mt-3 font-serif text-4xl text-ink">Privacy Policy</h1>
       <Ornament align="left" className="mt-4" />
       <p className="mt-2 text-sm text-ink/70">
-        Last updated: 19 June 2026 · Operated by Bharat Bliss Pvt Ltd
+        Last updated: 2 July 2026 · Operated by Bharat Bliss Pvt Ltd
       </p>
 
       <div className="mt-8 space-y-6 text-sm leading-relaxed">
-        <p className="rounded bg-brass/10 p-3 text-ink/70">
-          ⚠️ Template for review — have this checked by a professional before
-          launch and fill the [PLACEHOLDERS].
-        </p>
-
         <Section title="1. Who we are">
           Klenich is a brand operated by Bharat Bliss Pvt Ltd (“we”, “us”).
           Registered address: Bharat Bliss, 91, Bus Route, beside Scale Karkhana,

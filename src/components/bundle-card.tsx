@@ -1,4 +1,3 @@
-import Image from "next/image";
 import { formatINR } from "@/lib/catalog";
 import { KitPicker } from "@/components/kit-picker";
 import type { BundleView } from "@/lib/bundles";
@@ -12,14 +11,11 @@ export function BundleCard({ bundle }: { bundle: BundleView }) {
   return (
     <div className="flex flex-col bg-paper">
       {bundle.imageUrl && (
-        <div className="relative h-52 overflow-hidden border-b border-line bg-bone">
-          <Image
-            src={bundle.imageUrl}
-            alt={bundle.name}
-            fill
-            sizes="(max-width: 768px) 100vw, 500px"
-            className="object-contain"
-          />
+        <div className="h-52 overflow-hidden border-b border-line bg-bone">
+          {/* Plain <img>: the ?v cache-buster is a dynamic query string, which
+              next/image blocks unless whitelisted in images.localPatterns. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={bundle.imageUrl} alt={bundle.name} className="h-full w-full object-contain" />
         </div>
       )}
 

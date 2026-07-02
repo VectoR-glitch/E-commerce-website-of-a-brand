@@ -1,6 +1,7 @@
 "use client";
 import { useActionState } from "react";
 import { changePasswordAction, type ChangePasswordState } from "@/app/actions/password";
+import { PasswordInput } from "@/components/password-input";
 
 const field =
   "mt-2 w-full border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-forest";
@@ -19,10 +20,9 @@ export function ChangePasswordForm() {
     <form action={action} key={key} className="space-y-4">
       <div>
         <label htmlFor="currentPassword" className="smallcaps text-brass-deep">Current password</label>
-        <input
+        <PasswordInput
           id="currentPassword"
           name="currentPassword"
-          type="password"
           autoComplete="current-password"
           required
           className={field}
@@ -30,10 +30,9 @@ export function ChangePasswordForm() {
       </div>
       <div>
         <label htmlFor="newPassword" className="smallcaps text-brass-deep">New password</label>
-        <input
+        <PasswordInput
           id="newPassword"
           name="newPassword"
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}
@@ -43,10 +42,9 @@ export function ChangePasswordForm() {
       </div>
       <div>
         <label htmlFor="confirmPassword" className="smallcaps text-brass-deep">Confirm new password</label>
-        <input
+        <PasswordInput
           id="confirmPassword"
           name="confirmPassword"
-          type="password"
           autoComplete="new-password"
           required
           minLength={8}

@@ -9,8 +9,11 @@ import {
   uploadProductImage,
   deleteProductImage,
   setPrimaryImage,
+  deleteVariant,
+  deleteProduct,
 } from "@/app/admin/actions";
 import { SkuEditor } from "@/components/sku-editor";
+import { ConfirmSubmit } from "@/components/confirm-submit";
 
 export const dynamic = "force-dynamic";
 
@@ -187,8 +190,20 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
                 <input type="checkbox" name="active" defaultChecked={v.active} /> Active
               </label>
               <button className="smallcaps border border-line px-4 py-1.5 text-ink/70 hover:border-forest hover:text-forest">Save</button>
+              {/* Delete lives in its own form — forms can't nest. */}
             </form>
-            <SkuEditor variantId={v.id} currentSku={v.sku} />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <SkuEditor variantId={v.id} currentSku={v.sku} />
+              <form action={deleteVariant}>
+                <input type="hidden" name="variantId" value={v.id} />
+                <ConfirmSubmit
+                  message={`Permanently delete variant ${[v.fragrance, v.size].filter(Boolean).join(" · ")} (SKU ${v.sku})? Order history is kept. To just hide it from the store, untick Active instead.`}
+                  className="smallcaps text-xs text-red-600 hover:underline"
+                >
+                  Delete variant
+                </ConfirmSubmit>
+              </form>
+            </div>
           </div>
         ))}
         {product.variants.length === 0 && <p className="text-sm text-ink/50">No variants yet.</p>}
@@ -220,6 +235,26 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
             <input name="stock" type="number" min={0} defaultValue={0} className={`${fieldCls} w-20`} />
           </div>
           <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Add</button>
+        </form>
+      </div>
+
+      {/* Danger zone */}
+      <div className="mt-10 max-w-2xl border border-red-200 bg-red-50/50 p-5">
+        <h2 className="smallcaps text-red-700">Danger zone</h2>
+        <p className="mt-2 text-sm text-ink/70">
+          Permanently delete this product and all {product.variants.length}{" "}
+          {product.variants.length === 1 ? "variant" : "variants"} + images. Past
+          orders keep their records. To just take it off the store, untick{" "}
+          <span className="font-medium">Active</span> above instead.
+        </p>
+        <form action={deleteProduct} className="mt-3">
+          <input type="hidden" name="productId" value={product.id} />
+          <ConfirmSubmit
+            message={`Permanently delete "${product.name}" and all its variants + images? This cannot be undone. Past orders are kept. To just hide it, untick Active instead.`}
+            className="smallcaps border border-red-600 px-5 py-2 text-red-700 transition-colors hover:bg-red-600 hover:text-white"
+          >
+            Delete product
+          </ConfirmSubmit>
         </form>
       </div>
     </div>

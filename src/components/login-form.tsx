@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { loginAction, type LoginState } from "@/app/actions/auth";
 import { resendVerificationAction, type ResendState } from "@/app/actions/account";
+import { PasswordInput } from "@/components/password-input";
 
 const field =
   "mt-2 w-full border border-line bg-white px-3.5 py-3 text-sm outline-none focus:border-forest";
@@ -24,10 +25,9 @@ export function LoginForm({ next }: { next: string }) {
         </div>
         <div>
           <label htmlFor="password" className="smallcaps text-brass-deep">Password</label>
-          <input
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             autoComplete="current-password"
             required
             className={field}

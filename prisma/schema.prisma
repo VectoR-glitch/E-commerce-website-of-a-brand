@@ -30,8 +30,29 @@ model Product {
 
   variants  Variant[]
   images    ProductImage[]
+  reviews   Review[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+}
+
+/// A customer review of a product. Only customers who bought the product may
+/// post one (checked server-side), and it stays hidden until an admin approves
+/// it — so `approved` gates public visibility. One review per customer/product.
+model Review {
+  id         String   @id @default(cuid())
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId  String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String
+  rating     Int // 1–5 stars
+  title      String?
+  body       String
+  approved   Boolean  @default(false) // admin-gated before it shows publicly
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([productId, customerId]) // one review per customer per product
+  @@index([productId])
 }
 
 /// A product image stored directly in Postgres (self-owned, no object storage).
@@ -95,6 +116,7 @@ model Customer {
   orders    Order[]
   addresses Address[]
   cart      Cart?
+  reviews   Review[]
   verificationTokens  VerificationToken[]
   passwordResetTokens PasswordResetToken[]
   createdAt DateTime  @default(now())

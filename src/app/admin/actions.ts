@@ -352,3 +352,31 @@ export async function deleteProduct(formData: FormData): Promise<void> {
   revalidatePath("/admin/stock");
   redirect("/admin/products");
 }
+
+// ── Reviews (moderation) ────────────────────────────────────────────────────
+export async function approveReview(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("reviewId") ?? "");
+  if (!id) return;
+  const review = await prisma.review.update({
+    where: { id },
+    data: { approved: true },
+    select: { product: { select: { slug: true } } },
+  });
+  revalidatePath("/admin/reviews");
+  revalidatePath(`/product/${review.product.slug}`);
+}
+
+export async function deleteReview(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("reviewId") ?? "");
+  if (!id) return;
+  const review = await prisma.review.findUnique({
+    where: { id },
+    select: { product: { select: { slug: true } } },
+  });
+  if (!review) return;
+  await prisma.review.delete({ where: { id } });
+  revalidatePath("/admin/reviews");
+  revalidatePath(`/product/${review.product.slug}`);
+}

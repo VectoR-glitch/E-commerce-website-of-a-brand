@@ -1,12 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/subscription-reminders",
+      "path": "/api/cron/daily",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/back-in-stock",
-      "schedule": "0 4 * * *"
     }
   ]
 }

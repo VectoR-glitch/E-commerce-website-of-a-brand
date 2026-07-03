@@ -47,8 +47,8 @@ export default async function AdminSubscriptions() {
 
       <p className="mt-3 max-w-2xl text-xs text-ink/50">
         Managed model — no card is stored. Reminders email each due subscriber a one-tap reorder at
-        their saved price, then roll the schedule forward one cycle. A daily Vercel Cron runs this
-        automatically (<span className="font-mono">/api/cron/subscription-reminders</span>, 03:00 UTC);
+        their saved price, then roll the schedule forward one cycle. The daily Vercel Cron runs this
+        automatically (<span className="font-mono">/api/cron/daily</span>, 03:00 UTC);
         this button is the manual trigger for sending due reminders on demand.
       </p>
 

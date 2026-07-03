@@ -458,6 +458,88 @@ export async function sendBackInStockEmail(input: {
   });
 }
 
+// ── Abandoned cart reminder ─────────────────────────────────────────────────
+// Sent to a signed-in customer who left items in their cart without checking
+// out. One gentle nudge per abandonment episode (see the sweep). Lists what's
+// waiting and links straight back to the cart.
+type AbandonedItem = {
+  name: string;
+  fragrance: string | null;
+  size: string;
+  quantity: number;
+  pricePaise: number;
+};
+
+export async function sendAbandonedCartEmail(input: {
+  to: string;
+  name: string | null;
+  items: AbandonedItem[];
+  subtotalPaise: number;
+  cartUrl: string;
+}): Promise<void> {
+  if (!resend) return; // no key → safe no-op until configured
+  const hi = input.name ? `Hi ${escapeHtml(input.name)},` : "Hi,";
+
+  const rows = input.items
+    .map((it) => {
+      const name = escapeHtml(it.name);
+      const variant = escapeHtml([it.fragrance, it.size].filter(Boolean).join(" · "));
+      return `
+        <tr>
+          <td style="padding:10px 0;border-bottom:1px solid ${C.line};">
+            <div style="font-weight:600;color:${C.ink};">${name}</div>
+            <div style="font-size:13px;color:${C.muted};">${variant} &nbsp;×&nbsp; ${it.quantity}</div>
+          </td>
+          <td style="padding:10px 0;border-bottom:1px solid ${C.line};text-align:right;white-space:nowrap;color:${C.ink};">
+            ${formatINR(it.pricePaise * it.quantity)}
+          </td>
+        </tr>`;
+    })
+    .join("");
+
+  const textLines = [
+    input.name ? `Hi ${input.name},` : "Hi,",
+    "",
+    "You left something in your cart at Klenich:",
+    "",
+    ...input.items.map((it) => {
+      const variant = [it.fragrance, it.size].filter(Boolean).join(" · ");
+      return `  - ${it.name}${variant ? ` (${variant})` : ""} × ${it.quantity} — ${formatINR(it.pricePaise * it.quantity)}`;
+    }),
+    "",
+    `Subtotal: ${formatINR(input.subtotalPaise)}`,
+    "",
+    "Your cart is saved — pick up where you left off:",
+    input.cartUrl,
+    "",
+    "Klenich · Plant-powered home care, made in India",
+    SITE_URL,
+  ];
+
+  await resend.emails.send({
+    from: FROM,
+    to: input.to,
+    subject: "You left something behind 🧺",
+    text: textLines.join("\n"),
+    html: shell(
+      "Your cart is waiting",
+      "You left something behind",
+      `<p style="color:${C.ink};font-size:15px;margin:0 0 14px;">${hi}</p>
+       <p style="color:${C.muted};font-size:14px;line-height:1.6;margin:0 0 20px;">
+         Your cart is saved and ready when you are — here's what's inside:
+       </p>
+       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+         ${rows}
+         <tr><td style="padding:12px 0 0;font-family:Georgia,serif;font-size:18px;color:${C.ink};">Subtotal</td><td style="padding:12px 0 0;text-align:right;font-family:Georgia,serif;font-size:18px;color:${C.ink};">${formatINR(input.subtotalPaise)}</td></tr>
+       </table>
+       <div style="margin-top:24px;">${ctaButton(input.cartUrl, "Complete your order")}</div>
+       <p style="color:${C.muted};font-size:13px;margin:0;line-height:1.6;">
+         Prices and stock can change — checkout to lock in what's in your cart.
+       </p>`,
+    ),
+  });
+}
+
 export type ContactMessage = {
   name: string;
   email: string;

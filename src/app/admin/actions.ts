@@ -398,6 +398,52 @@ export async function deleteReview(formData: FormData): Promise<void> {
   revalidatePath(`/product/${review.product.slug}`);
 }
 
+// ── Product Q&A ───────────────────────────────────────────────────────────────
+// Answer a customer question. Saving an answer publishes it in one step (it's
+// the answer that makes a question worth showing). Editing an already-published
+// answer just updates it in place.
+export async function answerQuestion(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("questionId") ?? "");
+  const answer = String(formData.get("answer") ?? "").trim();
+  if (!id || answer.length < 2) return;
+  const q = await prisma.productQuestion.update({
+    where: { id },
+    data: { answer, answeredAt: new Date(), published: true },
+    select: { product: { select: { slug: true } } },
+  });
+  revalidatePath("/admin/questions");
+  revalidatePath(`/product/${q.product.slug}`);
+}
+
+// Pull a published question back into the moderation queue without deleting it.
+export async function unpublishQuestion(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("questionId") ?? "");
+  if (!id) return;
+  const q = await prisma.productQuestion.update({
+    where: { id },
+    data: { published: false },
+    select: { product: { select: { slug: true } } },
+  });
+  revalidatePath("/admin/questions");
+  revalidatePath(`/product/${q.product.slug}`);
+}
+
+export async function deleteQuestion(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("questionId") ?? "");
+  if (!id) return;
+  const q = await prisma.productQuestion.findUnique({
+    where: { id },
+    select: { product: { select: { slug: true } } },
+  });
+  if (!q) return;
+  await prisma.productQuestion.delete({ where: { id } });
+  revalidatePath("/admin/questions");
+  revalidatePath(`/product/${q.product.slug}`);
+}
+
 // ── Coupons ─────────────────────────────────────────────────────────────────
 const COUPON_CODE_RE = /^[A-Z0-9][A-Z0-9-]{1,23}$/;
 

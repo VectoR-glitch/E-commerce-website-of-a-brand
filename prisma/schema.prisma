@@ -31,6 +31,7 @@ model Product {
   variants    Variant[]
   images      ProductImage[]
   reviews     Review[]
+  questions   ProductQuestion[]
   bundleItems BundleItem[]
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -53,6 +54,35 @@ model Review {
   updatedAt  DateTime @updatedAt
 
   @@unique([productId, customerId]) // one review per customer per product
+  @@index([productId])
+}
+
+/// A product Q&A entry. Two kinds share one model:
+///  - Store FAQ (isFaq=true, customerId=null): common questions the brand seeds
+///    and answers itself; published immediately.
+///  - Customer question (isFaq=false): a signed-in shopper asks — no purchase
+///    required, since questions are usually pre-purchase — and it stays hidden
+///    until an admin answers it, which publishes it.
+/// `published` gates public visibility either way. Ordering: FAQ first by
+/// `sortOrder`, then answered customer questions newest-first (see product-qa.ts).
+model ProductQuestion {
+  id         String    @id @default(cuid())
+  product    Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId  String
+  // Null for store FAQ, or once an asker deletes their account (SetNull keeps
+  // the published Q&A intact — it belongs to the product, not the person).
+  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  customerId String?
+  askedName  String? // asker's display name captured at ask time; null for FAQ
+  question   String
+  answer     String? // the store's answer; null while awaiting a reply
+  answeredAt DateTime?
+  published  Boolean   @default(false) // admin-gated before it shows publicly
+  isFaq      Boolean   @default(false) // store-seeded common Q&A vs customer-asked
+  sortOrder  Int       @default(0) // FAQ display order (lower first)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
   @@index([productId])
 }
 
@@ -193,6 +223,7 @@ model Customer {
   addresses Address[]
   cart      Cart?
   reviews   Review[]
+  questions ProductQuestion[]
   subscriptions Subscription[]
   wishlist      WishlistItem[]
   loyaltyLedger LoyaltyLedger[]

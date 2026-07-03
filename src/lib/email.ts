@@ -413,6 +413,51 @@ export async function sendPasswordResetEmail(
   });
 }
 
+// ── Back-in-stock alert ─────────────────────────────────────────────────────
+// Sent when a variant a customer asked about is restocked. One-tap back to the
+// product page, where the item is now buyable.
+export async function sendBackInStockEmail(input: {
+  to: string;
+  productName: string;
+  variantLabel: string; // e.g. "Lavender · 1L"
+  pricePaise: number;
+  productUrl: string;
+}): Promise<void> {
+  if (!resend) return; // no key → safe no-op until configured
+  const label = escapeHtml(input.variantLabel);
+  const name = escapeHtml(input.productName);
+
+  await resend.emails.send({
+    from: FROM,
+    to: input.to,
+    subject: `Back in stock: ${input.productName}`,
+    text: [
+      `Good news — the ${input.productName} (${input.variantLabel}) you wanted is back in stock.`,
+      `Price: ${formatINR(input.pricePaise)}.`,
+      "",
+      "Popular items can sell out again quickly — grab yours here:",
+      input.productUrl,
+      "",
+      "Klenich · Plant-powered home care, made in India",
+      SITE_URL,
+    ].join("\n"),
+    html: shell(
+      "Back in stock",
+      "It's back — grab it before it's gone",
+      `<p style="color:${C.ink};font-size:15px;margin:0 0 6px;line-height:1.6;">
+         Good news — the <strong>${name}</strong> (${label}) you asked about is back in stock.
+       </p>
+       <p style="color:${C.muted};font-size:14px;margin:0 0 20px;">
+         <strong style="color:${C.ink};">${formatINR(input.pricePaise)}</strong> · popular items can sell out again quickly.
+       </p>
+       ${ctaButton(input.productUrl, "Shop it now")}
+       <p style="color:${C.muted};font-size:13px;margin:0;line-height:1.6;">
+         You're getting this because you asked to be notified when this item returned. No further action is needed.
+       </p>`,
+    ),
+  });
+}
+
 export type ContactMessage = {
   name: string;
   email: string;

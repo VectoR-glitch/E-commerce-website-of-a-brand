@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
 import { updateStock } from "@/app/admin/actions";
+import { pendingAlertCounts } from "@/lib/back-in-stock";
 
 export const dynamic = "force-dynamic";
 
@@ -10,10 +11,15 @@ const LOW_STOCK_THRESHOLD = 50;
 export default async function StockPage() {
   await requireAdmin();
 
-  const variants = await prisma.variant.findMany({
-    orderBy: [{ active: "desc" }, { stock: "asc" }],
-    include: { product: { select: { name: true } } },
-  });
+  const [variants, waiting] = await Promise.all([
+    prisma.variant.findMany({
+      orderBy: [{ active: "desc" }, { stock: "asc" }],
+      include: { product: { select: { name: true } } },
+    }),
+    // How many customers are waiting on a back-in-stock alert per variant —
+    // setting stock above 0 emails them all.
+    pendingAlertCounts(),
+  ]);
 
   const fieldCls = "border border-line bg-white px-2 py-1.5 text-sm outline-none focus:border-forest";
 
@@ -33,6 +39,7 @@ export default async function StockPage() {
               <th className="px-3 py-2 font-medium">Variant</th>
               <th className="px-3 py-2 text-right font-medium">Price</th>
               <th className="px-3 py-2 text-right font-medium">Stock</th>
+              <th className="px-3 py-2 text-right font-medium">Waiting</th>
               <th className="px-3 py-2 font-medium">Update</th>
             </tr>
           </thead>
@@ -50,6 +57,18 @@ export default async function StockPage() {
                   <td className="px-3 py-2 text-right whitespace-nowrap text-ink/70">{formatINR(v.pricePaise)}</td>
                   <td className={`px-3 py-2 text-right font-semibold ${low ? "text-red-600" : "text-ink"}`}>
                     {v.stock}{low && <span className="ml-1 text-xs">low</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {waiting.get(v.id) ? (
+                      <span
+                        className="smallcaps inline-block border border-brass/40 bg-brass/10 px-2 py-0.5 text-xs text-brass-deep"
+                        title={`${waiting.get(v.id)} waiting for a back-in-stock alert`}
+                      >
+                        {waiting.get(v.id)}
+                      </span>
+                    ) : (
+                      <span className="text-ink/30">—</span>
+                    )}
                   </td>
                   <td className="px-3 py-2">
                     <form action={updateStock} className="flex gap-2">

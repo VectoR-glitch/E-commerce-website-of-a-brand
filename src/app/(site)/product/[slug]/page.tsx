@@ -105,6 +105,7 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
       <ProductDetail
         product={product}
         initialFragrance={typeof fragrance === "string" ? fragrance : undefined}
+        defaultEmail={session?.email ?? ""}
       />
 
       {/* Reviews */}

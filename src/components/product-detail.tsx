@@ -10,13 +10,17 @@ import { flyToCart } from "@/lib/fly-to-cart";
 import { createSubscription } from "@/app/actions/subscriptions";
 import { Ornament } from "@/components/ornament";
 import { WishlistButton } from "@/components/wishlist-button";
+import { BackInStockForm } from "@/components/back-in-stock-form";
 
 export function ProductDetail({
   product,
   initialFragrance,
+  defaultEmail = "",
 }: {
   product: Product;
   initialFragrance?: string;
+  /** signed-in customer's email, to prefill the back-in-stock form */
+  defaultEmail?: string;
 }) {
   const hasFragrance = product.fragrances.length > 0;
   const { addItem, authenticated } = useCart();
@@ -304,6 +308,16 @@ export function ProductDetail({
             </div>
           </div>
         </div>
+
+        {/* Back-in-stock alert — only when the chosen variant is sold out */}
+        {outOfStock && selected?.id && (
+          <BackInStockForm
+            key={selected.id}
+            variantId={selected.id}
+            variantLabel={[fragrance, size].filter(Boolean).join(" · ")}
+            defaultEmail={defaultEmail}
+          />
+        )}
 
         {/* Subscribe & save */}
         {selected && (

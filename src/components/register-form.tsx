@@ -7,11 +7,12 @@ import { PasswordInput } from "@/components/password-input";
 const field =
   "mt-2 w-full border border-line bg-white px-3.5 py-3 text-sm outline-none focus:border-forest";
 
-export function RegisterForm() {
+export function RegisterForm({ referral }: { referral?: string }) {
   const [state, action, pending] = useActionState<RegisterState, FormData>(registerAction, undefined);
 
   return (
     <form action={action} className="mt-10 space-y-5">
+      {referral && <input type="hidden" name="ref" value={referral} />}
       <div>
         <label htmlFor="name" className="smallcaps text-brass-deep">Name</label>
         <input id="name" name="name" type="text" autoComplete="name" required className={field} />

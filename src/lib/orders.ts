@@ -3,6 +3,7 @@
 // race-safe path. Never import from client code.
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { awardLoyaltyForSettledOrder } from "@/lib/loyalty";
 
 type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
@@ -104,6 +105,15 @@ export async function settleOrderPaid(params: {
         data: { usedCount: { increment: 1 } },
       });
     }
+
+    // Credit loyalty (buyer's points + any first-order referral bonus) exactly
+    // once, here in the winning claim, for the same idempotency reason.
+    await awardLoyaltyForSettledOrder(tx, {
+      id: existing.id,
+      customerId: existing.customerId,
+      subtotalPaise: existing.subtotalPaise,
+      discountPaise: existing.discountPaise,
+    });
 
     // Re-read so the returned order (used for the confirmation email) reflects
     // the settled status + amountPaidPaise we just wrote.

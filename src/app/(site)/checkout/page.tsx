@@ -7,6 +7,7 @@ import { formatINR } from "@/lib/catalog";
 import { INDIAN_STATES } from "@/lib/constants";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
+import { TrustBadges } from "@/components/trust-badges";
 import { PENDING_COUPON_KEY } from "@/components/kit-picker";
 
 
@@ -967,9 +968,10 @@ export default function CheckoutPage() {
           <p className="mt-1 text-center text-xs text-ink/40">
             UPI, cards, netbanking &amp; wallets accepted.
           </p>
+          <TrustBadges className="mt-5 border-t border-line pt-5" />
           <Link
             href="/cart"
-            className="smallcaps mt-2 block py-1 text-center text-ink/55 hover:text-forest"
+            className="smallcaps mt-4 block py-1 text-center text-ink/55 hover:text-forest"
           >
             Back to cart
           </Link>

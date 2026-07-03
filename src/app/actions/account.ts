@@ -7,6 +7,7 @@ import { hashPassword, generateToken } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { rateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
 import { sendVerificationEmail } from "@/lib/email";
+import { resolveReferralCode } from "@/lib/loyalty";
 import { INDIAN_STATES } from "@/lib/constants";
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -65,16 +66,30 @@ export async function registerAction(_prev: RegisterState, formData: FormData): 
     return { error: "An account with this email already exists. Try signing in instead." };
   }
 
+  // Referral attribution: if they arrived via a friend's link, stamp who
+  // referred them (never themselves). Both sides are rewarded on this account's
+  // first settled order (see awardLoyaltyForSettledOrder).
+  const referredByRaw = String(formData.get("ref") ?? "");
+  const referrerId = referredByRaw ? await resolveReferralCode(referredByRaw) : null;
+
   const passwordHash = hashPassword(password);
   const customer = existing
     ? // A guest/order-only row for this email exists → upgrade it to a login
       // account, preserving any orders already attached to it.
       await prisma.customer.update({
         where: { id: existing.id },
-        data: { name, passwordHash, role: "CUSTOMER" },
+        data: {
+          name,
+          passwordHash,
+          role: "CUSTOMER",
+          // Only attribute if not already referred and it isn't a self-referral.
+          ...(referrerId && referrerId !== existing.id && !existing.referredById
+            ? { referredById: referrerId }
+            : {}),
+        },
       })
     : await prisma.customer.create({
-        data: { name, email, passwordHash, role: "CUSTOMER" },
+        data: { name, email, passwordHash, role: "CUSTOMER", referredById: referrerId },
       });
 
   await issueVerification(customer.id, email, name);

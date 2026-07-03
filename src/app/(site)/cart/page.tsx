@@ -8,6 +8,7 @@ import { MAX_ORDER_PAISE } from "@/lib/constants";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
 import { QuantityStepper } from "@/components/quantity-stepper";
+import { TrustBadges } from "@/components/trust-badges";
 
 export default function CartPage() {
   const { items, subtotalPaise, setQuantity, removeItem } = useCart();
@@ -145,6 +146,7 @@ export default function CartPage() {
           >
             Continue shopping
           </Link>
+          <TrustBadges className="mt-6 border-t border-line pt-6" />
         </aside>
         </Reveal>
       </div>

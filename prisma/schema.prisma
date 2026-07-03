@@ -155,15 +155,68 @@ model Customer {
   // Set when the customer confirms their email via the verification link.
   // Null = unverified (account created but email not yet confirmed).
   emailVerified DateTime?
+
+  // Loyalty: current redeemable balance (1 point = ₹1, see POINT_VALUE_PAISE).
+  // `points` is the running balance; every change is also journalled in
+  // LoyaltyLedger for audit. `referralCode` is this customer's own shareable
+  // code (generated lazily). `referredById` points at the customer who referred
+  // them (self-relation) — set once at registration, drives the referral bonus.
+  points        Int     @default(0)
+  referralCode  String? @unique
+  referredBy    Customer?  @relation("Referrals", fields: [referredById], references: [id])
+  referredById  String?
+  referrals     Customer[] @relation("Referrals")
+
   orders    Order[]
   addresses Address[]
   cart      Cart?
   reviews   Review[]
   subscriptions Subscription[]
+  wishlist      WishlistItem[]
+  loyaltyLedger LoyaltyLedger[]
   verificationTokens  VerificationToken[]
   passwordResetTokens PasswordResetToken[]
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
+
+  @@index([referredById])
+}
+
+/// A signed-in customer's saved product (cross-device wishlist). Mirrors the
+/// server Cart pattern: the guest wishlist lives in localStorage; on login it
+/// merges into these rows, which then become authoritative. Keyed on the
+/// product SLUG + fragrance (NOT a variant) so it matches the client wishlist's
+/// identity — the same product+fragrance a shopper hearts on a card. `fragrance`
+/// defaults to "" (never null) so the composite unique constraint actually
+/// dedupes fragrance-less products (Postgres treats NULLs as distinct).
+model WishlistItem {
+  id          String   @id @default(cuid())
+  customer    Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId  String
+  productSlug String
+  fragrance   String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@unique([customerId, productSlug, fragrance])
+  @@index([customerId])
+}
+
+/// An append-only journal of every loyalty-point movement, so the running
+/// `Customer.points` balance is always reconstructable and auditable. `delta` is
+/// positive for points earned, negative for points redeemed. `reason` tags the
+/// source ("order" | "referral" | "referee" | "redeem"); `orderId` links an earn
+/// back to the order that triggered it (also the idempotency anchor — earn is
+/// written exactly once, inside the order's winning settlement claim).
+model LoyaltyLedger {
+  id         String   @id @default(cuid())
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId String
+  delta      Int
+  reason     String
+  orderId    String?
+  createdAt  DateTime @default(now())
+
+  @@index([customerId])
 }
 
 model Address {
@@ -263,6 +316,10 @@ model Order {
   discountPaise Int @default(0)
   couponCode    String? // the coupon applied to this order, if any (uppercase)
   totalPaise    Int
+  // Loyalty points awarded when this order settled (0 for guest orders / before
+  // settlement). Written exactly once inside the winning settlement claim, so it
+  // also marks that earn has already been granted for this order.
+  pointsEarned  Int @default(0)
   // Amount actually collected via Razorpay. ONLINE = totalPaise; COD = the
   // delivery fee prepaid up front (goods are paid in cash on delivery, so the
   // cash due on delivery = totalPaise - amountPaidPaise).

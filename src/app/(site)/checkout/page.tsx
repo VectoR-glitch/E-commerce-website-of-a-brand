@@ -968,7 +968,7 @@ export default function CheckoutPage() {
           <p className="mt-1 text-center text-xs text-ink/40">
             UPI, cards, netbanking &amp; wallets accepted.
           </p>
-          <TrustBadges className="mt-5 border-t border-line pt-5" />
+          <TrustBadges className="mt-7" />
           <Link
             href="/cart"
             className="smallcaps mt-4 block py-1 text-center text-ink/55 hover:text-forest"

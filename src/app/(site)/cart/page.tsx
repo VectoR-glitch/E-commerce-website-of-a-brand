@@ -146,7 +146,7 @@ export default function CartPage() {
           >
             Continue shopping
           </Link>
-          <TrustBadges className="mt-6 border-t border-line pt-6" />
+          <TrustBadges className="mt-7" />
         </aside>
         </Reveal>
       </div>

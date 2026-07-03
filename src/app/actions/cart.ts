@@ -34,7 +34,11 @@ async function writeCart(customerId: string, wanted: Map<string, number>): Promi
   const cart = await prisma.cart.upsert({
     where: { customerId },
     create: { customerId },
-    update: {},
+    // Clearing reminderSentAt marks fresh cart activity: it re-arms the
+    // abandoned-cart reminder (so a re-engaged-then-abandoned cart can be nudged
+    // again) and, being a non-empty update, bumps updatedAt — the inactivity
+    // clock the sweep reads.
+    update: { reminderSentAt: null },
     select: { id: true },
   });
 

@@ -8,22 +8,29 @@ import { CartDrawer } from "@/components/cart-drawer";
 import { MapleEasterEgg } from "@/components/maple-easter-egg";
 import { CartProvider } from "@/lib/cart-context";
 import { WishlistProvider } from "@/lib/wishlist-context";
+import { RecentlyViewedProvider } from "@/lib/recently-viewed";
 import { getSession } from "@/lib/session";
 import { loadServerCartItems } from "@/lib/server-cart";
+import { loadServerWishlistItems } from "@/lib/server-wishlist";
 
 export default async function SiteLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Seed the cart from the signed-in customer's server cart (cross-device);
-  // guests start empty and hydrate from localStorage on the client.
+  // Seed the cart AND wishlist from the signed-in customer's server rows
+  // (cross-device); guests start empty and hydrate from localStorage on the
+  // client. Both are loaded together so a signed-in shopper's saved state is
+  // present on first paint.
   const session = await getSession();
-  const initialItems = session ? await loadServerCartItems(session.sub) : [];
+  const [initialItems, initialWishlist] = session
+    ? await Promise.all([loadServerCartItems(session.sub), loadServerWishlistItems(session.sub)])
+    : [[], []];
 
   return (
     <CartProvider authenticated={Boolean(session)} initialItems={initialItems}>
-      <WishlistProvider>
+      <WishlistProvider authenticated={Boolean(session)} initialItems={initialWishlist}>
+      <RecentlyViewedProvider>
       <a
         href="#main"
         className="smallcaps sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:bg-forest focus:px-4 focus:py-3 focus:text-bone"
@@ -40,6 +47,7 @@ export default async function SiteLayout({
       <BackToTop />
       <CartDrawer />
       <MapleEasterEgg />
+      </RecentlyViewedProvider>
       </WishlistProvider>
     </CartProvider>
   );

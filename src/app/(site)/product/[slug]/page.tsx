@@ -3,9 +3,11 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getProduct } from "@/lib/products";
 import { ProductDetail } from "@/components/product-detail";
+import { RecentlyViewed } from "@/components/recently-viewed";
+import { RecentlyViewedTracker } from "@/components/recently-viewed-tracker";
 import { SITE_URL } from "@/lib/constants";
 import { jsonLdHtml } from "@/lib/json-ld";
-import type { Product } from "@/lib/catalog";
+import { priceFromPaise, type Product } from "@/lib/catalog";
 import { getProductReviews, getReviewEligibility, type ReviewSummary } from "@/lib/reviews";
 import { getSession } from "@/lib/session";
 import { Stars } from "@/components/stars";
@@ -91,6 +93,15 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
         ← Back to shop
       </Link>
 
+      <RecentlyViewedTracker
+        item={{
+          slug: product.slug,
+          name: product.name,
+          image: product.image,
+          fromPaise: priceFromPaise(product),
+        }}
+      />
+
       <ProductDetail
         product={product}
         initialFragrance={typeof fragrance === "string" ? fragrance : undefined}
@@ -154,6 +165,8 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
           </ul>
         )}
       </div>
+
+      <RecentlyViewed excludeSlug={product.slug} />
     </section>
   );
 }

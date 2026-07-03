@@ -12,6 +12,7 @@ const NAV = [
   { href: "/admin/stock", label: "Stock" },
   { href: "/admin/products", label: "Products" },
   { href: "/admin/reviews", label: "Reviews" },
+  { href: "/admin/questions", label: "Q&A" },
   { href: "/admin/coupons", label: "Coupons" },
   { href: "/admin/bundles", label: "Kits" },
   { href: "/admin/subscriptions", label: "Subscriptions" },

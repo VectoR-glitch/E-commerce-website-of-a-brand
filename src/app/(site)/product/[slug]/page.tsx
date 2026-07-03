@@ -9,9 +9,11 @@ import { SITE_URL } from "@/lib/constants";
 import { jsonLdHtml } from "@/lib/json-ld";
 import { priceFromPaise, type Product } from "@/lib/catalog";
 import { getProductReviews, getReviewEligibility, type ReviewSummary } from "@/lib/reviews";
+import { getProductQuestions, getAskEligibility } from "@/lib/product-qa";
 import { getSession } from "@/lib/session";
 import { Stars } from "@/components/stars";
 import { ReviewForm } from "@/components/review-form";
+import { AskQuestionForm } from "@/components/ask-question-form";
 
 export const dynamic = "force-dynamic";
 
@@ -77,9 +79,13 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
   const product = await getProduct(slug);
   if (!product) notFound();
 
-  const { productId, reviews, summary } = await getProductReviews(slug);
-  const [{ canReview, existing }, session] = await Promise.all([
+  const [{ productId, reviews, summary }, { questions }] = await Promise.all([
+    getProductReviews(slug),
+    getProductQuestions(slug),
+  ]);
+  const [{ canReview, existing }, { canAsk }, session] = await Promise.all([
     productId ? getReviewEligibility(productId) : Promise.resolve({ canReview: false, existing: null }),
+    productId ? getAskEligibility(productId) : Promise.resolve({ canAsk: false, pendingCount: 0 }),
     getSession(),
   ]);
 
@@ -160,6 +166,55 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
                     month: "short",
                     year: "numeric",
                   })}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      {/* Questions & Answers */}
+      <div className="mt-20 border-t border-line pt-12">
+        <span className="smallcaps text-brass-deep">Questions &amp; Answers</span>
+        <h2 className="mt-2 font-serif text-3xl">
+          {questions.length > 0 ? "Your questions, answered" : "Have a question?"}
+        </h2>
+
+        {productId && canAsk ? (
+          <AskQuestionForm productId={productId} slug={slug} />
+        ) : (
+          <p className="mt-4 text-sm text-ink/55">
+            {session ? (
+              "Thanks — you already have a question awaiting our reply on this product."
+            ) : (
+              <>
+                <Link href={`/login?next=/product/${slug}`} className="text-forest underline">
+                  Sign in
+                </Link>{" "}
+                to ask a question — we answer publicly so it helps everyone.
+              </>
+            )}
+          </p>
+        )}
+
+        {questions.length > 0 && (
+          <ul className="mt-10 space-y-8">
+            {questions.map((q) => (
+              <li key={q.id} className="border-b border-line pb-6 last:border-0">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="smallcaps text-xs text-brass-deep">Q</span>
+                  <span className="text-sm font-medium text-ink">{q.question}</span>
+                </div>
+                {q.answer && (
+                  <div className="mt-2 flex gap-3">
+                    <span className="smallcaps text-xs text-forest">A</span>
+                    <p className="whitespace-pre-line text-sm leading-relaxed text-ink/75">
+                      {q.answer}
+                    </p>
+                  </div>
+                )}
+                <p className="mt-2 text-xs text-ink/45">
+                  {q.isFaq ? "Klenich" : `Asked by ${q.asker}`}
                 </p>
               </li>
             ))}

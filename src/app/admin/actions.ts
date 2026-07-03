@@ -9,6 +9,7 @@ import { requireAdmin } from "@/lib/session";
 import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
 import { bundleCouponCode } from "@/lib/bundles";
 import { sendDueSubscriptionReminders } from "@/lib/subscriptions";
+import { notifyBackInStockForVariant } from "@/lib/back-in-stock";
 
 const ORDER_STATUSES = Object.values(OrderStatus);
 const PAYMENT_STATUSES = Object.values(PaymentStatus);
@@ -131,6 +132,18 @@ export async function updateStock(formData: FormData): Promise<void> {
   const stock = Math.floor(raw);
 
   await prisma.variant.update({ where: { id: variantId }, data: { stock } });
+
+  // Restocked → notify anyone waiting on this variant. Best-effort: a failure
+  // here must never break the stock update, and the daily sweep retries any
+  // that don't send. No-op when stock is still 0 or nobody's waiting.
+  if (stock > 0) {
+    try {
+      await notifyBackInStockForVariant(variantId);
+    } catch {
+      // swallowed — the cron sweep is the backstop
+    }
+  }
+
   revalidatePath("/admin/stock");
   revalidatePath("/admin");
 }

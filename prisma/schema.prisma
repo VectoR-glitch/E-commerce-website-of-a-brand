@@ -97,10 +97,32 @@ model Variant {
   cartItems  CartItem[]
   bundleItems BundleItem[]
   subscriptions Subscription[]
+  backInStockAlerts BackInStockAlert[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
   @@index([productId])
+}
+
+/// A "notify me when back in stock" request against a specific out-of-stock
+/// variant. One pending request per email+variant (re-subscribing just resets
+/// notifiedAt). When the variant is restocked, everyone with notifiedAt = null
+/// is emailed and stamped notified — so they're never nudged twice for the same
+/// refill, but CAN sign up again if it sells out later. customerId is recorded
+/// when a signed-in shopper subscribes (plain reference, no FK — the alert is
+/// email-addressed and outlives an account deletion).
+model BackInStockAlert {
+  id         String    @id @default(cuid())
+  variant    Variant   @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId  String
+  email      String
+  customerId String?
+  notifiedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@unique([variantId, email])
+  @@index([variantId])
+  @@index([notifiedAt])
 }
 
 /// A curated kit — a set of variants sold together at a discount to cross-sell

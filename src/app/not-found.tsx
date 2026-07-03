@@ -2,13 +2,16 @@ import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { CartProvider } from "@/lib/cart-context";
+import { WishlistProvider } from "@/lib/wishlist-context";
 import { Ornament } from "@/components/ornament";
 
 // Root not-found: rendered for unmatched URLs and notFound() calls. It sits
-// outside the (site) layout, so it brings its own header/footer + cart.
+// outside the (site) layout, so it brings its own header/footer + the providers
+// the header needs (cart + wishlist counts). Guest defaults — no session here.
 export default function NotFound() {
   return (
     <CartProvider>
+      <WishlistProvider>
       <SiteHeader />
       <main className="flex-1">
         <section className="mx-auto flex max-w-2xl flex-col items-center px-8 py-32 text-center">
@@ -38,6 +41,7 @@ export default function NotFound() {
         </section>
       </main>
       <SiteFooter />
+      </WishlistProvider>
     </CartProvider>
   );
 }

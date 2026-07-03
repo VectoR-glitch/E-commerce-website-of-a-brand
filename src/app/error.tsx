@@ -5,6 +5,7 @@ import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { CartProvider } from "@/lib/cart-context";
+import { WishlistProvider } from "@/lib/wishlist-context";
 import { Ornament } from "@/components/ornament";
 
 // Root error boundary: catches unexpected runtime errors in the (site) tree.
@@ -24,6 +25,7 @@ export default function Error({
 
   return (
     <CartProvider>
+      <WishlistProvider>
       <SiteHeader />
       <main className="flex-1">
         <section className="mx-auto flex max-w-2xl flex-col items-center px-8 py-32 text-center">
@@ -59,6 +61,7 @@ export default function Error({
         </section>
       </main>
       <SiteFooter />
+      </WishlistProvider>
     </CartProvider>
   );
 }

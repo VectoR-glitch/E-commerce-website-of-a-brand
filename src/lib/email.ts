@@ -477,3 +477,56 @@ export async function sendContactEmail(msg: ContactMessage): Promise<boolean> {
 
   return true;
 }
+
+// ── Subscribe & save reminder ───────────────────────────────────────────────
+// Sent when a subscription is due. Managed model: we never auto-charge — the
+// email nudges the customer to place the order (one tap on their account page),
+// with the saved price pre-applied.
+export async function sendSubscriptionReminder(input: {
+  to: string;
+  name: string | null;
+  productName: string;
+  variantLabel: string; // e.g. "Lavender · 1L"
+  quantity: number;
+  discountPercent: number;
+  unitDiscountedPaise: number;
+  manageUrl: string;
+}): Promise<void> {
+  if (!resend) return; // no key → safe no-op until configured
+  const hi = input.name ? `Hi ${escapeHtml(input.name)},` : "Hi,";
+  const label = escapeHtml(input.variantLabel);
+  const qty = input.quantity > 1 ? ` × ${input.quantity}` : "";
+
+  await resend.emails.send({
+    from: FROM,
+    to: input.to,
+    subject: `Time to restock your ${input.productName}?`,
+    text: [
+      input.name ? `Hi ${input.name},` : "Hi,",
+      "",
+      `Your ${input.productName} (${input.variantLabel})${qty} is due for its next delivery.`,
+      `As a subscriber you save ${input.discountPercent}% — ${formatINR(input.unitDiscountedPaise)} each.`,
+      "",
+      "Nothing is charged automatically. Place the order whenever you're ready:",
+      input.manageUrl,
+      "",
+      "Klenich · Plant-powered home care, made in India",
+      SITE_URL,
+    ].join("\n"),
+    html: shell(
+      `Subscribe & save · ${input.discountPercent}% off`,
+      "Ready for a refill?",
+      `<p style="color:${C.ink};font-size:15px;margin:0 0 14px;">${hi}</p>
+       <p style="color:${C.ink};font-size:15px;margin:0 0 6px;line-height:1.6;">
+         Your <strong>${escapeHtml(input.productName)}</strong> (${label})${qty} is due for its next delivery.
+       </p>
+       <p style="color:${C.muted};font-size:14px;margin:0 0 20px;">
+         As a subscriber you pay <strong style="color:${C.ink};">${formatINR(input.unitDiscountedPaise)}</strong> each — a standing ${input.discountPercent}% saving.
+       </p>
+       ${ctaButton(input.manageUrl, "Order now")}
+       <p style="color:${C.muted};font-size:13px;margin:0;line-height:1.6;">
+         Nothing is charged automatically — order only when you're ready. You can skip, pause or cancel anytime from your account.
+       </p>`,
+    ),
+  });
+}

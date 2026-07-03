@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
 import { bundleCouponCode } from "@/lib/bundles";
+import { sendDueSubscriptionReminders } from "@/lib/subscriptions";
 
 const ORDER_STATUSES = Object.values(OrderStatus);
 const PAYMENT_STATUSES = Object.values(PaymentStatus);
@@ -569,4 +570,14 @@ export async function removeBundleImage(formData: FormData): Promise<void> {
   });
   revalidatePath(`/admin/bundles/${bundleId}`);
   revalidatePath("/shop");
+}
+
+// ── Subscriptions ───────────────────────────────────────────────────────────
+// Manually run the "subscribe & save" reminder batch (a daily cron should call
+// sendDueSubscriptionReminders() in production; this button is the interim
+// trigger + a way to test it). Rolls each reminded subscription forward a cycle.
+export async function runSubscriptionReminders(): Promise<void> {
+  await requireAdmin();
+  await sendDueSubscriptionReminders();
+  revalidatePath("/admin/subscriptions");
 }

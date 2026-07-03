@@ -1,8 +1,10 @@
 import Link from "next/link";
 import Image from "next/image";
 import { formatINR, priceFromPaise, type Product } from "@/lib/catalog";
+import { LOW_STOCK_THRESHOLD } from "@/lib/constants";
 import { Ornament } from "@/components/ornament";
 import { CardMedia } from "@/components/card-media";
+import { WishlistButton } from "@/components/wishlist-button";
 
 export function ProductCard({
   product,
@@ -21,6 +23,21 @@ export function ProductCard({
   const image =
     (fragrance && product.fragranceImages?.[fragrance]) || product.image;
   const subtitle = fragrance ?? product.tagline;
+
+  // Stock urgency cue — only from real DB numbers (never the static fallback,
+  // where stock is undefined), so it stays truthful. Scope to the shown
+  // fragrance when the card represents one. "Sold out" when every relevant
+  // variant is empty; "Only N left" when the combined stock is running low.
+  const relevant = fragrance
+    ? product.variants.filter((v) => v.fragrance === fragrance)
+    : product.variants;
+  const stocks = relevant
+    .map((v) => v.stock)
+    .filter((s): s is number => typeof s === "number");
+  const stockKnown = stocks.length > 0 && stocks.length === relevant.length;
+  const totalStock = stocks.reduce((sum, s) => sum + s, 0);
+  const soldOut = stockKnown && totalStock <= 0;
+  const lowStock = stockKnown && !soldOut && totalStock <= LOW_STOCK_THRESHOLD;
 
   // For a full-product listing, build a labelled slide for every variant
   // (fragrance × size) so each card shows its variant + size — and cycles
@@ -47,6 +64,20 @@ export function ProductCard({
       className="group flex flex-col bg-paper transition-colors hover:bg-white"
     >
       <div className="relative h-80 overflow-hidden border-b border-line">
+        <WishlistButton
+          item={{ slug: product.slug, fragrance, name: product.name, image, fromPaise: from }}
+        />
+        {(soldOut || lowStock) && (
+          <span
+            className={`smallcaps absolute left-3 top-3 z-10 border px-2.5 py-1 text-xs backdrop-blur ${
+              soldOut
+                ? "border-line bg-bone/85 text-ink/55"
+                : "border-brass/40 bg-bone/85 text-brass-deep"
+            }`}
+          >
+            {soldOut ? "Sold out" : `Only ${totalStock} left`}
+          </span>
+        )}
         {variantSlides.length >= 1 ? (
           <CardMedia slides={variantSlides} name={product.name} />
         ) : image ? (

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { CartCount } from "@/components/cart-count";
+import { WishlistLink } from "@/components/wishlist-link";
 import { MobileNav } from "@/components/mobile-nav";
 
 const navLinks = [
@@ -46,6 +47,7 @@ export function SiteHeader({ accountSlot }: { accountSlot?: React.ReactNode }) {
         </nav>
         <div className="flex items-center gap-3">
           {accountSlot}
+          <WishlistLink />
           <CartCount />
           <MobileNav />
         </div>

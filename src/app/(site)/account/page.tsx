@@ -45,6 +45,13 @@ export default async function AccountPage() {
           <p className="mt-1 text-sm text-ink/60">Track and review your orders</p>
         </Link>
         <Link
+          href="/account/subscriptions"
+          className="border border-line bg-paper p-5 transition-colors hover:border-forest"
+        >
+          <p className="smallcaps text-brass-deep">Subscriptions</p>
+          <p className="mt-1 text-sm text-ink/60">Manage your subscribe &amp; save deliveries</p>
+        </Link>
+        <Link
           href="/account/security"
           className="border border-line bg-paper p-5 transition-colors hover:border-forest"
         >

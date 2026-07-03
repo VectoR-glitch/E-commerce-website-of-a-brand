@@ -7,6 +7,7 @@ import { BackToTop } from "@/components/back-to-top";
 import { CartDrawer } from "@/components/cart-drawer";
 import { MapleEasterEgg } from "@/components/maple-easter-egg";
 import { CartProvider } from "@/lib/cart-context";
+import { WishlistProvider } from "@/lib/wishlist-context";
 import { getSession } from "@/lib/session";
 import { loadServerCartItems } from "@/lib/server-cart";
 
@@ -22,6 +23,7 @@ export default async function SiteLayout({
 
   return (
     <CartProvider authenticated={Boolean(session)} initialItems={initialItems}>
+      <WishlistProvider>
       <a
         href="#main"
         className="smallcaps sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[60] focus:bg-forest focus:px-4 focus:py-3 focus:text-bone"
@@ -38,6 +40,7 @@ export default async function SiteLayout({
       <BackToTop />
       <CartDrawer />
       <MapleEasterEgg />
+      </WishlistProvider>
     </CartProvider>
   );
 }

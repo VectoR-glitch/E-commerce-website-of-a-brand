@@ -96,6 +96,7 @@ model Variant {
   orderItems OrderItem[]
   cartItems  CartItem[]
   bundleItems BundleItem[]
+  subscriptions Subscription[]
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
@@ -158,6 +159,7 @@ model Customer {
   addresses Address[]
   cart      Cart?
   reviews   Review[]
+  subscriptions Subscription[]
   verificationTokens  VerificationToken[]
   passwordResetTokens PasswordResetToken[]
   createdAt DateTime  @default(now())
@@ -314,6 +316,38 @@ model Coupon {
   expiresAt     DateTime? // null = never expires
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+}
+
+/// A "subscribe & save" standing order. Managed + reminder model (no stored
+/// card mandate): we track the schedule and email the customer each cycle with
+/// a one-tap reorder that pre-applies their saved discount. The discount is
+/// realised through a per-subscription coupon (code SUB-<id-suffix>) so the
+/// whole checkout/settlement discount pipeline is reused — same as kits. That
+/// code is PRIVATE (only ever shown in the customer's own reminder/account, never
+/// in public page source), so its unguessable cuid suffix is sufficient gating.
+model Subscription {
+  id              String   @id @default(cuid())
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId      String
+  variant         Variant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId       String
+  quantity        Int      @default(1)
+  intervalDays    Int // cadence: every N days (e.g. 30 / 45 / 60)
+  discountPercent Int // saved % off, snapshotted at subscribe time
+  status          SubscriptionStatus @default(ACTIVE)
+  nextDeliveryAt  DateTime // when the next reminder/reorder is due
+  lastReminderAt  DateTime? // guards against double-sending a cycle's reminder
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([status, nextDeliveryAt])
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
 }
 
 enum DiscountType {

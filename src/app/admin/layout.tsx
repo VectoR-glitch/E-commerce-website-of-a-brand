@@ -24,28 +24,30 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-bone text-ink">
       <header className="border-b border-line bg-paper">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-6 px-6 py-4">
-          <div className="flex items-center gap-8">
+        <div className="mx-auto max-w-6xl px-6">
+          {/* Row 1 — brand + account actions */}
+          <div className="flex items-center justify-between gap-6 py-4">
             <Link href="/admin" className="font-serif text-lg tracking-wide text-forest">
               KLENICH <span className="text-brass-deep">Ops</span>
             </Link>
-            <nav className="flex gap-5 text-sm">
-              {NAV.map((n) => (
-                <Link key={n.href} href={n.href} className="text-ink/70 hover:text-forest">
-                  {n.label}
-                </Link>
-              ))}
-            </nav>
+            <div className="flex items-center gap-4 text-sm">
+              <span className="hidden text-ink/60 sm:inline">{session.email}</span>
+              <Link href="/" className="text-ink/60 hover:text-forest">View site</Link>
+              <form action={logoutAction}>
+                <button className="smallcaps border border-line px-3 py-1.5 text-ink/70 hover:border-forest hover:text-forest">
+                  Log out
+                </button>
+              </form>
+            </div>
           </div>
-          <div className="flex items-center gap-4 text-sm">
-            <span className="hidden text-ink/60 sm:inline">{session.email}</span>
-            <Link href="/" className="text-ink/60 hover:text-forest">View site</Link>
-            <form action={logoutAction}>
-              <button className="smallcaps border border-line px-3 py-1.5 text-ink/70 hover:border-forest hover:text-forest">
-                Log out
-              </button>
-            </form>
-          </div>
+          {/* Row 2 — section nav, wraps instead of scrolling */}
+          <nav className="flex flex-wrap gap-x-6 gap-y-2 border-t border-line py-3 text-sm">
+            {NAV.map((n) => (
+              <Link key={n.href} href={n.href} className="text-ink/70 hover:text-forest">
+                {n.label}
+              </Link>
+            ))}
+          </nav>
         </div>
       </header>
       <main className="mx-auto max-w-6xl px-6 py-8">{children}</main>

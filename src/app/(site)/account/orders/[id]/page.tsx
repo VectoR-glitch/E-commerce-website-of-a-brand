@@ -3,7 +3,9 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
+import { buildReorderItems } from "@/lib/reorder";
 import { ORDER_STATUS_LABEL, orderStatusBadgeClass, paymentMethodLabel } from "@/lib/order-display";
+import { ReorderButton } from "@/components/reorder-button";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,7 @@ export default async function AccountOrderDetail(props: { params: Promise<{ id: 
 
   const isCod = order.paymentMethod === "COD";
   const codDue = order.totalPaise - order.amountPaidPaise;
+  const reorder = await buildReorderItems(order.items);
 
   return (
     <div className="mx-auto max-w-2xl px-8 py-16">
@@ -33,9 +36,17 @@ export default async function AccountOrderDetail(props: { params: Promise<{ id: 
           {ORDER_STATUS_LABEL[order.status]}
         </span>
       </div>
-      <p className="mt-1 text-sm text-ink/55">
-        Placed {order.createdAt.toISOString().slice(0, 10)} · {paymentMethodLabel(order.paymentMethod)}
-      </p>
+      <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-ink/55">
+          Placed {order.createdAt.toISOString().slice(0, 10)} · {paymentMethodLabel(order.paymentMethod)}
+        </p>
+        <ReorderButton items={reorder.items} unavailableCount={reorder.unavailable.length} />
+      </div>
+      {reorder.unavailable.length > 0 && (
+        <p className="mt-2 text-xs text-ink/45">
+          No longer available: {reorder.unavailable.join(", ")}
+        </p>
+      )}
 
       {/* Items */}
       <div className="mt-6 border border-line bg-paper p-5">

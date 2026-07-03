@@ -1,11 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { FRAGRANCE_HEX, formatINR, type Product } from "@/lib/catalog";
+import { LOW_STOCK_THRESHOLD, SUBSCRIBE_SAVE_PERCENT, SUBSCRIBE_INTERVALS } from "@/lib/constants";
 import { useCart } from "@/lib/cart-context";
 import { flyToCart } from "@/lib/fly-to-cart";
+import { createSubscription } from "@/app/actions/subscriptions";
 import { Ornament } from "@/components/ornament";
+import { WishlistButton } from "@/components/wishlist-button";
 
 export function ProductDetail({
   product,
@@ -15,7 +19,7 @@ export function ProductDetail({
   initialFragrance?: string;
 }) {
   const hasFragrance = product.fragrances.length > 0;
-  const { addItem } = useCart();
+  const { addItem, authenticated } = useCart();
   const imageRef = useRef<HTMLDivElement>(null);
   const addRowRef = useRef<HTMLDivElement>(null);
   const stickyRef = useRef<HTMLDivElement>(null);
@@ -34,6 +38,11 @@ export function ProductDetail({
       : undefined,
   );
   const [size, setSize] = useState<string>(product.sizes[0]);
+  // Subscribe & save state.
+  const [subInterval, setSubInterval] = useState<number>(SUBSCRIBE_INTERVALS[0].days);
+  const [subOk, setSubOk] = useState(false);
+  const [subError, setSubError] = useState<string | null>(null);
+  const [subPending, startSub] = useTransition();
 
   const selected = useMemo(
     () =>
@@ -49,7 +58,7 @@ export function ProductDetail({
     !!selected &&
     typeof selected.stock === "number" &&
     selected.stock > 0 &&
-    selected.stock <= 10;
+    selected.stock <= LOW_STOCK_THRESHOLD;
 
   // Show the photo matching the selected fragrance AND size, with fallbacks.
   const image =
@@ -103,6 +112,33 @@ export function ProductDetail({
     });
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1800);
+  }
+
+  const subDiscountedPaise = selected
+    ? Math.round(selected.pricePaise * (1 - SUBSCRIBE_SAVE_PERCENT / 100))
+    : 0;
+
+  function subscribe() {
+    if (!selected?.id) return;
+    const variantId = selected.id;
+    setSubError(null);
+    startSub(async () => {
+      const res = await createSubscription({ variantId, intervalDays: subInterval, quantity: 1 });
+      if (res?.ok) setSubOk(true);
+      else setSubError(res?.error ?? "Couldn't set up the subscription. Please try again.");
+    });
+  }
+
+  // Switching the variant invalidates the "Subscribed ✓" confirmation.
+  function pickFragrance(f: string) {
+    setFragrance(f);
+    setSubOk(false);
+    setSubError(null);
+  }
+  function pickSize(s: string) {
+    setSize(s);
+    setSubOk(false);
+    setSubError(null);
   }
 
   return (
@@ -185,7 +221,7 @@ export function ProductDetail({
                     <button
                       key={f}
                       type="button"
-                      onClick={() => setFragrance(f)}
+                      onClick={() => pickFragrance(f)}
                       className={`flex items-center gap-2 border px-4 py-2.5 text-sm transition-colors ${
                         active
                           ? "border-forest bg-forest text-bone"
@@ -213,7 +249,7 @@ export function ProductDetail({
                   <button
                     key={s}
                     type="button"
-                    onClick={() => setSize(s)}
+                    onClick={() => pickSize(s)}
                     className={`border px-5 py-2.5 text-sm transition-colors ${
                       active
                         ? "border-forest bg-forest text-bone"
@@ -246,18 +282,88 @@ export function ProductDetail({
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              disabled={!selected || outOfStock}
-              onClick={() => addToCart(imageRef.current)}
-              className="smallcaps bg-forest px-9 py-4 text-bone btn-fill-forest disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              {outOfStock ? "Out of Stock" : justAdded ? "Added ✓" : "Add to Cart"}
-            </button>
+            <div className="flex items-stretch gap-3">
+              <WishlistButton
+                variant="inline"
+                item={{
+                  slug: product.slug,
+                  fragrance,
+                  name: product.name,
+                  image,
+                  fromPaise: selected?.pricePaise ?? 0,
+                }}
+              />
+              <button
+                type="button"
+                disabled={!selected || outOfStock}
+                onClick={() => addToCart(imageRef.current)}
+                className="smallcaps bg-forest px-9 py-4 text-bone btn-fill-forest disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                {outOfStock ? "Out of Stock" : justAdded ? "Added ✓" : "Add to Cart"}
+              </button>
+            </div>
           </div>
         </div>
 
-        <div className="mt-12 space-y-2 border-t border-line pt-7 text-sm text-ink/70">
+        {/* Subscribe & save */}
+        {selected && (
+          <div className="mt-8 border border-brass/30 bg-brass/[0.05] p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <span className="smallcaps text-brass-deep">
+                Subscribe &amp; save {SUBSCRIBE_SAVE_PERCENT}%
+              </span>
+              <span className="text-sm text-ink/60">
+                <span className="font-serif text-lg text-ink">{formatINR(subDiscountedPaise)}</span>
+                <span className="ml-2 text-ink/45 line-through">{formatINR(selected.pricePaise)}</span>
+                <span className="ml-1">/ delivery</span>
+              </span>
+            </div>
+            <p className="mt-1.5 text-sm leading-relaxed text-ink/65">
+              Scheduled deliveries at a standing discount. Skip, pause or cancel anytime —
+              no card kept on file; we email you before each delivery.
+            </p>
+            {authenticated ? (
+              subOk ? (
+                <p className="mt-3 text-sm text-forest">
+                  Subscribed ✓ ·{" "}
+                  <Link href="/account/subscriptions" className="underline">
+                    Manage in your account
+                  </Link>
+                </p>
+              ) : (
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <select
+                    value={subInterval}
+                    onChange={(e) => setSubInterval(Number(e.target.value))}
+                    className="border border-line bg-white px-3 py-2.5 text-sm outline-none focus:border-forest"
+                  >
+                    {SUBSCRIBE_INTERVALS.map((i) => (
+                      <option key={i.days} value={i.days}>{i.label}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={subscribe}
+                    disabled={subPending || outOfStock}
+                    className="smallcaps border border-brass bg-brass/10 px-6 py-2.5 text-brass-deep transition-colors hover:bg-brass/20 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {subPending ? "Setting up…" : "Subscribe"}
+                  </button>
+                </div>
+              )
+            ) : (
+              <Link
+                href={`/login?next=${encodeURIComponent(`/product/${product.slug}`)}`}
+                className="smallcaps mt-4 inline-block border border-brass bg-brass/10 px-6 py-2.5 text-brass-deep transition-colors hover:bg-brass/20"
+              >
+                Sign in to subscribe
+              </Link>
+            )}
+            {subError && <p className="mt-2 text-sm text-red-600">{subError}</p>}
+          </div>
+        )}
+
+        <div className="mt-8 space-y-2 border-t border-line pt-7 text-sm text-ink/70">
           <p>🌱 Plant-powered formula, made in India</p>
           <p>🚚 Dispatched within 1 working day · delivery ₹64 (WB) / ₹160 (India)</p>
           <p>↩️ Returns on damaged or wrong items</p>

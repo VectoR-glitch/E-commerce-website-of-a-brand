@@ -47,6 +47,20 @@ export function deliveryFeePaise(state: string): number {
     : DELIVERY_FEE_NATIONAL_PAISE;
 }
 
+// "Subscribe & save" — the standing-order discount (percent off the subscribed
+// item) and the cadences a customer can pick, in days. Snapshotted onto each
+// Subscription at subscribe time, so changing this only affects new subscriptions.
+export const SUBSCRIBE_SAVE_PERCENT = 10;
+export const SUBSCRIBE_INTERVALS = [
+  { days: 30, label: "Every month" },
+  { days: 45, label: "Every 6 weeks" },
+  { days: 60, label: "Every 2 months" },
+];
+
+// Below this many units in stock (and above zero) the storefront shows an
+// urgency cue ("Only N left"). One source of truth for cards + PDP.
+export const LOW_STOCK_THRESHOLD = 10;
+
 // Canonical site origin, used to build absolute URLs (JSON-LD, OG, emails).
 // Override per-environment with NEXT_PUBLIC_SITE_URL; no trailing slash.
 export const SITE_URL = (

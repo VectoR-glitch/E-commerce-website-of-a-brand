@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
-import { pointsToPaise } from "@/lib/loyalty";
+import { pointsToPaise, loyaltyTier } from "@/lib/loyalty";
+import { LOYALTY_TIERS } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +10,7 @@ export default async function AdminLoyalty() {
   await requireAdmin();
 
   const now = new Date();
-  const [balances, referredCount, topCustomers, activeVouchers] = await Promise.all([
+  const [balances, referredCount, topCustomers, activeVouchers, tierCounts] = await Promise.all([
     // Outstanding points across all customers = the program's liability.
     prisma.customer.aggregate({ _sum: { points: true }, _count: { _all: true } }),
     prisma.customer.count({ where: { referredById: { not: null } } }),
@@ -17,7 +18,14 @@ export default async function AdminLoyalty() {
       where: { points: { gt: 0 } },
       orderBy: { points: "desc" },
       take: 15,
-      select: { id: true, name: true, email: true, points: true, _count: { select: { referrals: true } } },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        points: true,
+        lifetimePoints: true,
+        _count: { select: { referrals: true } },
+      },
     }),
     // Loyalty vouchers still spendable (minted LOYAL- coupons, unused, unexpired).
     prisma.coupon.findMany({
@@ -29,6 +37,18 @@ export default async function AdminLoyalty() {
       },
       select: { value: true },
     }),
+    // How many customers sit in each tier (band between this tier's threshold
+    // and the next one's, open-ended for the top tier).
+    Promise.all(
+      LOYALTY_TIERS.map((t, i) => {
+        const next = LOYALTY_TIERS[i + 1];
+        return prisma.customer.count({
+          where: {
+            lifetimePoints: { gte: t.minLifetimePoints, ...(next ? { lt: next.minLifetimePoints } : {}) },
+          },
+        });
+      }),
+    ),
   ]);
 
   const outstandingPoints = balances._sum.points ?? 0;
@@ -60,15 +80,31 @@ export default async function AdminLoyalty() {
         ))}
       </div>
 
+      <h2 className="mt-10 smallcaps text-brass-deep">Tiers</h2>
+      <div className="mt-4 grid gap-px border border-line bg-line sm:grid-cols-3">
+        {LOYALTY_TIERS.map((t, i) => (
+          <div key={t.name} className="bg-paper p-5">
+            <p className="smallcaps text-ink/55">
+              {t.name} · {t.earnPercent}% back
+            </p>
+            <p className="mt-1.5 font-serif text-2xl text-ink">{tierCounts[i]}</p>
+            <p className="mt-1 text-xs text-ink/50">
+              {t.minLifetimePoints > 0 ? `${t.minLifetimePoints}+ lifetime pts` : "Starting tier"}
+            </p>
+          </div>
+        ))}
+      </div>
+
       <h2 className="mt-10 smallcaps text-brass-deep">Top balances</h2>
       {topCustomers.length === 0 ? (
         <p className="mt-4 text-sm text-ink/50">No points earned yet.</p>
       ) : (
         <div className="mt-4 overflow-x-auto border border-line">
-          <table className="w-full min-w-[560px] text-sm">
+          <table className="w-full min-w-[620px] text-sm">
             <thead className="bg-paper text-left smallcaps text-ink/60">
               <tr>
                 <th className="px-4 py-3 font-normal">Customer</th>
+                <th className="px-4 py-3 font-normal">Tier</th>
                 <th className="px-4 py-3 font-normal">Points</th>
                 <th className="px-4 py-3 font-normal">Value</th>
                 <th className="px-4 py-3 font-normal">Referred</th>
@@ -81,6 +117,7 @@ export default async function AdminLoyalty() {
                     <div className="text-ink">{c.name ?? "—"}</div>
                     <div className="text-xs text-ink/55">{c.email}</div>
                   </td>
+                  <td className="px-4 py-3 text-ink/70">{loyaltyTier(c.lifetimePoints).name}</td>
                   <td className="px-4 py-3 text-ink/80">{c.points.toLocaleString("en-IN")}</td>
                   <td className="px-4 py-3 text-ink/70">{formatINR(pointsToPaise(c.points))}</td>
                   <td className="px-4 py-3 text-ink/70">{c._count.referrals || "—"}</td>

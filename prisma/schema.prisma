@@ -12,10 +12,10 @@ datasource db {
 
 /// A product line (e.g. Floor Cleaner). Marketing content keyed by `slug` in Sanity.
 model Product {
-  id        String    @id @default(cuid())
-  slug      String    @unique // storefront route segment
-  name      String
-  active    Boolean   @default(true)
+  id     String  @id @default(cuid())
+  slug   String  @unique // storefront route segment
+  name   String
+  active Boolean @default(true)
 
   // Marketing/editorial content — moved off the static catalog into the DB so
   // the admin owns it (replaces Sanity). Nullable during migration backfill.
@@ -33,8 +33,8 @@ model Product {
   reviews     Review[]
   questions   ProductQuestion[]
   bundleItems BundleItem[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
 }
 
 /// A customer review of a product. Only customers who bought the product may
@@ -92,16 +92,16 @@ model ProductQuestion {
 /// `fragrance`/`size` scope an image to a specific variant axis (null = the
 /// product-level default).
 model ProductImage {
-  id          String  @id @default(cuid())
-  product     Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId   String
   data        Bytes // the image binary (bytea)
   contentType String // e.g. image/webp
   alt         String?
   fragrance   String? // null = applies regardless of fragrance
   size        String? // null = applies regardless of size
-  isPrimary   Boolean @default(false) // the card/PDP default
-  sortOrder   Int     @default(0)
+  isPrimary   Boolean  @default(false) // the card/PDP default
+  sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
 
   @@index([productId])
@@ -109,27 +109,27 @@ model ProductImage {
 
 /// A buyable SKU (fragrance + size). Price & stock are the source of truth here.
 model Variant {
-  id         String      @id @default(cuid())
-  sku        String      @unique
-  barcode    String?     @unique // EAN-13; null for items without a barcode
-  product    Product     @relation(fields: [productId], references: [id])
-  productId  String
-  fragrance  String? // null when the product has no fragrance axis
-  size       String
-  pricePaise Int
-  stock      Int         @default(0)
+  id                String             @id @default(cuid())
+  sku               String             @unique
+  barcode           String?            @unique // EAN-13; null for items without a barcode
+  product           Product            @relation(fields: [productId], references: [id])
+  productId         String
+  fragrance         String? // null when the product has no fragrance axis
+  size              String
+  pricePaise        Int
+  stock             Int                @default(0)
   // Packed shipping weight of one unit in grams (bottle + packaging). Nullable
   // means "not yet measured": courier rate calc must treat null as a hard block,
   // never as 0g. Set per-SKU once each bottle is weighed.
-  weightGrams Int?
-  active     Boolean     @default(true) // inactive variants never show on the site
-  orderItems OrderItem[]
-  cartItems  CartItem[]
-  bundleItems BundleItem[]
-  subscriptions Subscription[]
+  weightGrams       Int?
+  active            Boolean            @default(true) // inactive variants never show on the site
+  orderItems        OrderItem[]
+  cartItems         CartItem[]
+  bundleItems       BundleItem[]
+  subscriptions     Subscription[]
   backInStockAlerts BackInStockAlert[]
-  createdAt  DateTime    @default(now())
-  updatedAt  DateTime    @updatedAt
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@index([productId])
 }
@@ -177,9 +177,9 @@ model Bundle {
 }
 
 model BundleItem {
-  id       String @id @default(cuid())
-  bundle   Bundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
-  bundleId String
+  id        String   @id @default(cuid())
+  bundle    Bundle   @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  bundleId  String
   // A slot is EITHER an exact variant OR a flexible product slot: any variant of
   // `product`, optionally locked to `size` — the customer picks the specific
   // variant (fragrance/size) when adding the kit. Exactly one of variantId /
@@ -195,42 +195,47 @@ model BundleItem {
 }
 
 model Customer {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  name      String?
-  phone     String?
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  phone         String?
   // Account auth. passwordHash is null for guest/order-only rows (no login);
   // set (scrypt) once a row is an actual login account. role gates the admin
   // ops console — only ADMIN reaches /admin.
-  passwordHash String?
-  role         Role    @default(CUSTOMER)
+  passwordHash  String?
+  role          Role      @default(CUSTOMER)
   // Set when the customer confirms their email via the verification link.
   // Null = unverified (account created but email not yet confirmed).
   emailVerified DateTime?
 
   // Loyalty: current redeemable balance (1 point = ₹1, see POINT_VALUE_PAISE).
-  // `points` is the running balance; every change is also journalled in
-  // LoyaltyLedger for audit. `referralCode` is this customer's own shareable
-  // code (generated lazily). `referredById` points at the customer who referred
-  // them (self-relation) — set once at registration, drives the referral bonus.
-  points        Int     @default(0)
-  referralCode  String? @unique
-  referredBy    Customer?  @relation("Referrals", fields: [referredById], references: [id])
-  referredById  String?
-  referrals     Customer[] @relation("Referrals")
+  // `points` is the running balance (decreases on redeem); every change is also
+  // journalled in LoyaltyLedger for audit. `lifetimePoints` only ever goes up —
+  // it's the total ever earned (order + referral/referee bonuses, never
+  // decremented on redeem) — and is what determines the customer's loyalty tier,
+  // so redeeming a voucher can never demote you. `referralCode` is this
+  // customer's own shareable code (generated lazily). `referredById` points at
+  // the customer who referred them (self-relation) — set once at registration,
+  // drives the referral bonus.
+  points         Int        @default(0)
+  lifetimePoints Int        @default(0)
+  referralCode   String?    @unique
+  referredBy     Customer?  @relation("Referrals", fields: [referredById], references: [id])
+  referredById   String?
+  referrals      Customer[] @relation("Referrals")
 
-  orders    Order[]
-  addresses Address[]
-  cart      Cart?
-  reviews   Review[]
-  questions ProductQuestion[]
-  subscriptions Subscription[]
-  wishlist      WishlistItem[]
-  loyaltyLedger LoyaltyLedger[]
+  orders              Order[]
+  addresses           Address[]
+  cart                Cart?
+  reviews             Review[]
+  questions           ProductQuestion[]
+  subscriptions       Subscription[]
+  wishlist            WishlistItem[]
+  loyaltyLedger       LoyaltyLedger[]
   verificationTokens  VerificationToken[]
   passwordResetTokens PasswordResetToken[]
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
 
   @@index([referredById])
 }
@@ -318,16 +323,16 @@ model PasswordResetToken {
 // Server-side cart for signed-in customers (cross-device). The guest cart lives
 // in localStorage; on login it merges into this, which becomes authoritative.
 model Cart {
-  id         String     @id @default(cuid())
-  customer   Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  customerId String     @unique
-  items      CartItem[]
+  id             String     @id @default(cuid())
+  customer       Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId     String     @unique
+  items          CartItem[]
   // When we last emailed an abandoned-cart reminder for this cart. Reset to null
   // on every cart write (see writeCart), so each fresh abandonment episode is
   // eligible for exactly one reminder — never a repeated nudge for the same cart.
   reminderSentAt DateTime?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
 }
 
 model CartItem {
@@ -345,8 +350,8 @@ model CartItem {
 /// An order. All address/price fields are SNAPSHOTTED at checkout so later
 /// catalog or address edits never alter a historical order.
 model Order {
-  id          String  @id @default(cuid())
-  orderNumber String  @unique // human-friendly, e.g. KLN-2026-0042
+  id          String @id @default(cuid())
+  orderNumber String @unique // human-friendly, e.g. KLN-2026-0042
 
   customer   Customer? @relation(fields: [customerId], references: [id])
   customerId String? // null for guest checkout
@@ -368,19 +373,19 @@ model Order {
   paymentMethod PaymentMethod @default(ONLINE)
 
   // money, all in paise
-  subtotalPaise Int
-  shippingPaise Int @default(0)
-  discountPaise Int @default(0)
-  couponCode    String? // the coupon applied to this order, if any (uppercase)
-  totalPaise    Int
+  subtotalPaise   Int
+  shippingPaise   Int     @default(0)
+  discountPaise   Int     @default(0)
+  couponCode      String? // the coupon applied to this order, if any (uppercase)
+  totalPaise      Int
   // Loyalty points awarded when this order settled (0 for guest orders / before
   // settlement). Written exactly once inside the winning settlement claim, so it
   // also marks that earn has already been granted for this order.
-  pointsEarned  Int @default(0)
+  pointsEarned    Int     @default(0)
   // Amount actually collected via Razorpay. ONLINE = totalPaise; COD = the
   // delivery fee prepaid up front (goods are paid in cash on delivery, so the
   // cash due on delivery = totalPaise - amountPaidPaise).
-  amountPaidPaise Int @default(0)
+  amountPaidPaise Int     @default(0)
 
   // Razorpay
   razorpayOrderId   String? @unique
@@ -440,22 +445,46 @@ model Coupon {
 /// code is PRIVATE (only ever shown in the customer's own reminder/account, never
 /// in public page source), so its unguessable cuid suffix is sufficient gating.
 model Subscription {
-  id              String   @id @default(cuid())
-  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  id              String             @id @default(cuid())
+  customer        Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
   customerId      String
-  variant         Variant  @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variant         Variant            @relation(fields: [variantId], references: [id], onDelete: Cascade)
   variantId       String
-  quantity        Int      @default(1)
+  quantity        Int                @default(1)
   intervalDays    Int // cadence: every N days (e.g. 30 / 45 / 60)
   discountPercent Int // saved % off, snapshotted at subscribe time
   status          SubscriptionStatus @default(ACTIVE)
   nextDeliveryAt  DateTime // when the next reminder/reorder is due
   lastReminderAt  DateTime? // guards against double-sending a cycle's reminder
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
 
   @@index([customerId])
   @@index([status, nextDeliveryAt])
+}
+
+/// A journal/blog post — Klenich's own SEO content, admin-authored directly
+/// (no separate CMS). `body` is long-form copy, blank-line-separated
+/// paragraphs. `published` gates public visibility; `publishedAt` is set once,
+/// the first time a post is published, and never moves on re-publish — it's
+/// the stable "posted on" date (see updatedAt for "last edited"). The cover
+/// photo mirrors Bundle's inline-image pattern: stored directly in Postgres,
+/// served via /api/blog-image/[id].
+model BlogPost {
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  title           String
+  excerpt         String // card blurb + meta description fallback
+  body            String
+  metaDescription String? // optional SEO override; falls back to excerpt
+  published       Boolean   @default(false)
+  publishedAt     DateTime?
+  coverImageData  Bytes?
+  coverImageType  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([published, publishedAt])
 }
 
 enum SubscriptionStatus {
@@ -496,5 +525,5 @@ enum PaymentStatus {
 
 enum PaymentMethod {
   ONLINE // prepaid via Razorpay
-  COD    // delivery fee prepaid via Razorpay; goods collected in cash on delivery
+  COD // delivery fee prepaid via Razorpay; goods collected in cash on delivery
 }

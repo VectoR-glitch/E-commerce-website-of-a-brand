@@ -64,13 +64,21 @@ export const LOW_STOCK_THRESHOLD = 10;
 // ── Loyalty & referral ──────────────────────────────────────────────────────
 // All the tunable economics live here so the reward policy is one edit away.
 // One point is worth POINT_VALUE_PAISE of discount (₹1 by default): a point is
-// a ₹-denominated unit, which keeps "earn 5% back" and "redeem N points = ₹N
+// a ₹-denominated unit, which keeps "earn N% back" and "redeem N points = ₹N
 // off" trivially legible to shoppers.
 export const POINT_VALUE_PAISE = 100; // 1 point = ₹1
 
-// Earn: this % of an order's net goods value (subtotal − discount) is returned
-// as points when the order settles. 5% back at 1pt=₹1 → ₹1000 spent = 50 points.
-export const LOYALTY_EARN_PERCENT = 5;
+// Earn: tiered by lifetime points earned (Customer.lifetimePoints — a
+// never-decreasing counter, so redeeming a voucher can never demote a
+// customer). Each tier's earnPercent is the % of an order's net goods value
+// (subtotal − discount) returned as points when the order settles — e.g. 5%
+// back at 1pt=₹1 → ₹1000 spent = 50 points. Ordered ascending by threshold;
+// a customer's tier is the last one whose minLifetimePoints they've reached.
+export const LOYALTY_TIERS = [
+  { name: "Bronze", minLifetimePoints: 0, earnPercent: 3 },
+  { name: "Silver", minLifetimePoints: 300, earnPercent: 6 },
+  { name: "Gold", minLifetimePoints: 1000, earnPercent: 8 },
+] as const;
 
 // Referral: when a referred customer's FIRST order settles, both sides get a
 // one-off bonus. Points (not cash), credited to each loyalty balance.

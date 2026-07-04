@@ -3,7 +3,7 @@ import { requireSession } from "@/lib/session";
 import { getLoyaltySummary } from "@/lib/loyalty";
 import { formatINR } from "@/lib/catalog";
 import {
-  LOYALTY_EARN_PERCENT,
+  LOYALTY_TIERS,
   LOYALTY_MIN_REDEEM_POINTS,
   POINT_VALUE_PAISE,
   REFERRAL_REFEREE_BONUS_POINTS,
@@ -31,6 +31,17 @@ export default async function LoyaltyPage() {
   const session = await requireSession("/account/loyalty");
   const summary = await getLoyaltySummary(session.sub);
 
+  // Progress within the current tier's band (not from zero), so the bar fills
+  // from where this tier started, not from account creation.
+  const currentThreshold = LOYALTY_TIERS.find((t) => t.name === summary.tier)?.minLifetimePoints ?? 0;
+  const nextThreshold = summary.lifetimePoints + (summary.nextTier?.pointsNeeded ?? 0);
+  const tierProgressPct = summary.nextTier
+    ? Math.min(
+        100,
+        Math.round(((summary.lifetimePoints - currentThreshold) / (nextThreshold - currentThreshold)) * 100),
+      )
+    : 100;
+
   return (
     <div className="mx-auto max-w-2xl px-8 py-16">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
@@ -53,13 +64,42 @@ export default async function LoyaltyPage() {
         <p className="mt-1 text-sm text-ink/60">
           points · worth {formatINR(summary.pointsValuePaise)}
         </p>
+        <p className="mt-3">
+          <span className="smallcaps border border-forest/40 bg-bone px-3 py-1 text-forest">
+            {summary.tier} tier · {summary.tierEarnPercent}% back
+          </span>
+        </p>
+      </section>
+
+      {/* Tier progress */}
+      <section className="mt-6 border border-line bg-paper p-6">
+        {summary.nextTier ? (
+          <>
+            <p className="text-sm text-ink/70">
+              <strong>{summary.nextTier.pointsNeeded} points</strong> to{" "}
+              <strong>{summary.nextTier.name}</strong> tier.
+            </p>
+            <div className="mt-3 h-2 w-full rounded-r-[4px] bg-line">
+              <div className="h-2 rounded-r-[4px] bg-forest" style={{ width: `${tierProgressPct}%` }} />
+            </div>
+          </>
+        ) : (
+          <p className="text-sm text-forest">You&rsquo;ve reached our top tier — thank you for your loyalty.</p>
+        )}
+        <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink/50">
+          {LOYALTY_TIERS.map((t) => (
+            <span key={t.name} className={t.name === summary.tier ? "font-medium text-forest" : ""}>
+              {t.name} {t.earnPercent}%{t.minLifetimePoints > 0 ? ` (${t.minLifetimePoints}+ pts)` : ""}
+            </span>
+          ))}
+        </p>
       </section>
 
       {/* How it works */}
       <p className="mt-4 text-center text-xs text-ink/55">
-        Earn <strong>{LOYALTY_EARN_PERCENT}% back</strong> as points on every order
-        (1 point = {formatINR(POINT_VALUE_PAISE)}). Refer a friend and you both get
-        bonus points on their first order.
+        Earn <strong>{summary.tierEarnPercent}% back</strong> as points on every order at
+        your tier (1 point = {formatINR(POINT_VALUE_PAISE)}). Refer a friend and you both
+        get bonus points on their first order.
       </p>
 
       {/* Redeem */}

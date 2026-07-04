@@ -346,7 +346,11 @@ export default function CheckoutPage() {
   }, [subtotalPaise]);
 
   // "Add kit to cart" stashes the bundle's coupon code; apply it once on arrival
-  // at checkout, then clear it so a later manual visit isn't re-couponed.
+  // at checkout, then clear it so a later manual visit isn't re-couponed. If
+  // there's no pending kit coupon, fall back to auto-applying the signed-in
+  // customer's best qualifying loyalty voucher (highest value that still meets
+  // its own minimum spend) — visibly, via the same "applied" banner with a
+  // Remove option, so a saved reward is never left unused by accident.
   useEffect(() => {
     let code: string | null = null;
     try {
@@ -355,7 +359,19 @@ export default function CheckoutPage() {
     } catch {
       // ignore storage errors
     }
-    if (code) applyCoupon(code);
+    if (code) {
+      applyCoupon(code);
+      return;
+    }
+    fetch("/api/account/loyalty-voucher")
+      .then((r) => r.json())
+      .then((data: { vouchers?: { code: string; valuePaise: number }[] }) => {
+        const best = (data.vouchers ?? [])
+          .filter((v) => v.valuePaise <= subtotalPaise)
+          .sort((a, b) => b.valuePaise - a.valuePaise)[0];
+        if (best) applyCoupon(best.code);
+      })
+      .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

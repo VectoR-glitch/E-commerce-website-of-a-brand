@@ -631,6 +631,111 @@ export async function removeBundleImage(formData: FormData): Promise<void> {
   revalidatePath("/shop");
 }
 
+// ── Blog / journal ───────────────────────────────────────────────────────────
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export async function createBlogPost(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const title = String(formData.get("title") ?? "").trim();
+  const slug = String(formData.get("slug") ?? "").trim().toLowerCase();
+  if (!title || !SLUG_RE.test(slug)) return;
+
+  const clash = await prisma.blogPost.findUnique({ where: { slug } });
+  if (clash) return;
+
+  // Created as an empty draft; the edit page fills in excerpt/body/cover next.
+  const post = await prisma.blogPost.create({ data: { title, slug, excerpt: "", body: "" } });
+  revalidatePath("/admin/blog");
+  redirect(`/admin/blog/${post.id}`);
+}
+
+export async function updateBlogPost(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("blogPostId") ?? "");
+  const title = String(formData.get("title") ?? "").trim();
+  const slug = String(formData.get("slug") ?? "").trim().toLowerCase();
+  const excerpt = String(formData.get("excerpt") ?? "").trim();
+  const body = String(formData.get("body") ?? "").trim();
+  const metaDescription = String(formData.get("metaDescription") ?? "").trim() || null;
+  const published = formData.get("published") === "on";
+  if (!id || !title || !SLUG_RE.test(slug) || !excerpt || !body) return;
+
+  const existing = await prisma.blogPost.findUnique({
+    where: { id },
+    select: { slug: true, publishedAt: true },
+  });
+  if (!existing) return;
+
+  if (slug !== existing.slug) {
+    const clash = await prisma.blogPost.findUnique({ where: { slug } });
+    if (clash) return;
+  }
+
+  await prisma.blogPost.update({
+    where: { id },
+    data: {
+      title,
+      slug,
+      excerpt,
+      body,
+      metaDescription,
+      published,
+      // Set once, the first time a post goes live; re-publishing after
+      // unpublishing doesn't reset it — it's the stable "posted on" date.
+      publishedAt: published && !existing.publishedAt ? new Date() : existing.publishedAt,
+    },
+  });
+  revalidatePath("/admin/blog");
+  revalidatePath(`/admin/blog/${id}`);
+  revalidatePath("/blog");
+  revalidatePath(`/blog/${existing.slug}`);
+  if (slug !== existing.slug) revalidatePath(`/blog/${slug}`);
+}
+
+export async function deleteBlogPost(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("blogPostId") ?? "");
+  if (!id) return;
+  const post = await prisma.blogPost.findUnique({ where: { id }, select: { slug: true } });
+  if (!post) return;
+  await prisma.blogPost.delete({ where: { id } });
+  revalidatePath("/admin/blog");
+  revalidatePath("/blog");
+  revalidatePath(`/blog/${post.slug}`);
+  redirect("/admin/blog");
+}
+
+export async function uploadBlogImage(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const blogPostId = String(formData.get("blogPostId") ?? "");
+  const file = formData.get("file");
+  if (!blogPostId || !(file instanceof File) || !isAllowedImage(file.type, file.size)) return;
+
+  const data = Buffer.from(await file.arrayBuffer());
+  const post = await prisma.blogPost.update({
+    where: { id: blogPostId },
+    data: { coverImageData: data, coverImageType: file.type },
+    select: { slug: true },
+  });
+  revalidatePath(`/admin/blog/${blogPostId}`);
+  revalidatePath("/blog");
+  revalidatePath(`/blog/${post.slug}`);
+}
+
+export async function removeBlogImage(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const blogPostId = String(formData.get("blogPostId") ?? "");
+  if (!blogPostId) return;
+  const post = await prisma.blogPost.update({
+    where: { id: blogPostId },
+    data: { coverImageData: null, coverImageType: null },
+    select: { slug: true },
+  });
+  revalidatePath(`/admin/blog/${blogPostId}`);
+  revalidatePath("/blog");
+  revalidatePath(`/blog/${post.slug}`);
+}
+
 // ── Subscriptions ───────────────────────────────────────────────────────────
 // Manually run the "subscribe & save" reminder batch (a daily cron should call
 // sendDueSubscriptionReminders() in production; this button is the interim

@@ -16,6 +16,7 @@ const columns = [
     links: [
       { href: "/why-klenich", label: "Why Klenich" },
       { href: "/our-story", label: "Our Story" },
+      { href: "/blog", label: "Journal" },
     ],
   },
   {

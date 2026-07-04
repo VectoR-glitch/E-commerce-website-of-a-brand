@@ -2,6 +2,7 @@ import type { MetadataRoute } from "next";
 import { SITE_URL } from "@/lib/constants";
 import { getProducts } from "@/lib/products";
 import { products as staticCatalog } from "@/lib/catalog";
+import { getPublishedPosts } from "@/lib/blog";
 
 // Static, indexable routes with sensible crawl priorities. Transactional pages
 // (cart, checkout) are intentionally excluded — they're disallowed in robots.
@@ -10,6 +11,7 @@ const staticRoutes: { path: string; priority: number; freq: MetadataRoute.Sitema
   { path: "/shop", priority: 0.9, freq: "weekly" },
   { path: "/why-klenich", priority: 0.6, freq: "monthly" },
   { path: "/our-story", priority: 0.6, freq: "monthly" },
+  { path: "/blog", priority: 0.6, freq: "weekly" },
   { path: "/help", priority: 0.4, freq: "monthly" },
   { path: "/shipping-returns", priority: 0.4, freq: "yearly" },
   { path: "/contact", priority: 0.4, freq: "yearly" },
@@ -44,5 +46,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     priority: 0.8,
   }));
 
-  return [...staticEntries, ...productEntries];
+  // A blog fetch failure shouldn't take down the whole sitemap — same
+  // defensive pattern as the product-slug fallback above.
+  let blogEntries: MetadataRoute.Sitemap = [];
+  try {
+    const posts = await getPublishedPosts();
+    blogEntries = posts.map((p) => ({
+      url: `${SITE_URL}/blog/${p.slug}`,
+      lastModified: p.publishedAt,
+      changeFrequency: "monthly",
+      priority: 0.5,
+    }));
+  } catch {
+    blogEntries = [];
+  }
+
+  return [...staticEntries, ...productEntries, ...blogEntries];
 }

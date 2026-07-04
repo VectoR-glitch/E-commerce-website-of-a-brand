@@ -8,6 +8,7 @@ const navLinks = [
   { href: "/shop", label: "Shop" },
   { href: "/why-klenich", label: "Why Klenich" },
   { href: "/our-story", label: "Our Story" },
+  { href: "/blog", label: "Journal" },
   { href: "/help", label: "Help" },
 ];
 

@@ -13,7 +13,7 @@ export default function TermsPage() {
       <h1 className="mt-3 font-serif text-4xl text-ink">Terms & Conditions</h1>
       <Ornament align="left" className="mt-4" />
       <p className="mt-2 text-sm text-ink/70">
-        Last updated: 2 July 2026 · Operated by Bharat Bliss Pvt Ltd
+        Last updated: 4 July 2026 · Operated by Bharat Bliss Pvt Ltd
       </p>
 
       <div className="mt-8 space-y-6 text-sm leading-relaxed">
@@ -36,17 +36,48 @@ export default function TermsPage() {
           Delivery timelines and our return policy are described on the Shipping
           & Returns page, which forms part of these terms.
         </Section>
-        <Section title="5. Safe use of products">
+        <Section title="5. Subscribe & Save">
+          Subscribe &amp; Save is a reminder service, not an automatic payment
+          plan: we don’t store your card and nothing is charged without you
+          actively completing checkout each cycle. We’ll email you when a
+          delivery is due with a one-tap reorder at your saved discount; you
+          can pause or cancel anytime from your account.
+        </Section>
+        <Section title="6. Loyalty & referral program">
+          Loyalty points are earned on settled orders at the rate shown on your
+          account page and may be redeemed into a single-use discount voucher,
+          subject to a minimum redemption amount and a voucher expiry period —
+          both shown at redemption. Referral bonuses are credited on a referred
+          customer’s first settled order. We may amend, pause, or end the
+          program, or withhold rewards obtained through abuse of these terms
+          (e.g. fraudulent accounts or self-referral), at our discretion.
+        </Section>
+        <Section title="7. Reviews & questions">
+          Content you submit (reviews, ratings, product questions) must be your
+          own genuine opinion or question, not false, defamatory, or infringing.
+          We moderate submissions before they appear publicly and may edit for
+          length or clarity, decline to publish, or remove content that
+          violates these terms.
+        </Section>
+        <Section title="8. Safe use of products">
           Our products are household cleaners. Use as directed on the label, keep
           out of reach of children and pets, and do not mix with other cleaning
           chemicals. We are not liable for misuse.
         </Section>
-        <Section title="6. Liability & governing law">
+        <Section title="9. Liability & governing law">
           To the extent permitted by law, our liability is limited to the order
           value. These terms are governed by the laws of India, subject to the
           courts of Kolkata, West Bengal.
         </Section>
-        <Section title="7. Contact">
+        <Section title="10. Grievance Officer">
+          In accordance with applicable Indian law, grievances regarding these
+          terms may be addressed to our Grievance Officer:
+          <br />
+          Name: <span className="text-brass-deep">[Grievance Officer name — to be designated]</span>
+          <br />
+          Email: bharatblissofficial@gmail.com · Phone: +91 89812 21994
+        </Section>
+        <Section title="11. Contact">
           Email bharatblissofficial@gmail.com for any questions about these terms.
         </Section>
       </div>

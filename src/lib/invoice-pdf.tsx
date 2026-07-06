@@ -230,14 +230,11 @@ function InvoiceDocument({ order }: { order: InvoiceOrder }) {
             </Text>
           </View>
         </View>
-        {order.discountPaise > 0 && (
-          <Text style={[styles.muted, { marginTop: 4, fontSize: 8 }]}>
-            Includes a discount of {money(order.discountPaise)}, applied proportionally across the items above.
-          </Text>
-        )}
-
         {/* Terms (left) + tax/total summary (right) — Total Amount is always
-            === order.totalPaise, the exact figure shown at checkout. */}
+            === order.totalPaise, the exact figure shown at checkout. Subtotal
+            and Discount are shown tax-inclusive, pre-discount → post-discount,
+            so Subtotal − Discount reconciles exactly to the SUBTOTAL bar above
+            (and its ex-tax/tax split is what Taxable Amount + GST show next). */}
         <View style={[styles.row, styles.section, { gap: 16 }]}>
           <View style={{ flex: 1.3 }}>
             <Text style={[styles.sectionHeader, { backgroundColor: "transparent", paddingHorizontal: 0, color: "#806224" }]}>
@@ -252,7 +249,19 @@ function InvoiceDocument({ order }: { order: InvoiceOrder }) {
             </Text>
           </View>
           <View style={{ flex: 1 }}>
-            <View style={styles.between}>
+            {order.discountPaise > 0 && (
+              <>
+                <View style={styles.between}>
+                  <Text style={styles.muted}>Subtotal</Text>
+                  <Text>{money(order.subtotalPaise)}</Text>
+                </View>
+                <View style={[styles.between, { marginTop: 3 }]}>
+                  <Text style={styles.muted}>Discount</Text>
+                  <Text>-{money(order.discountPaise)}</Text>
+                </View>
+              </>
+            )}
+            <View style={[styles.between, { marginTop: order.discountPaise > 0 ? 3 : 0 }]}>
               <Text style={styles.muted}>Taxable Amount</Text>
               <Text>{money(breakdown.totals.taxableValuePaise)}</Text>
             </View>

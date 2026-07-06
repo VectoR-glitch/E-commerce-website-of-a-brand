@@ -565,28 +565,39 @@ export default function CheckoutPage() {
           },
         },
         handler: async (response: RazorpayResponse) => {
-          // 4. Verify the signature server-side before celebrating.
-          const verify = await fetch("/api/payment/verify", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(response),
-          });
-          const vdata = await verify.json();
-          if (verify.ok && vdata.ok) {
-            setPaidPaise(data.amount);
-            // COD: the goods total is still owed in cash on delivery.
-            setCodDuePaise(isCod ? data.totalPaise - data.amount : 0);
-            setShippedTo(`${form.city}, ${form.state} — ${form.pincode}`);
-            setOrderNumber(vdata.orderNumber);
-            clear();
-            setPlaced(true);
-            window.scrollTo({ top: 0, behavior: "smooth" });
-          } else {
+          // 4. Verify the signature server-side before celebrating. This runs
+          // as a Razorpay SDK callback, well after the outer try/catch below
+          // has already exited — so it needs its own error handling, or a
+          // network hiccup / non-JSON error response leaves the button stuck
+          // on "Processing" forever with setSubmitting(false) never reached.
+          try {
+            const verify = await fetch("/api/payment/verify", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(response),
+            });
+            const vdata = await verify.json();
+            if (verify.ok && vdata.ok) {
+              setPaidPaise(data.amount);
+              // COD: the goods total is still owed in cash on delivery.
+              setCodDuePaise(isCod ? data.totalPaise - data.amount : 0);
+              setShippedTo(`${form.city}, ${form.state} — ${form.pincode}`);
+              setOrderNumber(vdata.orderNumber);
+              clear();
+              setPlaced(true);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            } else {
+              setPayError(
+                vdata.error ?? "We couldn't confirm your payment. If money was deducted, contact us.",
+              );
+            }
+          } catch {
             setPayError(
-              vdata.error ?? "We couldn't confirm your payment. If money was deducted, contact us.",
+              "We couldn't confirm your payment. If money was deducted, contact us.",
             );
+          } finally {
+            setSubmitting(false);
           }
-          setSubmitting(false);
         },
         modal: {
           ondismiss: () => setSubmitting(false),

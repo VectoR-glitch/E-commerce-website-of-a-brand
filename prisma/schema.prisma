@@ -28,6 +28,11 @@ model Product {
   safety      String? // caution note (e.g. acidic cleaners)
   placeholder String? // emoji fallback when an image is missing
 
+  // GST invoicing (see OrderItem, which snapshots these at order time so a
+  // later rate change never alters an already-issued invoice).
+  hsnCode    String @default("34022")
+  gstPercent Int    @default(18)
+
   variants    Variant[]
   images      ProductImage[]
   reviews     Review[]
@@ -387,6 +392,13 @@ model Order {
   // cash due on delivery = totalPaise - amountPaidPaise).
   amountPaidPaise Int     @default(0)
 
+  // GST invoice number (e.g. KLN/2026-27/00001) — allocated exactly once,
+  // inside the winning settlement claim, from InvoiceSequence. Null until
+  // settled; never reassigned or reused once set (a GST invoice number must
+  // be sequential and unique for its financial year).
+  invoiceNumber      String?   @unique
+  invoiceGeneratedAt DateTime?
+
   // Razorpay
   razorpayOrderId   String? @unique
   razorpayPaymentId String?
@@ -416,8 +428,22 @@ model OrderItem {
   unitPaise   Int
   quantity    Int
   linePaise   Int
+  // GST snapshot — copied from Product at order time, so a later HSN/rate
+  // change on the product can never alter an already-issued invoice.
+  hsnCode     String  @default("34022")
+  gstPercent  Int     @default(18)
 
   @@index([orderId])
+}
+
+/// The atomic counter behind GST invoice numbers, one row per Indian financial
+/// year (id = "2026-27" etc., April–March). `lastNumber` only ever increments,
+/// inside the same transaction that allocates an order's invoiceNumber — so
+/// numbers are guaranteed sequential and never reused, as GST invoicing rules
+/// require.
+model InvoiceSequence {
+  id         String @id // financial year label, e.g. "2026-27"
+  lastNumber Int    @default(0)
 }
 
 /// A discount code applied at checkout. `value` is a percentage (1–100) when

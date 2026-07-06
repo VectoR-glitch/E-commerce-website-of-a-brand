@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { RAZORPAY_KEY_SECRET } from "@/lib/razorpay";
 import { settleOrderPaid } from "@/lib/orders";
 import { sendOrderEmails } from "@/lib/email";
+import { renderSettledOrderInvoicePdf } from "@/lib/invoice-pdf";
 import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 
 type VerifyBody = {
@@ -83,7 +84,8 @@ export async function POST(request: Request) {
   // webhook may have beaten us). Never let an email failure break the order.
   if (result.newlySettled) {
     try {
-      await sendOrderEmails(result.order);
+      const invoice = await renderSettledOrderInvoicePdf(result.order);
+      await sendOrderEmails(result.order, invoice ?? undefined);
     } catch (err) {
       console.error("Order email failed (verify):", err);
     }

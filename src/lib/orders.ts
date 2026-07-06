@@ -4,6 +4,7 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { awardLoyaltyForSettledOrder } from "@/lib/loyalty";
+import { nextInvoiceNumber } from "@/lib/gst";
 
 type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
@@ -113,6 +114,15 @@ export async function settleOrderPaid(params: {
       customerId: existing.customerId,
       subtotalPaise: existing.subtotalPaise,
       discountPaise: existing.discountPaise,
+    });
+
+    // Allocate the GST invoice number exactly once, here in the winning claim
+    // — a sequential number must never be issued twice or skipped.
+    const invoiceGeneratedAt = new Date();
+    const invoiceNumber = await nextInvoiceNumber(tx, invoiceGeneratedAt);
+    await tx.order.update({
+      where: { id: existing.id },
+      data: { invoiceNumber, invoiceGeneratedAt },
     });
 
     // Re-read so the returned order (used for the confirmation email) reflects

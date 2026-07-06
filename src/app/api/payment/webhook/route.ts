@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { settleOrderPaid } from "@/lib/orders";
 import { sendOrderEmails } from "@/lib/email";
+import { renderSettledOrderInvoicePdf } from "@/lib/invoice-pdf";
 
 // Razorpay webhook backup. If the browser-side verify never runs (customer
 // closes the tab, loses signal, etc.), Razorpay still calls this endpoint
@@ -66,7 +67,8 @@ export async function POST(request: Request) {
           // The browser verify never ran (tab closed, etc.) — send here. Only
           // fires when WE won the settle, so emails are never duplicated.
           try {
-            await sendOrderEmails(result.order);
+            const invoice = await renderSettledOrderInvoicePdf(result.order);
+            await sendOrderEmails(result.order, invoice ?? undefined);
           } catch (err) {
             console.error("Order email failed (webhook):", err);
           }

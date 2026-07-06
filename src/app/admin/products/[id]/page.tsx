@@ -88,15 +88,35 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
             <label className="smallcaps mb-1 block text-brass-deep">Safety note <span className="text-ink/45">(optional)</span></label>
             <textarea name="safety" defaultValue={product.safety ?? ""} rows={2} className={`${fieldCls} w-full`} />
           </div>
-          <div className="flex flex-wrap items-center gap-6">
+          <div className="flex flex-wrap items-end gap-6">
             <div>
               <label className="smallcaps mb-1 block text-brass-deep">Emoji fallback</label>
               <input name="placeholder" defaultValue={product.placeholder ?? ""} className={`${fieldCls} w-24`} />
             </div>
-            <label className="flex items-center gap-2 pt-5 text-sm">
+            <div>
+              <label className="smallcaps mb-1 block text-brass-deep">HSN code</label>
+              <input name="hsnCode" defaultValue={product.hsnCode} required className={`${fieldCls} w-24`} />
+            </div>
+            <div>
+              <label className="smallcaps mb-1 block text-brass-deep">GST %</label>
+              <input
+                name="gstPercent"
+                type="number"
+                min={0}
+                max={100}
+                defaultValue={product.gstPercent}
+                required
+                className={`${fieldCls} w-20`}
+              />
+            </div>
+            <label className="flex items-center gap-2 pb-2 text-sm">
               <input type="checkbox" name="active" defaultChecked={product.active} /> Active (visible on storefront)
             </label>
           </div>
+          <p className="text-xs text-ink/55">
+            HSN/GST are snapshotted onto each order line at checkout, so changing them here only
+            affects future orders — past GST invoices never change.
+          </p>
           <p className="text-xs text-ink/55">Slug <span className="font-mono">{product.slug}</span> is fixed (changing it would break links).</p>
           <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Save product</button>
         </form>

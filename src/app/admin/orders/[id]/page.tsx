@@ -28,7 +28,17 @@ export default async function OrderDetail(props: { params: Promise<{ id: string 
 
       <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="font-serif text-3xl">{order.orderNumber}</h1>
-        <span className="text-sm text-ink/60">{order.createdAt.toISOString().slice(0, 16).replace("T", " ")}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-ink/60">{order.createdAt.toISOString().slice(0, 16).replace("T", " ")}</span>
+          {order.invoiceNumber && (
+            <a
+              href={`/api/invoice/${order.id}`}
+              className="smallcaps border border-line px-3 py-1.5 text-xs text-ink/70 transition-colors hover:border-forest hover:text-forest"
+            >
+              Invoice {order.invoiceNumber}
+            </a>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">

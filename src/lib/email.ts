@@ -190,9 +190,13 @@ function orderText(order: OrderForEmail, opts: { admin: boolean }): string {
 /**
  * Sends the customer confirmation and the admin notification for a paid order.
  * Call only from the path that newly settles the order (exactly once). Throws
- * are the caller's to swallow so email never breaks an order.
+ * are the caller's to swallow so email never breaks an order. `invoice`, when
+ * given, attaches the GST invoice PDF to both emails.
  */
-export async function sendOrderEmails(order: OrderForEmail): Promise<void> {
+export async function sendOrderEmails(
+  order: OrderForEmail,
+  invoice?: { pdf: Buffer; invoiceNumber: string },
+): Promise<void> {
   if (!resend) return; // no key → safe no-op until configured
 
   const isCod = order.paymentMethod === "COD";
@@ -203,6 +207,9 @@ export async function sendOrderEmails(order: OrderForEmail): Promise<void> {
   const payNote = isCod
     ? `<p style="margin:0 0 18px;padding:12px 14px;background:${C.bone};border:1px solid ${C.line};border-radius:4px;font-size:14px;color:${C.ink};"><strong>Cash on Delivery</strong> — your delivery fee of <strong>${formatINR(order.amountPaidPaise)}</strong> is paid. Please keep <strong>${formatINR(codDuePaise)}</strong> in cash ready for the delivery agent.</p>`
     : "";
+  const attachments = invoice
+    ? [{ filename: `${invoice.invoiceNumber.replace(/\//g, "-")}.pdf`, content: invoice.pdf }]
+    : undefined;
 
   // 1. Customer confirmation
   await resend.emails.send({
@@ -217,6 +224,7 @@ export async function sendOrderEmails(order: OrderForEmail): Promise<void> {
         : "Thank you — your order is on its way to being prepared.",
       `<p style="color:${C.muted};font-size:14px;margin:0 0 18px;">Order <strong style="color:${C.ink};">${order.orderNumber}</strong></p>${payNote}${summary}`,
     ),
+    attachments,
   });
 
   // 2. Admin notification (to your inbox)
@@ -231,6 +239,7 @@ export async function sendOrderEmails(order: OrderForEmail): Promise<void> {
       `New ${isCod ? "COD " : ""}order ${order.orderNumber}`,
       `<p style="color:${C.muted};font-size:14px;margin:0 0 18px;">Customer: <strong style="color:${C.ink};">${escapeHtml(order.shipName)}</strong> · ${escapeHtml(order.email)}</p>${isCod ? `<p style="margin:0 0 18px;font-size:14px;color:${C.ink};"><strong>COD</strong> — delivery fee ${formatINR(order.amountPaidPaise)} prepaid online. Collect <strong>${formatINR(codDuePaise)}</strong> in cash on delivery.</p>` : ""}${summary}`,
     ),
+    attachments,
   });
 }
 

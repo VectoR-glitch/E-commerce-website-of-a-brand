@@ -131,6 +131,10 @@ export async function POST(request: Request) {
       unitPaise: variant.pricePaise,
       quantity: qty,
       linePaise,
+      // GST snapshot — frozen at order time so a later product-level rate
+      // change never alters an already-issued invoice.
+      hsnCode: variant.product.hsnCode,
+      gstPercent: variant.product.gstPercent,
     });
   }
 

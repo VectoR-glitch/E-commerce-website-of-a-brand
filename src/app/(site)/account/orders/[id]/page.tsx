@@ -40,7 +40,17 @@ export default async function AccountOrderDetail(props: { params: Promise<{ id: 
         <p className="text-sm text-ink/55">
           Placed {order.createdAt.toISOString().slice(0, 10)} · {paymentMethodLabel(order.paymentMethod)}
         </p>
-        <ReorderButton items={reorder.items} unavailableCount={reorder.unavailable.length} />
+        <div className="flex items-center gap-3">
+          {order.invoiceNumber && (
+            <a
+              href={`/api/invoice/${order.id}`}
+              className="smallcaps border border-line px-4 py-2 text-ink/70 transition-colors hover:border-forest hover:text-forest"
+            >
+              Download invoice
+            </a>
+          )}
+          <ReorderButton items={reorder.items} unavailableCount={reorder.unavailable.length} />
+        </div>
       </div>
       {reorder.unavailable.length > 0 && (
         <p className="mt-2 text-xs text-ink/45">

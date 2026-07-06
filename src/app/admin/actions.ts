@@ -168,7 +168,9 @@ export async function updateProduct(formData: FormData): Promise<void> {
   const id = String(formData.get("productId") ?? "");
   const name = String(formData.get("name") ?? "").trim();
   const active = formData.get("active") === "on";
-  if (!id || !name) return;
+  const hsnCode = String(formData.get("hsnCode") ?? "").trim();
+  const gstPercent = Math.round(Number(formData.get("gstPercent")));
+  if (!id || !name || !hsnCode || !Number.isFinite(gstPercent) || gstPercent < 0 || gstPercent > 100) return;
 
   // Empty text → null; one item per line for the list fields.
   const text = (k: string) => String(formData.get(k) ?? "").trim() || null;
@@ -180,6 +182,8 @@ export async function updateProduct(formData: FormData): Promise<void> {
     data: {
       name,
       active,
+      hsnCode,
+      gstPercent,
       tagline: text("tagline"),
       claim: text("claim"),
       claimTone: text("claimTone"),

@@ -81,6 +81,9 @@ export function RegisterForm({ referral }: { referral?: string }) {
           autoComplete="postal-code"
           placeholder="6-digit pincode"
           required
+          onInput={(e) => {
+            e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "").slice(0, 6);
+          }}
           className={field}
         />
       </div>

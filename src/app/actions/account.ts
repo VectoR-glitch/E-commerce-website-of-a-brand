@@ -54,10 +54,21 @@ export async function registerAction(_prev: RegisterState, formData: FormData): 
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
+  const phone = String(formData.get("phone") ?? "").trim();
+  const line1 = String(formData.get("line1") ?? "").trim();
+  const line2 = String(formData.get("line2") ?? "").trim() || null;
+  const city = String(formData.get("city") ?? "").trim();
+  const state = String(formData.get("state") ?? "").trim();
+  const pincode = String(formData.get("pincode") ?? "").trim();
 
   if (!name) return { error: "Please enter your name." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a valid email address." };
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
+  if (!/^[6-9]\d{9}$/.test(phone)) return { error: "Enter a valid 10-digit mobile number." };
+  if (!line1) return { error: "Enter your address (line 1)." };
+  if (!city) return { error: "Enter your city / town." };
+  if (!INDIAN_STATES.includes(state)) return { error: "Select a valid state." };
+  if (!/^\d{6}$/.test(pincode)) return { error: "Enter a valid 6-digit pincode." };
 
   const existing = await prisma.customer.findUnique({ where: { email } });
   if (existing?.passwordHash) {
@@ -80,6 +91,7 @@ export async function registerAction(_prev: RegisterState, formData: FormData): 
         where: { id: existing.id },
         data: {
           name,
+          phone,
           passwordHash,
           role: "CUSTOMER",
           // Only attribute if not already referred and it isn't a self-referral.
@@ -89,8 +101,27 @@ export async function registerAction(_prev: RegisterState, formData: FormData): 
         },
       })
     : await prisma.customer.create({
-        data: { name, email, passwordHash, role: "CUSTOMER", referredById: referrerId },
+        data: { name, email, phone, passwordHash, role: "CUSTOMER", referredById: referrerId },
       });
+
+  // Save the address given at signup as the default shipping address (same
+  // upsert-by-isDefault shape as saveAddressAction), so checkout's prefill
+  // picks it up immediately — a guest/order-only row upgrading here may
+  // already have one (unlikely, but handled the same way for safety).
+  const existingAddress = await prisma.address.findFirst({
+    where: { customerId: customer.id, isDefault: true },
+    select: { id: true },
+  });
+  if (existingAddress) {
+    await prisma.address.update({
+      where: { id: existingAddress.id },
+      data: { line1, line2, city, state, pincode, phone },
+    });
+  } else {
+    await prisma.address.create({
+      data: { customerId: customer.id, line1, line2, city, state, pincode, phone, isDefault: true },
+    });
+  }
 
   await issueVerification(customer.id, email, name);
 

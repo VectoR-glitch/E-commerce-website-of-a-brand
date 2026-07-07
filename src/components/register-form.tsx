@@ -3,6 +3,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { registerAction, type RegisterState } from "@/app/actions/account";
 import { PasswordInput } from "@/components/password-input";
+import { INDIAN_STATES } from "@/lib/constants";
 
 const field =
   "mt-2 w-full border border-line bg-white px-3.5 py-3 text-sm outline-none focus:border-forest";
@@ -20,6 +21,68 @@ export function RegisterForm({ referral }: { referral?: string }) {
       <div>
         <label htmlFor="email" className="smallcaps text-brass-deep">Email</label>
         <input id="email" name="email" type="email" autoComplete="email" required className={field} />
+      </div>
+      <div>
+        <label htmlFor="phone" className="smallcaps text-brass-deep">Mobile</label>
+        <input
+          id="phone"
+          name="phone"
+          inputMode="numeric"
+          maxLength={10}
+          autoComplete="tel-national"
+          placeholder="10-digit mobile"
+          required
+          className={field}
+        />
+      </div>
+      <div>
+        <label htmlFor="line1" className="smallcaps text-brass-deep">Address line 1</label>
+        <input
+          id="line1"
+          name="line1"
+          autoComplete="address-line1"
+          placeholder="House / flat no., street"
+          required
+          className={field}
+        />
+      </div>
+      <div>
+        <label htmlFor="line2" className="smallcaps text-brass-deep">Address line 2</label>
+        <input
+          id="line2"
+          name="line2"
+          autoComplete="address-line2"
+          placeholder="Area, landmark (optional)"
+          className={field}
+        />
+      </div>
+      <div className="grid gap-5 sm:grid-cols-2">
+        <div>
+          <label htmlFor="city" className="smallcaps text-brass-deep">City / Town</label>
+          <input id="city" name="city" autoComplete="address-level2" required className={field} />
+        </div>
+        <div>
+          <label htmlFor="state" className="smallcaps text-brass-deep">State</label>
+          <select id="state" name="state" defaultValue="" autoComplete="address-level1" required className={field}>
+            <option value="" disabled>Select a state</option>
+            {INDIAN_STATES.map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label htmlFor="pincode" className="smallcaps text-brass-deep">Pincode</label>
+        <input
+          id="pincode"
+          name="pincode"
+          inputMode="numeric"
+          maxLength={6}
+          autoComplete="postal-code"
+          placeholder="6-digit pincode"
+          required
+          className={field}
+        />
       </div>
       <div>
         <label htmlFor="password" className="smallcaps text-brass-deep">Password</label>

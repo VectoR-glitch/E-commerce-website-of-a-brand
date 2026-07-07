@@ -7,6 +7,7 @@ import { formatINR } from "@/lib/catalog";
 import { INDIAN_STATES } from "@/lib/constants";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
+import { Kicker } from "@/components/kicker";
 import { TrustBadges } from "@/components/trust-badges";
 import { PENDING_COUPON_KEY } from "@/components/kit-picker";
 
@@ -378,7 +379,7 @@ export default function CheckoutPage() {
   if (items.length === 0 && !placed) {
     return (
       <section className="mx-auto max-w-3xl px-8 py-24 text-center">
-        <span className="smallcaps text-brass-deep">Checkout</span>
+        <Kicker>Checkout</Kicker>
         <h1 className="mt-4 font-serif text-4xl">Your cart is empty</h1>
         <Link
           href="/shop"
@@ -617,9 +618,9 @@ export default function CheckoutPage() {
   if (placed) {
     return (
       <section className="mx-auto max-w-2xl px-8 py-24 text-center">
-        <span className="smallcaps text-brass-deep">
+        <Kicker>
           {method === "COD" ? "Order Placed" : "Payment Successful"}
-        </span>
+        </Kicker>
         <h1 className="mt-4 font-serif text-4xl">Thank you — order confirmed ✓</h1>
         <p className="mt-4 text-ink/65">
           {method === "COD" ? (
@@ -669,7 +670,7 @@ export default function CheckoutPage() {
   return (
     <section className="mx-auto max-w-5xl px-8 py-16">
       <Reveal>
-        <span className="smallcaps text-brass-deep">Checkout</span>
+        <Kicker>Checkout</Kicker>
         <h1 className="mt-4 font-serif text-4xl">Shipping details</h1>
         <Ornament align="left" className="mt-5" />
       </Reveal>

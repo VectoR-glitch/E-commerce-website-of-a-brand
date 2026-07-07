@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Ornament } from "@/components/ornament";
+import { Kicker } from "@/components/kicker";
 import { BlogCard } from "@/components/blog-card";
 import { getPublishedPosts } from "@/lib/blog";
 
@@ -18,7 +19,7 @@ export default async function BlogIndexPage() {
   return (
     <div className="mx-auto max-w-6xl px-8 py-24">
       <header className="text-center">
-        <span className="smallcaps text-brass-deep">The Journal</span>
+        <Kicker>The Journal</Kicker>
         <h1 className="mt-4 font-serif text-5xl">Notes from Klenich</h1>
         <Ornament className="mt-6" />
         <p className="mx-auto mt-6 max-w-xl text-ink/70">

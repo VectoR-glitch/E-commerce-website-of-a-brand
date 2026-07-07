@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Ornament } from "@/components/ornament";
 import { Reveal } from "@/components/reveal";
+import { Kicker } from "@/components/kicker";
 
 export const metadata: Metadata = {
   title: "Terms & Conditions",
@@ -11,7 +12,7 @@ export default function TermsPage() {
   return (
     <div className="mx-auto max-w-2xl px-8 py-20 text-ink/75">
       <Reveal>
-      <span className="smallcaps text-brass-deep">Legal</span>
+      <Kicker>Legal</Kicker>
       <h1 className="mt-3 font-serif text-4xl text-ink">Terms & Conditions</h1>
       <Ornament align="left" className="mt-4" />
       <p className="mt-2 text-sm text-ink/70">

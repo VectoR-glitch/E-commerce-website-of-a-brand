@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Ornament } from "@/components/ornament";
+import { Kicker } from "@/components/kicker";
 import { LoginForm } from "@/components/login-form";
 import { getSession } from "@/lib/session";
 
@@ -48,7 +49,7 @@ export default async function LoginPage(props: {
   return (
     <div className="mx-auto max-w-md px-8 py-20">
       <header className="text-center">
-        <span className="smallcaps text-brass-deep">Account</span>
+        <Kicker>Account</Kicker>
         <h1 className="mt-4 font-serif text-5xl">Sign in</h1>
         <Ornament className="mt-6" />
       </header>

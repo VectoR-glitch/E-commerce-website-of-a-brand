@@ -1,11 +1,18 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { RAZORPAY_KEY_SECRET } from "@/lib/razorpay";
 import { settleOrderPaid } from "@/lib/orders";
 import { sendOrderEmails } from "@/lib/email";
 import { renderSettledOrderInvoicePdf } from "@/lib/invoice-pdf";
 import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
+
+// Settlement (a multi-step DB transaction) plus PDF generation plus two email
+// sends can together run long — give this route real headroom rather than
+// the platform default, so a slow moment doesn't get the function killed
+// mid-flight with no error (see `after` below for how the email step is kept
+// from blocking the client on top of this).
+export const maxDuration = 30;
 
 type VerifyBody = {
   razorpay_order_id?: string;
@@ -81,14 +88,20 @@ export async function POST(request: Request) {
   }
 
   // Send confirmation + admin notification once, only if WE settled it (the
-  // webhook may have beaten us). Never let an email failure break the order.
+  // webhook may have beaten us). Runs via `after()` so the client gets its
+  // response immediately rather than waiting on PDF generation + two email
+  // sends — but it still executes within this invocation's lifetime (up to
+  // maxDuration above), it just no longer blocks or races the response.
+  // Never let an email failure break the order.
   if (result.newlySettled) {
-    try {
-      const invoice = await renderSettledOrderInvoicePdf(result.order);
-      await sendOrderEmails(result.order, invoice ?? undefined);
-    } catch (err) {
-      console.error("Order email failed (verify):", err);
-    }
+    after(async () => {
+      try {
+        const invoice = await renderSettledOrderInvoicePdf(result.order);
+        await sendOrderEmails(result.order, invoice ?? undefined);
+      } catch (err) {
+        console.error("Order email failed (verify):", err);
+      }
+    });
   }
 
   return NextResponse.json({ ok: true, orderNumber: result.orderNumber });

@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { settleOrderPaid } from "@/lib/orders";
 import { sendOrderEmails } from "@/lib/email";
 import { renderSettledOrderInvoicePdf } from "@/lib/invoice-pdf";
@@ -10,6 +10,11 @@ import { renderSettledOrderInvoicePdf } from "@/lib/invoice-pdf";
 //
 // Set RAZORPAY_WEBHOOK_SECRET and register this URL (…/api/payment/webhook)
 // in the Razorpay dashboard for the `payment.captured` event.
+//
+// Settlement plus PDF generation plus two email sends can together run long
+// — give this route real headroom rather than the platform default (see
+// `after` below for why the email step doesn't hold up Razorpay's own ACK).
+export const maxDuration = 30;
 
 function safeEqual(a: string, b: string) {
   const ba = Buffer.from(a);
@@ -66,12 +71,17 @@ export async function POST(request: Request) {
         } else if (result.newlySettled) {
           // The browser verify never ran (tab closed, etc.) — send here. Only
           // fires when WE won the settle, so emails are never duplicated.
-          try {
-            const invoice = await renderSettledOrderInvoicePdf(result.order);
-            await sendOrderEmails(result.order, invoice ?? undefined);
-          } catch (err) {
-            console.error("Order email failed (webhook):", err);
-          }
+          // Via `after()` so Razorpay gets its ACK immediately instead of
+          // waiting on PDF generation + two email sends.
+          const order = result.order;
+          after(async () => {
+            try {
+              const invoice = await renderSettledOrderInvoicePdf(order);
+              await sendOrderEmails(order, invoice ?? undefined);
+            } catch (err) {
+              console.error("Order email failed (webhook):", err);
+            }
+          });
         }
       }
     }

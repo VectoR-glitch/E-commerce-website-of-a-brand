@@ -55,6 +55,11 @@ export default async function CustomersPage(props: { searchParams: Promise<SP> }
       lifetimePoints: true,
       createdAt: true,
       _count: { select: { orders: true } },
+      addresses: {
+        where: { isDefault: true },
+        take: 1,
+        select: { line1: true, line2: true, city: true, state: true, pincode: true },
+      },
     },
   });
 
@@ -91,12 +96,13 @@ export default async function CustomersPage(props: { searchParams: Promise<SP> }
       </form>
 
       <div className="mt-6 overflow-x-auto border border-line">
-        <table className="w-full min-w-[820px] border-collapse text-sm">
+        <table className="w-full min-w-[1000px] border-collapse text-sm">
           <thead>
             <tr className="bg-paper text-left text-ink/60">
               <th className="px-3 py-2 font-medium">Name</th>
               <th className="px-3 py-2 font-medium">Email</th>
               <th className="px-3 py-2 font-medium">Phone</th>
+              <th className="px-3 py-2 font-medium">Address</th>
               <th className="px-3 py-2 font-medium">Verified</th>
               <th className="px-3 py-2 font-medium">Role</th>
               <th className="px-3 py-2 text-right font-medium">Orders</th>
@@ -110,6 +116,18 @@ export default async function CustomersPage(props: { searchParams: Promise<SP> }
                 <td className="px-3 py-2 text-ink">{c.name ?? "—"}</td>
                 <td className="px-3 py-2 text-ink/70">{c.email}</td>
                 <td className="px-3 py-2 text-ink/70">{c.phone ?? "—"}</td>
+                <td className="px-3 py-2 text-ink/70">
+                  {c.addresses[0] ? (
+                    <>
+                      <div>{c.addresses[0].line1}{c.addresses[0].line2 ? `, ${c.addresses[0].line2}` : ""}</div>
+                      <div className="text-xs text-ink/55">
+                        {c.addresses[0].city}, {c.addresses[0].state} — {c.addresses[0].pincode}
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-ink/40">No saved address</span>
+                  )}
+                </td>
                 <td className="px-3 py-2">
                   {c.emailVerified ? (
                     <span className="text-forest">✓</span>
@@ -140,7 +158,7 @@ export default async function CustomersPage(props: { searchParams: Promise<SP> }
               </tr>
             ))}
             {customers.length === 0 && (
-              <tr><td colSpan={8} className="px-3 py-10 text-center text-ink/50">No account holders match these filters.</td></tr>
+              <tr><td colSpan={9} className="px-3 py-10 text-center text-ink/50">No account holders match these filters.</td></tr>
             )}
           </tbody>
         </table>

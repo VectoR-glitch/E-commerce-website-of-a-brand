@@ -13,8 +13,18 @@ const PAGE_SIZE = 100;
 
 type SP = { status?: string; payment?: string; method?: string; q?: string };
 
+// toISOString() is always UTC — Klenich operates in IST (UTC+5:30), so that
+// silently showed a time 5.5 hours behind the actual order time.
 function fmtDate(d: Date): string {
-  return d.toISOString().slice(0, 16).replace("T", " ");
+  return d.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 export default async function OrdersPage(props: { searchParams: Promise<SP> }) {

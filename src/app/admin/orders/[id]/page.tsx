@@ -11,6 +11,20 @@ export const dynamic = "force-dynamic";
 const ORDER_STATUSES = Object.values(OrderStatus);
 const PAYMENT_STATUSES = Object.values(PaymentStatus);
 
+// toISOString() is always UTC — Klenich operates in IST (UTC+5:30), so that
+// silently showed a time 5.5 hours behind the actual order time.
+function fmtDate(d: Date): string {
+  return d.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 export default async function OrderDetail(props: { params: Promise<{ id: string }> }) {
   await requireAdmin();
   const { id } = await props.params;
@@ -29,7 +43,7 @@ export default async function OrderDetail(props: { params: Promise<{ id: string 
       <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="font-serif text-3xl">{order.orderNumber}</h1>
         <div className="flex items-center gap-3">
-          <span className="text-sm text-ink/60">{order.createdAt.toISOString().slice(0, 16).replace("T", " ")}</span>
+          <span className="text-sm text-ink/60">{fmtDate(order.createdAt)}</span>
           {order.invoiceNumber && (
             <a
               href={`/api/invoice/${order.id}`}

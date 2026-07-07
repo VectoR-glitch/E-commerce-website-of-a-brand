@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Ornament } from "@/components/ornament";
+import { Reveal } from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Shipping & Returns",
@@ -9,13 +10,16 @@ export const metadata: Metadata = {
 export default function ShippingReturnsPage() {
   return (
     <div className="mx-auto max-w-2xl px-8 py-20">
+      <Reveal>
       <header>
         <span className="smallcaps text-brass-deep">Policy</span>
         <h1 className="mt-3 font-serif text-4xl">Shipping & Returns</h1>
         <Ornament align="left" className="mt-5" />
       </header>
+      </Reveal>
 
       <div className="mt-10 space-y-10 text-ink/75">
+        <Reveal>
         <section>
           <h2 className="font-serif text-2xl text-ink">Shipping</h2>
           <ul className="mt-4 list-disc space-y-2 pl-5">
@@ -32,7 +36,9 @@ export default function ShippingReturnsPage() {
             </li>
           </ul>
         </section>
+        </Reveal>
 
+        <Reveal>
         <section>
           <h2 className="font-serif text-2xl text-ink">Returns & Refunds</h2>
           <p className="mt-4">
@@ -56,7 +62,9 @@ export default function ShippingReturnsPage() {
             issue. Claims without a valid uncut unboxing video cannot be accepted.
           </p>
         </section>
+        </Reveal>
 
+        <Reveal>
         <section>
           <h2 className="font-serif text-2xl text-ink">Refund timeline</h2>
           <p className="mt-4">
@@ -64,6 +72,7 @@ export default function ShippingReturnsPage() {
             <strong> 3 business days</strong>.
           </p>
         </section>
+        </Reveal>
       </div>
     </div>
   );

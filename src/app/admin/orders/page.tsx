@@ -98,7 +98,7 @@ export default async function OrdersPage(props: { searchParams: Promise<SP> }) {
           <input name="q" defaultValue={q} placeholder="KLN-2026-… or email" className={`${fieldCls} w-full`} />
         </div>
         <button type="submit" className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Filter</button>
-        <Link href="/admin/orders" className="smallcaps px-3 py-2 text-ink/60 hover:text-forest">Reset</Link>
+        <Link href="/admin/orders" className="smallcaps px-3 py-2 text-ink/60 transition-colors hover:text-forest">Reset</Link>
       </form>
 
       <div className="mt-6 overflow-x-auto border border-line">
@@ -116,7 +116,7 @@ export default async function OrdersPage(props: { searchParams: Promise<SP> }) {
           </thead>
           <tbody>
             {orders.map((o) => (
-              <tr key={o.id} className="border-t border-line hover:bg-paper/60">
+              <tr key={o.id} className="border-t border-line transition-colors hover:bg-paper/60">
                 <td className="px-3 py-2">
                   <Link href={`/admin/orders/${o.id}`} className="font-medium text-forest hover:underline">
                     {o.orderNumber}

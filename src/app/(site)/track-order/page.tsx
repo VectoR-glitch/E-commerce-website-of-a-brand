@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Ornament } from "@/components/ornament";
+import { Reveal } from "@/components/reveal";
 
 // Live order tracking is post-launch (see docs/tracking-plan.md). Until then this
 // page is intentionally a static, honest pointer to support — NOT a form that
@@ -7,12 +8,15 @@ import { Ornament } from "@/components/ornament";
 export default function TrackOrderPage() {
   return (
     <div className="mx-auto max-w-xl px-8 py-20">
+      <Reveal>
       <header className="text-center">
         <span className="smallcaps text-brass-deep">Track Order</span>
         <h1 className="mt-4 font-serif text-5xl">Where’s my order?</h1>
         <Ornament className="mt-6" />
       </header>
+      </Reveal>
 
+      <Reveal delay={120}>
       <div className="mt-10 border border-line bg-paper p-8 text-center text-ink/70">
         <p className="font-serif text-xl text-ink">Live tracking is coming soon</p>
         <p className="mt-3 text-sm leading-relaxed">
@@ -26,6 +30,7 @@ export default function TrackOrderPage() {
           Contact us
         </Link>
       </div>
+      </Reveal>
     </div>
   );
 }

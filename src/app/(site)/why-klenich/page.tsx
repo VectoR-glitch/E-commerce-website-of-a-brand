@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Ornament } from "@/components/ornament";
+import { Reveal } from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Why Klenich",
@@ -30,6 +31,7 @@ const pillars = [
 export default function WhyKlenichPage() {
   return (
     <div className="mx-auto max-w-4xl px-8 py-24">
+      <Reveal>
       <header className="text-center">
         <span className="smallcaps text-brass-deep">Why Klenich</span>
         <h1 className="mt-4 font-serif text-5xl leading-tight">
@@ -43,16 +45,18 @@ export default function WhyKlenichPage() {
           your health, your skin, or your peace of mind.
         </p>
       </header>
+      </Reveal>
 
       <div className="mt-16 grid gap-px border border-line bg-line sm:grid-cols-2">
-        {pillars.map((p) => (
-          <div key={p.title} className="bg-paper p-9">
+        {pillars.map((p, i) => (
+          <Reveal key={p.title} delay={i * 80} className="bg-paper p-9">
             <h2 className="font-serif text-2xl">{p.title}</h2>
             <p className="mt-3 text-ink/65">{p.body}</p>
-          </div>
+          </Reveal>
         ))}
       </div>
 
+      <Reveal>
       <section className="mt-16 border border-line bg-forest p-10 text-center text-bone">
         <span className="smallcaps text-brass-deep">Made for family homes</span>
         <p className="mx-auto mt-4 max-w-2xl font-serif text-2xl text-paper">
@@ -60,6 +64,7 @@ export default function WhyKlenichPage() {
           and pets.
         </p>
       </section>
+      </Reveal>
 
       <div className="mt-14 text-center">
         <Link

@@ -418,7 +418,7 @@ export default function CheckoutPage() {
   // here (in an event handler) rather than synchronously inside the effect.
   // Any edit invalidates the previous lookup, so clear it until it re-resolves.
   function onPincodeChange(ev: React.ChangeEvent<HTMLInputElement>) {
-    const v = ev.target.value;
+    const v = ev.target.value.replace(/\D/g, "").slice(0, 6);
     const valid = /^\d{6}$/.test(v);
     setForm((f) => ({ ...f, pincode: v }));
     setPinInfo(null);

@@ -72,6 +72,9 @@ export function AddressForm({ address }: { address: AddressValues }) {
             maxLength={6}
             required
             placeholder="6-digit pincode"
+            onInput={(e) => {
+              e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "").slice(0, 6);
+            }}
             className={field}
           />
         </div>

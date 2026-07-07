@@ -50,6 +50,10 @@ export async function settleOrderPaid(params: {
 }): Promise<SettleResult> {
   const { razorpayOrderId, paymentId, signature } = params;
 
+  // This transaction does several sequential round-trips (order lookup, stock
+  // decrements, coupon/loyalty updates, invoice number allocation, re-read) —
+  // enough that Prisma's 5s interactive-transaction default was observed
+  // expiring mid-flight in production (P2028, ~7s elapsed) against Neon.
   return prisma.$transaction(async (tx) => {
     const existing = await tx.order.findUnique({
       where: { razorpayOrderId },
@@ -137,5 +141,5 @@ export async function settleOrderPaid(params: {
       newlySettled: true,
       order: order ?? existing,
     };
-  });
+  }, { timeout: 20_000 });
 }

@@ -10,6 +10,7 @@ const NAV = [
   { href: "/admin", label: "Overview" },
   { href: "/admin/analytics", label: "Analytics" },
   { href: "/admin/orders", label: "Orders" },
+  { href: "/admin/customers", label: "Customers" },
   { href: "/admin/stock", label: "Stock" },
   { href: "/admin/products", label: "Products" },
   { href: "/admin/reviews", label: "Reviews" },
@@ -35,9 +36,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </Link>
             <div className="flex items-center gap-4 text-sm">
               <span className="hidden text-ink/60 sm:inline">{session.email}</span>
-              <Link href="/" className="text-ink/60 hover:text-forest">View site</Link>
+              <Link href="/" className="text-ink/60 transition-colors hover:text-forest">View site</Link>
               <form action={logoutAction}>
-                <button className="smallcaps border border-line px-3 py-1.5 text-ink/70 hover:border-forest hover:text-forest">
+                <button className="smallcaps border border-line px-3 py-1.5 text-ink/70 hover:border-forest transition-colors hover:text-forest">
                   Log out
                 </button>
               </form>
@@ -46,7 +47,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           {/* Row 2 — section nav, wraps instead of scrolling */}
           <nav className="flex flex-wrap gap-x-6 gap-y-2 border-t border-line py-3 text-sm">
             {NAV.map((n) => (
-              <Link key={n.href} href={n.href} className="text-ink/70 hover:text-forest">
+              <Link key={n.href} href={n.href} className="text-ink/70 transition-colors hover:text-forest">
                 {n.label}
               </Link>
             ))}

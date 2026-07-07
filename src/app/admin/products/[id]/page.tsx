@@ -35,7 +35,7 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
 
   return (
     <div>
-      <Link href="/admin/products" className="smallcaps text-ink/60 hover:text-forest">← Products</Link>
+      <Link href="/admin/products" className="smallcaps text-ink/60 transition-colors hover:text-forest">← Products</Link>
       <h1 className="mt-3 font-serif text-3xl">{product.name}</h1>
 
       {/* Product fields + editorial content */}
@@ -209,7 +209,7 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
               <label className="flex items-center gap-1.5 pb-1.5 text-sm">
                 <input type="checkbox" name="active" defaultChecked={v.active} /> Active
               </label>
-              <button className="smallcaps border border-line px-4 py-1.5 text-ink/70 hover:border-forest hover:text-forest">Save</button>
+              <button className="smallcaps border border-line px-4 py-1.5 text-ink/70 transition-colors hover:border-forest hover:text-forest">Save</button>
               {/* Delete lives in its own form — forms can't nest. */}
             </form>
             <div className="mt-2 flex items-center justify-between gap-3">

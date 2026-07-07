@@ -38,7 +38,7 @@ export default async function OrderDetail(props: { params: Promise<{ id: string 
 
   return (
     <div>
-      <Link href="/admin/orders" className="smallcaps text-ink/60 hover:text-forest">← Orders</Link>
+      <Link href="/admin/orders" className="smallcaps text-ink/60 transition-colors hover:text-forest">← Orders</Link>
 
       <div className="mt-3 flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="font-serif text-3xl">{order.orderNumber}</h1>

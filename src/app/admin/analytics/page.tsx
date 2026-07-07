@@ -201,7 +201,7 @@ export default async function AdminAnalytics() {
                 </span>
                 <span
                   title={`${d.label}: ${formatINR(d.paise)}`}
-                  className="block w-full rounded-t-[4px] bg-forest group-hover:bg-brass-deep group-focus:bg-brass-deep"
+                  className="block w-full rounded-t-[4px] bg-forest transition-colors group-hover:bg-brass-deep group-focus:bg-brass-deep"
                   style={{ height: heightPx }}
                 />
               </div>
@@ -210,7 +210,7 @@ export default async function AdminAnalytics() {
         </div>
       </div>
       <details className="mt-3">
-        <summary className="smallcaps cursor-pointer text-ink/60 hover:text-forest">View as table</summary>
+        <summary className="smallcaps cursor-pointer text-ink/60 transition-colors hover:text-forest">View as table</summary>
         <div className="mt-3 overflow-x-auto border border-line">
           <table className="w-full min-w-[420px] text-sm">
             <thead className="bg-paper text-left smallcaps text-ink/60">

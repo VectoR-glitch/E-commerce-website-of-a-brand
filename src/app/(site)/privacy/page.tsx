@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Ornament } from "@/components/ornament";
+import { Reveal } from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Privacy Policy",
@@ -9,12 +10,14 @@ export const metadata: Metadata = {
 export default function PrivacyPage() {
   return (
     <div className="mx-auto max-w-2xl px-8 py-20 text-ink/75">
+      <Reveal>
       <span className="smallcaps text-brass-deep">Legal</span>
       <h1 className="mt-3 font-serif text-4xl text-ink">Privacy Policy</h1>
       <Ornament align="left" className="mt-4" />
       <p className="mt-2 text-sm text-ink/70">
         Last updated: 4 July 2026 · Operated by Bharat Bliss Pvt Ltd
       </p>
+      </Reveal>
 
       <div className="mt-8 space-y-6 text-sm leading-relaxed">
         <Section title="1. Who we are">
@@ -79,9 +82,11 @@ export default function PrivacyPage() {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section>
-      <h2 className="font-serif text-lg text-ink">{title}</h2>
-      <p className="mt-2">{children}</p>
-    </section>
+    <Reveal>
+      <section>
+        <h2 className="font-serif text-lg text-ink">{title}</h2>
+        <p className="mt-2">{children}</p>
+      </section>
+    </Reveal>
   );
 }

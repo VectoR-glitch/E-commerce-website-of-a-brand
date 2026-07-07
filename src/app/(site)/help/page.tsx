@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { Ornament } from "@/components/ornament";
+import { Reveal } from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Help & FAQs",
@@ -41,15 +42,18 @@ const faqs = [
 export default function HelpPage() {
   return (
     <div className="mx-auto max-w-3xl px-8 py-20">
+      <Reveal>
       <header className="text-center">
         <span className="smallcaps text-brass-deep">Help</span>
         <h1 className="mt-4 font-serif text-5xl">Frequently asked questions</h1>
         <Ornament className="mt-6" />
       </header>
+      </Reveal>
 
       <div className="mt-14 divide-y divide-line border-y border-line">
         {faqs.map((f) => (
-          <details key={f.q} className="group py-5">
+          <Reveal key={f.q}>
+          <details className="group py-5">
             <summary className="flex cursor-pointer list-none items-center justify-between font-serif text-xl">
               {f.q}
               <span className="text-brass-deep transition-transform group-open:rotate-45">
@@ -58,9 +62,11 @@ export default function HelpPage() {
             </summary>
             <p className="mt-3 text-ink/70">{f.a}</p>
           </details>
+          </Reveal>
         ))}
       </div>
 
+      <Reveal>
       <p className="mt-12 text-center text-ink/65">
         Still need help?{" "}
         <Link href="/contact" className="link-underline text-forest">
@@ -68,6 +74,7 @@ export default function HelpPage() {
         </Link>
         .
       </p>
+      </Reveal>
     </div>
   );
 }

@@ -67,7 +67,7 @@ export default async function BundleEdit(props: { params: Promise<{ id: string }
 
   return (
     <div>
-      <Link href="/admin/bundles" className="smallcaps text-ink/60 hover:text-forest">← Kits</Link>
+      <Link href="/admin/bundles" className="smallcaps text-ink/60 transition-colors hover:text-forest">← Kits</Link>
       <h1 className="mt-3 font-serif text-3xl">{bundle.name}</h1>
       <p className="mt-1 text-sm text-ink/55">
         Discount code <span className="font-mono">{bundleCouponCode(bundle.slug)}</span> is applied automatically at checkout.

@@ -109,7 +109,7 @@ export default async function AdminQuestionsPage() {
           defaultValue={q.answer ?? ""}
           className={answerField}
         />
-        <button className="smallcaps mt-2 border border-line px-4 py-1.5 text-ink/70 hover:border-forest hover:text-forest">
+        <button className="smallcaps mt-2 border border-line px-4 py-1.5 text-ink/70 transition-colors hover:border-forest hover:text-forest">
           Save answer
         </button>
       </form>
@@ -117,7 +117,7 @@ export default async function AdminQuestionsPage() {
         {q.published && (
           <form action={unpublishQuestion}>
             <input type="hidden" name="questionId" value={q.id} />
-            <button className="smallcaps border border-line px-4 py-1.5 text-ink/70 hover:border-[#9a6b1f] hover:text-[#9a6b1f]">
+            <button className="smallcaps border border-line px-4 py-1.5 text-ink/70 transition-colors hover:border-[#9a6b1f] hover:text-[#9a6b1f]">
               Hide
             </button>
           </form>

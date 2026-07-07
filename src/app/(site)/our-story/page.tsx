@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Ornament } from "@/components/ornament";
+import { Reveal } from "@/components/reveal";
 
 export const metadata: Metadata = {
   title: "Our Story",
@@ -10,6 +11,7 @@ export const metadata: Metadata = {
 export default function OurStoryPage() {
   return (
     <div className="mx-auto max-w-2xl px-8 py-24">
+      <Reveal>
       <header className="text-center">
         <span className="smallcaps text-brass-deep">Our Story</span>
         <h1 className="mt-4 font-serif text-5xl">Bliss in Every Drop</h1>
@@ -18,8 +20,9 @@ export default function OurStoryPage() {
           A letter from our founder, Alok Das
         </p>
       </header>
+      </Reveal>
 
-      <div className="mt-12 space-y-6 text-lg leading-relaxed text-ink/75">
+      <Reveal delay={120} className="mt-12 space-y-6 text-lg leading-relaxed text-ink/75">
         <p className="dropcap">
           It began, as these things often do, with a small moment in an ordinary
           kitchen.
@@ -60,14 +63,17 @@ export default function OurStoryPage() {
           that’s cared for.
         </p>
         <p>Thank you for letting us into yours.</p>
-      </div>
+      </Reveal>
 
+      <Reveal delay={100}>
       <p className="mt-12 border-t border-line pt-8 text-center font-serif text-2xl italic text-forest">
         “Safe cleaning, the rule in every Indian home — not the exception in a
         few.”
       </p>
+      </Reveal>
 
       {/* Founder signature */}
+      <Reveal delay={140}>
       <figure className="mt-14 flex flex-col items-center text-center">
         <figcaption className="font-serif text-4xl italic text-forest">
           Alok Das
@@ -91,6 +97,7 @@ export default function OurStoryPage() {
           Founder · Bharat Bliss Pvt Ltd
         </p>
       </figure>
+      </Reveal>
     </div>
   );
 }

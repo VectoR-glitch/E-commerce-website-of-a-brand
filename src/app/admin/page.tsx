@@ -56,7 +56,7 @@ export default async function AdminOverview() {
           <Link
             key={s}
             href={`/admin/orders?status=${s}`}
-            className="flex items-center gap-2 border border-line bg-paper px-3 py-2 text-sm hover:border-forest"
+            className="flex items-center gap-2 border border-line bg-paper px-3 py-2 text-sm transition-colors hover:border-forest"
           >
             <span className="text-ink/70">{s}</span>
             <span className="font-semibold text-ink">{counts[s] ?? 0}</span>

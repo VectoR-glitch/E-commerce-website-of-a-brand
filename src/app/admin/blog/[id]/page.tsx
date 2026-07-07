@@ -19,7 +19,7 @@ export default async function BlogPostEdit(props: { params: Promise<{ id: string
 
   return (
     <div>
-      <Link href="/admin/blog" className="smallcaps text-ink/60 hover:text-forest">← Journal</Link>
+      <Link href="/admin/blog" className="smallcaps text-ink/60 transition-colors hover:text-forest">← Journal</Link>
       <h1 className="mt-3 font-serif text-3xl">{post.title || "(untitled)"}</h1>
       {post.published ? (
         <p className="mt-1 text-sm text-ink/55">

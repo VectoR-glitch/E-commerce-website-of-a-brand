@@ -11,6 +11,7 @@ import {
 } from "@/lib/constants";
 import { RedeemPoints } from "@/components/account/redeem-points";
 import { ReferralShare } from "@/components/account/referral-share";
+import { Kicker } from "@/components/kicker";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export default async function LoyaltyPage() {
     <div className="mx-auto max-w-2xl px-8 py-16">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <span className="smallcaps text-brass-deep">Rewards</span>
+          <Kicker>Rewards</Kicker>
           <h1 className="mt-2 font-serif text-4xl">Points &amp; referrals</h1>
         </div>
         <Link

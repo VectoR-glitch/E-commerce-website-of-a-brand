@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Ornament } from "@/components/ornament";
 import { COUNTRIES } from "@/lib/country-codes";
 import { CountryCodeSelect } from "@/components/country-code-select";
+import { Kicker } from "@/components/kicker";
 
 export default function ContactPage() {
   const [sent, setSent] = useState(false);
@@ -64,7 +65,7 @@ export default function ContactPage() {
   return (
     <div className="mx-auto max-w-2xl px-8 py-20">
       <header className="text-center">
-        <span className="smallcaps text-brass-deep">Contact</span>
+        <Kicker>Contact</Kicker>
         <h1 className="mt-4 font-serif text-5xl">Get in touch</h1>
         <Ornament className="mt-6" />
         <p className="mt-4 text-ink/65">

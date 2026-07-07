@@ -5,6 +5,7 @@ import { ProductCard } from "@/components/product-card";
 import { BundleCard } from "@/components/bundle-card";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
+import { Kicker } from "@/components/kicker";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function ShopPage() {
   return (
     <section className="mx-auto max-w-6xl px-8 py-24">
       <Reveal className="mb-16 text-center">
-        <span className="smallcaps text-brass-deep">The Collection</span>
+        <Kicker>The Collection</Kicker>
         <h1 className="mt-4 font-serif text-5xl">Shop Klenich</h1>
         <p className="mx-auto mt-4 max-w-md text-ink/70">
           Plant-powered essentials, done right. More on the way.
@@ -50,7 +51,7 @@ export default async function ShopPage() {
       {bundles.length > 0 && (
         <div className="mt-24">
           <Reveal className="mb-12 text-center">
-            <span className="smallcaps text-brass-deep">Curated Kits</span>
+            <Kicker>Curated Kits</Kicker>
             <h2 className="mt-4 font-serif text-4xl">Save more, together</h2>
             <p className="mx-auto mt-4 max-w-md text-ink/70">
               Our essentials, bundled — one tap adds the kit and applies the saving at checkout.

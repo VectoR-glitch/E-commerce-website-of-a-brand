@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/session";
 import { logoutAction } from "@/app/actions/auth";
 import { ProfileForm } from "@/components/account/profile-form";
 import { AddressForm } from "@/components/account/address-form";
+import { Kicker } from "@/components/kicker";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function AccountPage() {
     <div className="mx-auto max-w-2xl px-8 py-16">
       <header className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <span className="smallcaps text-brass-deep">Account</span>
+          <Kicker>Account</Kicker>
           <h1 className="mt-2 font-serif text-4xl">
             {customer.name ? `Hello, ${customer.name}` : "Your account"}
           </h1>

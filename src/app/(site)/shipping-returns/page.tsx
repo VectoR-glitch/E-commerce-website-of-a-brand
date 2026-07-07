@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Ornament } from "@/components/ornament";
 import { Reveal } from "@/components/reveal";
+import { Kicker } from "@/components/kicker";
 
 export const metadata: Metadata = {
   title: "Shipping & Returns",
@@ -12,7 +13,7 @@ export default function ShippingReturnsPage() {
     <div className="mx-auto max-w-2xl px-8 py-20">
       <Reveal>
       <header>
-        <span className="smallcaps text-brass-deep">Policy</span>
+        <Kicker>Policy</Kicker>
         <h1 className="mt-3 font-serif text-4xl">Shipping & Returns</h1>
         <Ornament align="left" className="mt-5" />
       </header>

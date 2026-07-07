@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Ornament } from "@/components/ornament";
 import { Reveal } from "@/components/reveal";
+import { Kicker } from "@/components/kicker";
 
 export const metadata: Metadata = {
   title: "Help & FAQs",
@@ -44,7 +45,7 @@ export default function HelpPage() {
     <div className="mx-auto max-w-3xl px-8 py-20">
       <Reveal>
       <header className="text-center">
-        <span className="smallcaps text-brass-deep">Help</span>
+        <Kicker>Help</Kicker>
         <h1 className="mt-4 font-serif text-5xl">Frequently asked questions</h1>
         <Ornament className="mt-6" />
       </header>

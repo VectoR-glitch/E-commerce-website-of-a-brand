@@ -6,6 +6,7 @@ import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
 import { Ticker } from "@/components/ticker";
 import { Carousel } from "@/components/carousel";
+import { Kicker } from "@/components/kicker";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,7 @@ export default async function HomePage() {
       <section className="mx-auto grid max-w-6xl md:grid-cols-2">
         <div className="flex flex-col justify-center px-8 py-24 md:py-36 md:pr-20">
           <Reveal>
-            <span className="smallcaps text-brass-deep">A Bharat Bliss Brand</span>
+            <Kicker>A Bharat Bliss Brand</Kicker>
             <h1 className="mt-6 font-serif text-6xl leading-[1.02] font-normal md:text-7xl">
               Bliss in
               <br />
@@ -103,7 +104,7 @@ export default async function HomePage() {
       {/* Collection */}
       <section className="mx-auto max-w-6xl px-8 py-32">
         <Reveal className="mb-16 text-center">
-          <span className="smallcaps text-brass-deep">The Collection</span>
+          <Kicker>The Collection</Kicker>
           <h2 className="mt-4 font-serif text-5xl">Three essentials. Done right.</h2>
           <Ornament className="mt-6" />
         </Reveal>
@@ -120,7 +121,7 @@ export default async function HomePage() {
       <section className="border-y border-brass/25 bg-forest py-36 text-center text-bone">
         <Reveal>
           <Ornament className="mb-8" />
-          <span className="smallcaps text-brass-deep">The Klenich Promise</span>
+          <Kicker>The Klenich Promise</Kicker>
           <h2 className="mx-auto mt-6 max-w-4xl px-8 font-serif text-5xl leading-tight text-paper">
             Gentle where it touches you,
             <br />

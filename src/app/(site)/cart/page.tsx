@@ -7,6 +7,7 @@ import { formatINR } from "@/lib/catalog";
 import { MAX_ORDER_PAISE } from "@/lib/constants";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
+import { Kicker } from "@/components/kicker";
 import { QuantityStepper } from "@/components/quantity-stepper";
 import { TrustBadges } from "@/components/trust-badges";
 
@@ -16,7 +17,7 @@ export default function CartPage() {
   if (items.length === 0) {
     return (
       <section className="mx-auto max-w-3xl px-8 py-24 text-center">
-        <span className="smallcaps text-brass-deep">Your Cart</span>
+        <Kicker>Your Cart</Kicker>
         <h1 className="mt-4 font-serif text-4xl">Your cart is empty</h1>
         <p className="mt-3 text-ink/70">
           Plant-powered cleaning is a click away.
@@ -38,7 +39,7 @@ export default function CartPage() {
   return (
     <section className="mx-auto max-w-5xl px-8 py-16">
       <Reveal>
-        <span className="smallcaps text-brass-deep">Your Cart</span>
+        <Kicker>Your Cart</Kicker>
         <h1 className="mt-4 font-serif text-4xl">Cart</h1>
         <Ornament align="left" className="mt-5" />
       </Reveal>

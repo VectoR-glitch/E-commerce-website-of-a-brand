@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Ornament } from "@/components/ornament";
 import { Reveal } from "@/components/reveal";
+import { Kicker } from "@/components/kicker";
 
 export const metadata: Metadata = {
   title: "Our Story",
@@ -13,7 +14,7 @@ export default function OurStoryPage() {
     <div className="mx-auto max-w-2xl px-8 py-24">
       <Reveal>
       <header className="text-center">
-        <span className="smallcaps text-brass-deep">Our Story</span>
+        <Kicker>Our Story</Kicker>
         <h1 className="mt-4 font-serif text-5xl">Bliss in Every Drop</h1>
         <Ornament className="mt-6" />
         <p className="smallcaps mt-6 text-ink/70">

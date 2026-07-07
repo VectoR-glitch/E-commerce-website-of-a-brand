@@ -5,6 +5,7 @@ import Image from "next/image";
 import { formatINR } from "@/lib/catalog";
 import { useWishlist, wishlistKey } from "@/lib/wishlist-context";
 import { Ornament } from "@/components/ornament";
+import { Kicker } from "@/components/kicker";
 
 export default function WishlistPage() {
   const { items, remove, clear } = useWishlist();
@@ -12,7 +13,7 @@ export default function WishlistPage() {
   return (
     <div className="mx-auto max-w-5xl px-8 py-16">
       <div className="text-center">
-        <span className="smallcaps text-brass-deep">Saved for later</span>
+        <Kicker>Saved for later</Kicker>
         <h1 className="mt-2 font-serif text-4xl">Your wishlist</h1>
         <Ornament className="mx-auto mt-4" />
       </div>

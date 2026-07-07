@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { Ornament } from "@/components/ornament";
+import { Kicker } from "@/components/kicker";
 import { RegisterForm } from "@/components/register-form";
 import { getSession } from "@/lib/session";
 
@@ -18,7 +19,7 @@ export default async function RegisterPage(props: PageProps<"/register">) {
   return (
     <div className="mx-auto max-w-md px-8 py-20">
       <header className="text-center">
-        <span className="smallcaps text-brass-deep">Account</span>
+        <Kicker>Account</Kicker>
         <h1 className="mt-4 font-serif text-5xl">Create account</h1>
         <Ornament className="mt-6" />
         <p className="mt-5 text-sm text-ink/60">

@@ -14,6 +14,7 @@ import { getSession } from "@/lib/session";
 import { Stars } from "@/components/stars";
 import { ReviewForm } from "@/components/review-form";
 import { AskQuestionForm } from "@/components/ask-question-form";
+import { Kicker } from "@/components/kicker";
 
 export const dynamic = "force-dynamic";
 
@@ -116,7 +117,7 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
 
       {/* Reviews */}
       <div className="mt-20 border-t border-line pt-12">
-        <span className="smallcaps text-brass-deep">Reviews</span>
+        <Kicker>Reviews</Kicker>
         {summary.count > 0 ? (
           <div className="mt-2 flex flex-wrap items-center gap-3">
             <h2 className="font-serif text-3xl">{summary.average.toFixed(1)} out of 5</h2>
@@ -175,7 +176,7 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
 
       {/* Questions & Answers */}
       <div className="mt-20 border-t border-line pt-12">
-        <span className="smallcaps text-brass-deep">Questions &amp; Answers</span>
+        <Kicker>Questions &amp; Answers</Kicker>
         <h2 className="mt-2 font-serif text-3xl">
           {questions.length > 0 ? "Your questions, answered" : "Have a question?"}
         </h2>

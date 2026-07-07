@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Ornament } from "@/components/ornament";
+import { Kicker } from "@/components/kicker";
 import { BlogCard } from "@/components/blog-card";
 import { getPublishedPost, getPublishedPosts, bodyParagraphs } from "@/lib/blog";
 import { SITE_URL } from "@/lib/constants";
@@ -77,7 +78,7 @@ export default async function BlogPostPage(props: PageProps<"/blog/[slug]">) {
       </Link>
 
       <header className="mt-8 text-center">
-        <span className="smallcaps text-brass-deep">{dateLabel}</span>
+        <Kicker>{dateLabel}</Kicker>
         <h1 className="mt-3 font-serif text-4xl leading-tight">{post.title}</h1>
         <Ornament className="mt-6" />
       </header>

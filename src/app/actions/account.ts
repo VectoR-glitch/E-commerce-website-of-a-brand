@@ -79,7 +79,7 @@ export async function registerAction(_prev: RegisterState, formData: FormData): 
 
   // Referral attribution: if they arrived via a friend's link, stamp who
   // referred them (never themselves). Both sides are rewarded on this account's
-  // first settled order (see awardLoyaltyForSettledOrder).
+  // first DELIVERED order (see awardLoyaltyForDeliveredOrder).
   const referredByRaw = String(formData.get("ref") ?? "");
   const referrerId = referredByRaw ? await resolveReferralCode(referredByRaw) : null;
 

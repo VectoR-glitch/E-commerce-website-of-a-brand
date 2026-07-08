@@ -1,19 +1,24 @@
 import "server-only";
 // Loyalty & referral engine. Points are ₹-denominated (see POINT_VALUE_PAISE):
-// customers earn a % back when an order settles, and can convert points into a
-// private, single-use discount voucher (LOYAL-<suffix>) that flows through the
-// existing coupon pipeline — same trick as kits (KIT-) and subscriptions (SUB-).
+// customers earn a % back once an order is DELIVERED (not merely paid — see
+// awardLoyaltyForDeliveredOrder), and can convert points into a private,
+// single-use discount voucher (LOYAL-<suffix>) that flows through the existing
+// coupon pipeline — same trick as kits (KIT-) and subscriptions (SUB-).
 // Referrals award both sides a one-off point bonus on the referred customer's
-// first settled order. Never import from client code.
+// first delivered order. Never import from client code.
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   POINT_VALUE_PAISE,
   LOYALTY_TIERS,
+  LOYALTY_MIN_REDEEM_POINTS,
+  LOYALTY_VOUCHER_TTL_DAYS,
   REFERRAL_REFERRER_BONUS_POINTS,
   REFERRAL_REFEREE_BONUS_POINTS,
   SITE_URL,
 } from "@/lib/constants";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export type LoyaltyTier = {
   name: string;
@@ -53,6 +58,48 @@ export const pointsToPaise = (points: number) => points * POINT_VALUE_PAISE;
 // ledger row's id so it's reconstructable (the account page lists a customer's
 // vouchers by re-deriving codes from their redeem ledger entries).
 export const loyaltyVoucherCode = (ledgerId: string) => `LOYAL-${ledgerId.slice(-8).toUpperCase()}`;
+
+// Converts a customer's points into a private, single-use FIXED coupon —
+// shared by the /account/loyalty redeem action and the checkout redeem-at-pay
+// route, so both debit the same way. The debit is atomic (only succeeds when
+// the balance actually covers it), so two concurrent redeems can't overspend.
+export async function redeemPoints(
+  customerId: string,
+  points: number,
+): Promise<{ code: string } | { error: string }> {
+  if (points < LOYALTY_MIN_REDEEM_POINTS) {
+    return { error: `Redeem at least ${LOYALTY_MIN_REDEEM_POINTS} points at a time.` };
+  }
+
+  const valuePaise = pointsToPaise(points);
+
+  return prisma.$transaction(async (tx): Promise<{ code: string } | { error: string }> => {
+    const debit = await tx.customer.updateMany({
+      where: { id: customerId, points: { gte: points } },
+      data: { points: { decrement: points } },
+    });
+    if (debit.count === 0) return { error: "You don't have that many points to redeem." };
+
+    const ledger = await tx.loyaltyLedger.create({
+      data: { customerId, delta: -points, reason: "redeem" },
+    });
+    const code = loyaltyVoucherCode(ledger.id);
+    await tx.coupon.create({
+      data: {
+        code,
+        type: "FIXED",
+        value: valuePaise,
+        // Require an order at least the voucher's worth so its value is never
+        // wasted against the subtotal cap in validateCoupon.
+        minOrderPaise: valuePaise,
+        maxUses: 1,
+        active: true,
+        expiresAt: new Date(Date.now() + LOYALTY_VOUCHER_TTL_DAYS * DAY_MS),
+      },
+    });
+    return { code };
+  });
+}
 
 // Human-readable referral code — no ambiguous characters (0/O, 1/I), so it
 // survives being read aloud or typed from a screenshot.
@@ -101,15 +148,27 @@ export async function resolveReferralCode(code: string): Promise<string | null> 
   return referrer?.id ?? null;
 }
 
-// Credits loyalty for a just-settled order. MUST be called inside the order's
-// winning settlement claim (runs exactly once per order), so the writes here are
-// inherently idempotent. Guest orders (no customerId) earn nothing. Returns the
-// buyer's own earned points (referral bonuses are separate ledger entries).
-export async function awardLoyaltyForSettledOrder(
+// Credits loyalty once an order is DELIVERED — not at payment settlement, so a
+// cancelled/returned order (even if it was paid) never earns points. Called
+// from the admin status-change action on every transition INTO DELIVERED; the
+// atomic claim below (not pointsEarned, which can legitimately be 0) makes it
+// safe to call more than once for the same order — a second call is a no-op.
+// Guest orders (no customerId) earn nothing. Returns the buyer's own earned
+// points (referral bonuses are separate ledger entries).
+export async function awardLoyaltyForDeliveredOrder(
   tx: Prisma.TransactionClient,
   order: { id: string; customerId: string | null; subtotalPaise: number; discountPaise: number },
 ): Promise<number> {
   if (!order.customerId) return 0;
+
+  // Claim the award exactly once — a concurrent or repeated call (e.g. an
+  // admin flipping DELIVERED → SHIPPED → DELIVERED again) finds count === 0
+  // and bails without re-crediting anything.
+  const claimed = await tx.order.updateMany({
+    where: { id: order.id, loyaltyAwardedAt: null },
+    data: { loyaltyAwardedAt: new Date() },
+  });
+  if (claimed.count === 0) return 0;
 
   // Tier is decided by the buyer's lifetime points BEFORE this order's earn is
   // added — so a customer earns at the rate they'd already qualified for, not
@@ -134,18 +193,18 @@ export async function awardLoyaltyForSettledOrder(
   }
   await tx.order.update({ where: { id: order.id }, data: { pointsEarned: earned } });
 
-  // Referral bonus — only on the buyer's FIRST settled order. This order is
-  // already flipped to settled before we run, so we count OTHER settled orders;
-  // 0 → this is their first → credit both sides once.
+  // Referral bonus — only on the buyer's FIRST delivered order. This order is
+  // already claimed above, so we count OTHER delivered (loyalty-awarded)
+  // orders; 0 → this is their first → credit both sides once.
   if (buyer?.referredById) {
-    const priorSettled = await tx.order.count({
+    const priorDelivered = await tx.order.count({
       where: {
         customerId: order.customerId,
         id: { not: order.id },
-        paymentStatus: { in: ["PAID", "PARTIALLY_PAID"] },
+        loyaltyAwardedAt: { not: null },
       },
     });
-    if (priorSettled === 0) {
+    if (priorDelivered === 0) {
       await tx.customer.update({
         where: { id: buyer.referredById },
         data: {
@@ -170,6 +229,59 @@ export async function awardLoyaltyForSettledOrder(
   }
 
   return earned;
+}
+
+// Reverses whatever awardLoyaltyForDeliveredOrder credited for this order —
+// called when a DELIVERED (or otherwise stock-committed) order moves to
+// CANCELLED/RETURNED, so a return doesn't leave the customer keeping points
+// for goods they gave back. Every ledger entry awardLoyaltyForDeliveredOrder
+// wrote is tagged with this orderId (the buyer's own earn, plus any referral/
+// referee bonus it triggered), so we just claw each one back from whoever
+// received it.
+//
+// Claims via the same loyaltyAwardedAt field, clearing it back to null — that
+// both makes this idempotent (a repeat call finds count === 0 and no-ops) and
+// means a later re-delivery of this same order (e.g. correcting a mistaken
+// return) can earn loyalty again.
+//
+// Clawback is clamped to the customer's CURRENT balance: they may have already
+// spent some of these points (e.g. redeemed into a voucher), and we can't take
+// back money that's already gone. lifetimePoints (which decides tier) is
+// clawed back the same way — unlike voucher redemption, a return means the
+// purchase that earned these points didn't actually stick, so it's fair for
+// tier progress to unwind too.
+export async function reverseLoyaltyForOrder(
+  tx: Prisma.TransactionClient,
+  orderId: string,
+): Promise<void> {
+  const claimed = await tx.order.updateMany({
+    where: { id: orderId, loyaltyAwardedAt: { not: null } },
+    data: { loyaltyAwardedAt: null, pointsEarned: 0 },
+  });
+  if (claimed.count === 0) return;
+
+  const entries = await tx.loyaltyLedger.findMany({ where: { orderId, delta: { gt: 0 } } });
+  for (const entry of entries) {
+    const customer = await tx.customer.findUnique({
+      where: { id: entry.customerId },
+      select: { points: true, lifetimePoints: true },
+    });
+    if (!customer) continue;
+
+    const pointsBack = Math.min(entry.delta, customer.points);
+    const lifetimeBack = Math.min(entry.delta, customer.lifetimePoints);
+    if (pointsBack > 0 || lifetimeBack > 0) {
+      await tx.customer.update({
+        where: { id: entry.customerId },
+        data: { points: { decrement: pointsBack }, lifetimePoints: { decrement: lifetimeBack } },
+      });
+    }
+    if (pointsBack > 0) {
+      await tx.loyaltyLedger.create({
+        data: { customerId: entry.customerId, delta: -pointsBack, reason: "return", orderId },
+      });
+    }
+  }
 }
 
 // ── Account-page read model ──────────────────────────────────────────────────

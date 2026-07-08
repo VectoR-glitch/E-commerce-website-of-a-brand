@@ -7,6 +7,7 @@ import { OrderStatus, PaymentStatus, DiscountType, Prisma } from "@prisma/client
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
+import { awardLoyaltyForDeliveredOrder, reverseLoyaltyForOrder } from "@/lib/loyalty";
 import { bundleCouponCode } from "@/lib/bundles";
 import { sendDueSubscriptionReminders } from "@/lib/subscriptions";
 import { notifyBackInStockForVariant } from "@/lib/back-in-stock";
@@ -46,27 +47,50 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
     // NOT auto-decrement again — the admin should verify stock in that case.)
     const wasCommitted = STOCK_COMMITTED.includes(changed.status);
     const nowFreed = status === "CANCELLED" || status === "RETURNED";
-    const restock =
-      wasCommitted && nowFreed
-        ? changed.items
-            .filter((it) => it.variantId)
-            .map((it) =>
-              prisma.variant.update({
-                where: { id: it.variantId! },
-                data: { stock: { increment: it.quantity } },
-              }),
-            )
-        : [];
 
-    // Batch all writes into a single short-lived transaction — restock (if any)
-    // and the status update commit together, atomically. The status write is
-    // guarded on the value we read (updateMany allows the non-unique `status`
-    // filter), so a concurrent admin transition can't re-write it — matches 0
-    // rows instead.
-    await prisma.$transaction([
-      ...restock,
-      prisma.order.updateMany({ where: { id, status: changed.status }, data: { status } }),
-    ]);
+    // One short-lived interactive transaction: restock (if any), the guarded
+    // status write, and — only on a real transition INTO DELIVERED, or back
+    // OUT of a stock-committed status into CANCELLED/RETURNED — the matching
+    // loyalty credit/reversal, all commit together atomically. The status
+    // write is guarded on the value we read, so a concurrent admin transition
+    // can't re-write it — matches 0 rows instead, and we skip the loyalty side
+    // effect for a claim we lost.
+    await prisma.$transaction(async (tx) => {
+      if (wasCommitted && nowFreed) {
+        for (const it of changed.items.filter((it) => it.variantId)) {
+          await tx.variant.update({
+            where: { id: it.variantId! },
+            data: { stock: { increment: it.quantity } },
+          });
+        }
+      }
+
+      const claimed = await tx.order.updateMany({
+        where: { id, status: changed.status },
+        data: { status },
+      });
+      if (claimed.count === 0) return;
+
+      // Loyalty points are granted only once an order is actually DELIVERED —
+      // not at payment settlement — so a returned/cancelled order never earns
+      // points it shouldn't have.
+      if (status === "DELIVERED") {
+        await awardLoyaltyForDeliveredOrder(tx, {
+          id: changed.id,
+          customerId: changed.customerId,
+          subtotalPaise: changed.subtotalPaise,
+          discountPaise: changed.discountPaise,
+        });
+      }
+
+      // Mirror image of the above: a DELIVERED (or otherwise stock-committed)
+      // order that's cancelled/returned gives back whatever points it earned —
+      // same condition as the restock above, so inventory and loyalty always
+      // move together. A no-op if this order never actually earned loyalty.
+      if (wasCommitted && nowFreed) {
+        await reverseLoyaltyForOrder(tx, changed.id);
+      }
+    });
   }
 
   revalidatePath(`/admin/orders/${id}`);

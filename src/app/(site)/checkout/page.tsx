@@ -4,12 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/catalog";
-import { INDIAN_STATES } from "@/lib/constants";
+import { INDIAN_STATES, LOYALTY_MIN_REDEEM_POINTS, POINT_VALUE_PAISE } from "@/lib/constants";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
 import { Kicker } from "@/components/kicker";
 import { TrustBadges } from "@/components/trust-badges";
 import { PENDING_COUPON_KEY } from "@/components/kit-picker";
+import { CheckoutRedeemPoints } from "@/components/checkout-redeem-points";
 
 
 // Minimal shape of the Razorpay Checkout we use.
@@ -168,6 +169,14 @@ export default function CheckoutPage() {
   // whole form in one tap. `prefillDone` hides the prompt once used or dismissed.
   const [prefill, setPrefill] = useState<FormState | null>(null);
   const [prefillDone, setPrefillDone] = useState(false);
+  // Signed-in customer's current loyalty points balance, for the inline
+  // "redeem points" control — 0 for guests.
+  const [loyaltyPoints, setLoyaltyPoints] = useState(0);
+  const [loyaltyLoaded, setLoyaltyLoaded] = useState(false);
+  // The kit's pending coupon (if arrived via "Add kit to cart"), kept around
+  // even after it's consumed so the customer can switch back to it after
+  // trying loyalty points instead — the two are mutually exclusive discounts.
+  const [kitCouponCode, setKitCouponCode] = useState<string | null>(null);
 
   // On mount, ask the server for the signed-in customer's saved address. Fails
   // silently — a guest (or no saved address) simply gets no prompt.
@@ -347,30 +356,38 @@ export default function CheckoutPage() {
   }, [subtotalPaise]);
 
   // "Add kit to cart" stashes the bundle's coupon code; apply it once on arrival
-  // at checkout, then clear it so a later manual visit isn't re-couponed. If
-  // there's no pending kit coupon, fall back to auto-applying the signed-in
-  // customer's best qualifying loyalty voucher (highest value that still meets
-  // its own minimum spend) — visibly, via the same "applied" banner with a
-  // Remove option, so a saved reward is never left unused by accident.
+  // at checkout, then clear it so a later manual visit isn't re-couponed. The
+  // kit coupon wins the pre-applied slot by default. We still always fetch the
+  // signed-in customer's loyalty points (so the balance — and the option to
+  // switch to it instead — is visible even while the kit discount is applied),
+  // and only fall back to auto-applying the best qualifying loyalty voucher
+  // when there's no kit coupon to apply — visibly, via the same "applied"
+  // banner with a Remove option, so a saved reward is never left unused.
   useEffect(() => {
-    let code: string | null = null;
+    let kitCode: string | null = null;
     try {
-      code = sessionStorage.getItem(PENDING_COUPON_KEY);
-      if (code) sessionStorage.removeItem(PENDING_COUPON_KEY);
+      kitCode = sessionStorage.getItem(PENDING_COUPON_KEY);
+      if (kitCode) sessionStorage.removeItem(PENDING_COUPON_KEY);
     } catch {
       // ignore storage errors
     }
-    if (code) {
-      applyCoupon(code);
-      return;
+    if (kitCode) {
+      // Deferred so we don't setState synchronously in the effect body.
+      setTimeout(() => setKitCouponCode(kitCode), 0);
+      applyCoupon(kitCode);
     }
+
     fetch("/api/account/loyalty-voucher")
       .then((r) => r.json())
-      .then((data: { vouchers?: { code: string; valuePaise: number }[] }) => {
-        const best = (data.vouchers ?? [])
-          .filter((v) => v.valuePaise <= subtotalPaise)
-          .sort((a, b) => b.valuePaise - a.valuePaise)[0];
-        if (best) applyCoupon(best.code);
+      .then((data: { vouchers?: { code: string; valuePaise: number }[]; points?: number }) => {
+        setLoyaltyPoints(data.points ?? 0);
+        setLoyaltyLoaded(true);
+        if (!kitCode) {
+          const best = (data.vouchers ?? [])
+            .filter((v) => v.valuePaise <= subtotalPaise)
+            .sort((a, b) => b.valuePaise - a.valuePaise)[0];
+          if (best) applyCoupon(best.code);
+        }
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -908,20 +925,70 @@ export default function CheckoutPage() {
           {/* Coupon */}
           <div className="mt-4">
             {coupon ? (
-              <div className="flex items-center justify-between gap-3 border border-forest/30 bg-forest/5 px-3 py-2 text-sm">
-                <span className="text-forest">
-                  <strong>{coupon.code}</strong> applied · {coupon.label}
-                </span>
-                <button
-                  type="button"
-                  onClick={removeCoupon}
-                  className="smallcaps text-xs text-ink/55 transition-colors hover:text-forest"
-                >
-                  Remove
-                </button>
+              <div className="border border-forest/30 bg-forest/5 px-3 py-2 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-forest">
+                    <strong>{coupon.code}</strong> applied · {coupon.label}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={removeCoupon}
+                    className="smallcaps text-xs text-ink/55 transition-colors hover:text-forest"
+                  >
+                    Remove
+                  </button>
+                </div>
+                {/* The kit coupon and a loyalty voucher are mutually exclusive
+                    (checkout only carries one discount at a time) — offer the
+                    other one as a one-tap swap rather than making the customer
+                    remove + re-find a code themselves. */}
+                {kitCouponCode && coupon.code === kitCouponCode && loyaltyLoaded && loyaltyPoints >= LOYALTY_MIN_REDEEM_POINTS && (
+                  <p className="mt-2 text-xs text-ink/55">
+                    Or use your {loyaltyPoints} points ({formatINR(loyaltyPoints * POINT_VALUE_PAISE)}) instead —{" "}
+                    <button type="button" onClick={removeCoupon} className="smallcaps link-underline text-forest">
+                      switch to points
+                    </button>
+                  </p>
+                )}
+                {kitCouponCode && coupon.code !== kitCouponCode && (
+                  <p className="mt-2 text-xs text-ink/55">
+                    Or use your kit discount instead —{" "}
+                    <button
+                      type="button"
+                      onClick={() => applyCoupon(kitCouponCode)}
+                      className="smallcaps link-underline text-forest"
+                    >
+                      switch back
+                    </button>
+                  </p>
+                )}
               </div>
             ) : (
               <>
+                {authenticated && loyaltyLoaded && (
+                  <CheckoutRedeemPoints
+                    balance={loyaltyPoints}
+                    minPoints={LOYALTY_MIN_REDEEM_POINTS}
+                    pointValuePaise={POINT_VALUE_PAISE}
+                    maxRedeemablePaise={subtotalPaise}
+                    onApply={(code, pointsUsed) => {
+                      setLoyaltyPoints((p) => p - pointsUsed);
+                      applyCoupon(code);
+                    }}
+                  />
+                )}
+                {kitCouponCode && (
+                  <p className="mb-2 text-xs text-ink/55">
+                    Or use your kit discount instead —{" "}
+                    <button
+                      type="button"
+                      onClick={() => applyCoupon(kitCouponCode)}
+                      className="smallcaps link-underline text-forest"
+                    >
+                      re-apply
+                    </button>
+                  </p>
+                )}
                 <div className="flex gap-2">
                   <input
                     value={couponInput}

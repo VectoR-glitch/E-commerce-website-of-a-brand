@@ -383,10 +383,15 @@ model Order {
   discountPaise   Int     @default(0)
   couponCode      String? // the coupon applied to this order, if any (uppercase)
   totalPaise      Int
-  // Loyalty points awarded when this order settled (0 for guest orders / before
-  // settlement). Written exactly once inside the winning settlement claim, so it
-  // also marks that earn has already been granted for this order.
+  // Loyalty points awarded once this order is DELIVERED (0 for guest orders /
+  // before delivery).
   pointsEarned    Int     @default(0)
+  // When loyalty (buyer's points + any first-order referral bonus) was
+  // credited for this order — null until then. This, not pointsEarned, is the
+  // idempotency guard (an order can legitimately earn 0 points), claimed
+  // atomically so re-marking DELIVERED (e.g. after a correction) never
+  // double-credits.
+  loyaltyAwardedAt DateTime?
   // Amount actually collected via Razorpay. ONLINE = totalPaise; COD = the
   // delivery fee prepaid up front (goods are paid in cash on delivery, so the
   // cash due on delivery = totalPaise - amountPaidPaise).

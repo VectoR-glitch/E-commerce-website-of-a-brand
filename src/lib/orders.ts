@@ -3,7 +3,6 @@
 // race-safe path. Never import from client code.
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { awardLoyaltyForSettledOrder } from "@/lib/loyalty";
 import { nextInvoiceNumber } from "@/lib/gst";
 
 type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
@@ -111,14 +110,9 @@ export async function settleOrderPaid(params: {
       });
     }
 
-    // Credit loyalty (buyer's points + any first-order referral bonus) exactly
-    // once, here in the winning claim, for the same idempotency reason.
-    await awardLoyaltyForSettledOrder(tx, {
-      id: existing.id,
-      customerId: existing.customerId,
-      subtotalPaise: existing.subtotalPaise,
-      discountPaise: existing.discountPaise,
-    });
+    // Loyalty is NOT credited here — it's awarded only once the order is later
+    // marked DELIVERED (see awardLoyaltyForDeliveredOrder in admin/actions.ts),
+    // so a settled-but-cancelled/returned order never earns points.
 
     // Allocate the GST invoice number exactly once, here in the winning claim
     // — a sequential number must never be issued twice or skipped.

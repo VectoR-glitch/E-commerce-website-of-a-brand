@@ -20,6 +20,7 @@ const REASON_LABEL: Record<string, string> = {
   referral: "Referral bonus",
   referee: "Welcome bonus",
   redeem: "Redeemed for a voucher",
+  return: "Reversed for a return",
 };
 
 const VOUCHER_STATUS: Record<string, { label: string; cls: string }> = {

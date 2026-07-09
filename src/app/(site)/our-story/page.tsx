@@ -3,10 +3,15 @@ import { Ornament } from "@/components/ornament";
 import { Reveal } from "@/components/reveal";
 import { Kicker } from "@/components/kicker";
 
+const title = "Our Story";
+const description =
+  "The story behind Klenich — a Bharat Bliss Pvt Ltd brand making plant-powered home care the Indian standard.";
+
 export const metadata: Metadata = {
-  title: "Our Story",
-  description:
-    "The story behind Klenich — a Bharat Bliss Pvt Ltd brand making plant-powered home care the Indian standard.",
+  title,
+  description,
+  alternates: { canonical: "/our-story" },
+  openGraph: { title, description },
 };
 
 export default function OurStoryPage() {

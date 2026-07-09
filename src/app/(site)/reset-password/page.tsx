@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Ornament } from "@/components/ornament";
 import { ResetPasswordForm } from "@/components/reset-password-form";
@@ -5,6 +6,11 @@ import { prisma } from "@/lib/prisma";
 import { hashToken } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Reset Password",
+  robots: { index: false, follow: false },
+};
 
 export default async function ResetPasswordPage(props: {
   searchParams: Promise<{ token?: string }>;

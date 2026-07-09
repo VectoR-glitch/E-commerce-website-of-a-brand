@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { getProducts } from "@/lib/products";
@@ -9,6 +10,13 @@ import { Carousel } from "@/components/carousel";
 import { Kicker } from "@/components/kicker";
 
 export const dynamic = "force-dynamic";
+
+// Title/description/openGraph already match the root layout's defaults — this
+// only adds the canonical URL, which the root doesn't set (it can't know a
+// child page's path).
+export const metadata: Metadata = {
+  alternates: { canonical: "/" },
+};
 
 const promises = [
   "Plant-Based",

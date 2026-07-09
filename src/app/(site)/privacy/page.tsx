@@ -3,9 +3,14 @@ import { Ornament } from "@/components/ornament";
 import { Reveal } from "@/components/reveal";
 import { Kicker } from "@/components/kicker";
 
+const title = "Privacy Policy";
+const description = "How Klenich (Bharat Bliss Pvt Ltd) collects and uses your data.";
+
 export const metadata: Metadata = {
-  title: "Privacy Policy",
-  description: "How Klenich (Bharat Bliss Pvt Ltd) collects and uses your data.",
+  title,
+  description,
+  alternates: { canonical: "/privacy" },
+  openGraph: { title, description },
 };
 
 export default function PrivacyPage() {

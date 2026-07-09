@@ -9,10 +9,15 @@ import { Kicker } from "@/components/kicker";
 
 export const dynamic = "force-dynamic";
 
+const title = "Shop";
+const description =
+  "The full Klenich collection — plant-powered dishwash, floor, and toilet care, made in India.";
+
 export const metadata: Metadata = {
-  title: "Shop",
-  description:
-    "The full Klenich collection — plant-powered dishwash, floor, and toilet care, made in India.",
+  title,
+  description,
+  alternates: { canonical: "/shop" },
+  openGraph: { title, description },
 };
 
 export default async function ShopPage() {

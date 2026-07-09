@@ -1,7 +1,18 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { Ornament } from "@/components/ornament";
 import { Reveal } from "@/components/reveal";
 import { Kicker } from "@/components/kicker";
+
+const title = "Track Order";
+const description = "Check the status of your Klenich order, or get in touch with support.";
+
+export const metadata: Metadata = {
+  title,
+  description,
+  alternates: { canonical: "/track-order" },
+  openGraph: { title, description },
+};
 
 // Live order tracking is post-launch (see docs/tracking-plan.md). Until then this
 // page is intentionally a static, honest pointer to support — NOT a form that

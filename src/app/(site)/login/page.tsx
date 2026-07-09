@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Ornament } from "@/components/ornament";
@@ -6,6 +7,13 @@ import { LoginForm } from "@/components/login-form";
 import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
+
+// No unique public content, and indexing it would just dilute the pages that
+// actually matter for search.
+export const metadata: Metadata = {
+  title: "Log In",
+  robots: { index: false, follow: false },
+};
 
 function safeNext(next: string | undefined): string {
   return next && next.startsWith("/") && !next.startsWith("//") ? next : "/";

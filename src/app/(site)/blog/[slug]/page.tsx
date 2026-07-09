@@ -54,6 +54,21 @@ function articleJsonLd(post: NonNullable<Awaited<ReturnType<typeof getPublishedP
   };
 }
 
+// Lets Google show "The Journal › {post}" breadcrumbs directly in the search
+// result instead of the raw URL. The current page is the last entry and
+// intentionally has no `item` URL, matching Google's own reference example.
+function breadcrumbJsonLd(post: { title: string; slug: string }) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "The Journal", item: `${SITE_URL}/blog` },
+      { "@type": "ListItem", position: 3, name: post.title },
+    ],
+  };
+}
+
 export default async function BlogPostPage(props: PageProps<"/blog/[slug]">) {
   const { slug } = await props.params;
   const post = await getPublishedPost(slug);
@@ -72,6 +87,10 @@ export default async function BlogPostPage(props: PageProps<"/blog/[slug]">) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdHtml(articleJsonLd(post)) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(breadcrumbJsonLd(post)) }}
       />
       <Link href="/blog" className="smallcaps text-ink/70 hover:text-forest">
         ← The Journal

@@ -3,9 +3,14 @@ import { Ornament } from "@/components/ornament";
 import { Reveal } from "@/components/reveal";
 import { Kicker } from "@/components/kicker";
 
+const title = "Terms & Conditions";
+const description = "Terms of sale and use for Klenich (Bharat Bliss Pvt Ltd).";
+
 export const metadata: Metadata = {
-  title: "Terms & Conditions",
-  description: "Terms of sale and use for Klenich (Bharat Bliss Pvt Ltd).",
+  title,
+  description,
+  alternates: { canonical: "/terms" },
+  openGraph: { title, description },
 };
 
 export default function TermsPage() {

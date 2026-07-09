@@ -61,16 +61,41 @@ function productJsonLd(product: Product, summary: ReviewSummary) {
   };
 }
 
+// Lets Google show "Shop › {product}" breadcrumbs directly in the search
+// result instead of the raw URL. The current page is the last entry and
+// intentionally has no `item` URL, matching Google's own reference example.
+function breadcrumbJsonLd(product: Product) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "Shop", item: `${SITE_URL}/shop` },
+      { "@type": "ListItem", position: 3, name: product.name },
+    ],
+  };
+}
+
 export async function generateMetadata(
   props: PageProps<"/product/[slug]">,
 ): Promise<Metadata> {
   const { slug } = await props.params;
   const product = await getProduct(slug);
   if (!product) return { title: "Not found" };
+  const imageUrl = product.image
+    ? product.image.startsWith("http")
+      ? product.image
+      : `${SITE_URL}${product.image}`
+    : undefined;
   return {
     title: product.name,
     description: product.tagline,
     alternates: { canonical: `/product/${slug}` },
+    openGraph: {
+      title: product.name,
+      description: product.tagline,
+      images: imageUrl ? [imageUrl] : undefined,
+    },
   };
 }
 
@@ -95,6 +120,10 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLdHtml(productJsonLd(product, summary)) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(breadcrumbJsonLd(product)) }}
       />
       <Link href="/shop" className="smallcaps text-ink/70 hover:text-forest">
         ← Back to shop

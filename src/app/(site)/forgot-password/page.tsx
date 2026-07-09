@@ -1,7 +1,13 @@
+import type { Metadata } from "next";
 import { Ornament } from "@/components/ornament";
 import { ForgotPasswordForm } from "@/components/forgot-password-form";
 
 export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Forgot Password",
+  robots: { index: false, follow: false },
+};
 
 export default function ForgotPasswordPage() {
   return (

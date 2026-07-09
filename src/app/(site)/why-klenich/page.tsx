@@ -5,10 +5,15 @@ import { Reveal } from "@/components/reveal";
 import { Kicker } from "@/components/kicker";
 import { LeafIcon } from "@/components/leaf-icon";
 
+const title = "Why Klenich";
+const description =
+  "Plant-powered home care made in India — gentle where it touches you, powerful where it needs to be.";
+
 export const metadata: Metadata = {
-  title: "Why Klenich",
-  description:
-    "Plant-powered home care made in India — gentle where it touches you, powerful where it needs to be.",
+  title,
+  description,
+  alternates: { canonical: "/why-klenich" },
+  openGraph: { title, description },
 };
 
 const pillars = [

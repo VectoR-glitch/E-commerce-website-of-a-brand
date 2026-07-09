@@ -3,9 +3,14 @@ import { Ornament } from "@/components/ornament";
 import { Reveal } from "@/components/reveal";
 import { Kicker } from "@/components/kicker";
 
+const title = "Shipping & Returns";
+const description = "Klenich shipping timelines, charges, and return policy.";
+
 export const metadata: Metadata = {
-  title: "Shipping & Returns",
-  description: "Klenich shipping timelines, charges, and return policy.",
+  title,
+  description,
+  alternates: { canonical: "/shipping-returns" },
+  openGraph: { title, description },
 };
 
 export default function ShippingReturnsPage() {

@@ -6,11 +6,15 @@ import { getPublishedPosts } from "@/lib/blog";
 
 export const dynamic = "force-dynamic";
 
+const title = "The Journal";
+const description =
+  "Notes on plant-powered home care, ingredients, and cleaning the gentle way — from the Klenich team.";
+
 export const metadata: Metadata = {
-  title: "The Journal",
-  description:
-    "Notes on plant-powered home care, ingredients, and cleaning the gentle way — from the Klenich team.",
+  title,
+  description,
   alternates: { canonical: "/blog" },
+  openGraph: { title, description },
 };
 
 export default async function BlogIndexPage() {

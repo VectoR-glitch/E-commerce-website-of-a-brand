@@ -3,10 +3,16 @@ import Link from "next/link";
 import { Ornament } from "@/components/ornament";
 import { Reveal } from "@/components/reveal";
 import { Kicker } from "@/components/kicker";
+import { jsonLdHtml } from "@/lib/json-ld";
+
+const title = "Help & FAQs";
+const description = "Answers about Klenich products, safety, shipping, and orders.";
 
 export const metadata: Metadata = {
-  title: "Help & FAQs",
-  description: "Answers about Klenich products, safety, shipping, and orders.",
+  title,
+  description,
+  alternates: { canonical: "/help" },
+  openGraph: { title, description },
 };
 
 const faqs = [
@@ -40,9 +46,25 @@ const faqs = [
   },
 ];
 
+// Lets Google render these as an expandable Q&A accordion directly in search
+// results, instead of just a plain blue link.
+const faqJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  mainEntity: faqs.map((f) => ({
+    "@type": "Question",
+    name: f.q,
+    acceptedAnswer: { "@type": "Answer", text: f.a },
+  })),
+};
+
 export default function HelpPage() {
   return (
     <div className="mx-auto max-w-3xl px-8 py-20">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLdHtml(faqJsonLd) }}
+      />
       <Reveal>
       <header className="text-center">
         <Kicker>Help</Kicker>

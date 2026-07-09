@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Ornament } from "@/components/ornament";
 import { Kicker } from "@/components/kicker";
@@ -5,6 +6,13 @@ import { RegisterForm } from "@/components/register-form";
 import { getSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
+
+// No unique public content, and indexing it would just dilute the pages that
+// actually matter for search.
+export const metadata: Metadata = {
+  title: "Create Account",
+  robots: { index: false, follow: false },
+};
 
 export default async function RegisterPage(props: PageProps<"/register">) {
   // Already signed in → no reason to register.

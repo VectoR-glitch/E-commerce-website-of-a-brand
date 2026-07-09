@@ -93,7 +93,11 @@ export default async function HomePage() {
           <span className="smallcaps absolute top-10 right-10 z-10 text-brass-deep">
             Made in India
           </span>
-          <div className="soft-in relative h-[500px] w-full">
+          <div
+            aria-hidden="true"
+            className="hero-drop-shadow absolute bottom-[18%] left-1/2 h-8 w-56 rounded-full bg-ink/20 blur-xl"
+          />
+          <div className="hero-drop relative h-[500px] w-full">
             <Image
               src="/products/dishwash-gel-lime.webp"
               alt="Klenich Dishwash Gel — Lime"

@@ -113,6 +113,49 @@ p {
   animation: klen-soft-in 1.2s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* Hero product bottle "drop-in" on first paint — falls from above the frame
+   with a slight tilt and settles with a gentle overshoot, like the bottle
+   physically landing in place. Paired with .hero-drop-shadow underneath. */
+@keyframes klen-hero-drop {
+  0% {
+    opacity: 0;
+    transform: translateY(-260px) rotate(-10deg) scale(0.94);
+  }
+  55% {
+    opacity: 1;
+  }
+  70% {
+    transform: translateY(8px) rotate(3deg) scale(1.015);
+  }
+  85% {
+    transform: translateY(-3px) rotate(-1deg) scale(0.998);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+}
+.hero-drop {
+  animation: klen-hero-drop 1.15s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes klen-hero-drop-shadow {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.5, 0.4);
+  }
+  70% {
+    opacity: 0.4;
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) scale(1, 1);
+  }
+}
+.hero-drop-shadow {
+  animation: klen-hero-drop-shadow 1.15s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: no-preference) {
   html {
     scroll-behavior: smooth;
@@ -233,6 +276,16 @@ p {
   }
   .soft-in {
     animation: none !important;
+  }
+  .hero-drop {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .hero-drop-shadow {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: translateX(-50%) !important;
   }
   .cart-bump {
     animation: none !important;

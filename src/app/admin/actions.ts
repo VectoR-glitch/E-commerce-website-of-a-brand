@@ -7,6 +7,7 @@ import { OrderStatus, PaymentStatus, DiscountType, Prisma } from "@prisma/client
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
+import { sendOrderStatusWhatsApp } from "@/lib/whatsapp";
 import { awardLoyaltyForDeliveredOrder, reverseLoyaltyForOrder } from "@/lib/loyalty";
 import { bundleCouponCode } from "@/lib/bundles";
 import { sendDueSubscriptionReminders } from "@/lib/subscriptions";
@@ -97,13 +98,19 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
   revalidatePath("/admin/orders");
   revalidatePath("/admin");
 
-  // Notify the customer of the new status. Best-effort: never let an email
-  // failure surface as a failed status update (the change is already committed).
+  // Notify the customer of the new status. Best-effort: never let a
+  // notification failure surface as a failed status update (the change is
+  // already committed).
   if (changed) {
     try {
       await sendOrderStatusEmail(toOrderForEmail(changed), status);
     } catch (err) {
       console.error(`status email failed for order ${id}:`, err);
+    }
+    try {
+      await sendOrderStatusWhatsApp(changed.phone, changed.orderNumber, status);
+    } catch (err) {
+      console.error(`status WhatsApp failed for order ${id}:`, err);
     }
   }
 }

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/session";
 import { logoutAction } from "@/app/actions/auth";
@@ -5,6 +6,12 @@ import { logoutAction } from "@/app/actions/auth";
 // Every admin page is dynamic (live DB per request) and individually re-guards
 // via requireAdmin(); this layout gate is the first line + supplies the nav.
 export const dynamic = "force-dynamic";
+
+// No public content, ever — keep the whole console out of the index as a
+// backstop, same as every other auth-gated area (login/account/wishlist).
+export const metadata: Metadata = {
+  robots: { index: false, follow: false },
+};
 
 const NAV = [
   { href: "/admin", label: "Overview" },

@@ -10,6 +10,16 @@ export type CouponResult =
 
 export type CartLine = { variantId: string; quantity: number };
 
+// KIT-<slug> and SUB-<id> codes are system-managed — kept in sync by the
+// Bundles/Subscriptions admin pages (syncBundleCoupon in admin/actions.ts,
+// syncSubscriptionCoupon in app/actions/subscriptions.ts). Deleting one via
+// the generic Coupons admin page leaves its bundle/subscription still
+// showing "Active" with a discount that silently stops applying — manage
+// those from their own admin page instead.
+export function isSystemCouponCode(code: string): boolean {
+  return code.startsWith("KIT-") || code.startsWith("SUB-");
+}
+
 // A bundle's discount is realised through a coupon whose code (KIT-<slug>) is
 // necessarily visible on the storefront. To stop customers from lifting that
 // code and using it off-kit, a KIT- coupon only applies when the cart actually

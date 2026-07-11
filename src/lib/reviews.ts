@@ -64,7 +64,10 @@ export async function getReviewEligibility(productId: string): Promise<{
     prisma.orderItem.findFirst({
       where: {
         variant: { productId },
-        order: { customerId: session.sub, status: { not: "CANCELLED" } },
+        // DELIVERED only — a PENDING/ON_HOLD order hasn't actually reached the
+        // customer yet, and a RETURNED one was refunded, so neither should
+        // count as a "verified purchase."
+        order: { customerId: session.sub, status: "DELIVERED" },
       },
       select: { id: true },
     }),

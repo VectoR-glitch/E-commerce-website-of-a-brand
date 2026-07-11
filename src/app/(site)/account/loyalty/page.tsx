@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession } from "@/lib/session";
 import { getLoyaltySummary } from "@/lib/loyalty";
@@ -14,6 +15,7 @@ import { ReferralShare } from "@/components/account/referral-share";
 import { Kicker } from "@/components/kicker";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Loyalty Points" };
 
 const REASON_LABEL: Record<string, string> = {
   order: "Earned on an order",

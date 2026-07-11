@@ -127,20 +127,24 @@ export async function sendDueSubscriptionReminders(): Promise<{ sent: number; fa
         manageUrl: `${SITE_URL}/account/subscriptions`,
       });
       sent++;
+
+      // Only roll the schedule forward on a successful send — otherwise a
+      // transient outage (bad API key, Resend down) would silently skip this
+      // customer's whole cycle with no retry. Rolls from the due date,
+      // skipping any cycles already in the past, so a long-idle subscription
+      // lands on a future date.
+      let next = s.nextDeliveryAt.getTime() + s.intervalDays * DAY_MS;
+      const now = Date.now();
+      while (next <= now) next += s.intervalDays * DAY_MS;
+      await prisma.subscription.update({
+        where: { id: s.id },
+        data: { lastReminderAt: new Date(), nextDeliveryAt: new Date(next) },
+      });
     } catch (err) {
       console.error(`Subscription reminder failed for subscription ${s.id} (${s.customer.email}):`, err);
       failed++;
+      // Leave nextDeliveryAt untouched — the next daily sweep retries this cycle.
     }
-
-    // Roll the schedule forward from the due date, skipping any cycles already
-    // in the past, so a long-idle subscription lands on a future date.
-    let next = s.nextDeliveryAt.getTime() + s.intervalDays * DAY_MS;
-    const now = Date.now();
-    while (next <= now) next += s.intervalDays * DAY_MS;
-    await prisma.subscription.update({
-      where: { id: s.id },
-      data: { lastReminderAt: new Date(), nextDeliveryAt: new Date(next) },
-    });
   }
 
   return { sent, failed };

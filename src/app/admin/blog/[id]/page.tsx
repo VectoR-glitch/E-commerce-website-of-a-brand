@@ -2,13 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { updateBlogPost, deleteBlogPost, removeBlogImage } from "@/app/admin/actions";
+import { deleteBlogPost, removeBlogImage } from "@/app/admin/actions";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 import { BlogImageUpload } from "@/components/blog-image-upload";
+import { EditBlogPostForm } from "@/components/edit-blog-post-form";
 
 export const dynamic = "force-dynamic";
-
-const fieldCls = "border border-line bg-white px-2.5 py-1.5 text-sm outline-none focus:border-forest";
 
 export default async function BlogPostEdit(props: { params: Promise<{ id: string }> }) {
   await requireAdmin();
@@ -32,60 +31,7 @@ export default async function BlogPostEdit(props: { params: Promise<{ id: string
       {/* Details */}
       <div className="mt-6 max-w-2xl border border-line bg-paper p-5">
         <h2 className="smallcaps text-brass-deep">Post</h2>
-        <form key={post.updatedAt.toISOString()} action={updateBlogPost} className="mt-3 space-y-4">
-          <input type="hidden" name="blogPostId" value={post.id} />
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">Title</label>
-            <input name="title" defaultValue={post.title} required maxLength={160} className={`${fieldCls} w-full`} />
-          </div>
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">Slug</label>
-            <input
-              name="slug"
-              defaultValue={post.slug}
-              required
-              pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-              className={`${fieldCls} w-full font-mono text-xs`}
-            />
-          </div>
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">Excerpt</label>
-            <textarea
-              name="excerpt"
-              defaultValue={post.excerpt}
-              required
-              rows={2}
-              maxLength={300}
-              placeholder="A short summary — shown on the journal list and as the fallback meta description."
-              className={`${fieldCls} w-full`}
-            />
-          </div>
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">Body</label>
-            <textarea
-              name="body"
-              defaultValue={post.body}
-              required
-              rows={14}
-              placeholder="Long-form copy. Leave a blank line between paragraphs."
-              className={`${fieldCls} w-full`}
-            />
-          </div>
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">Meta description (optional)</label>
-            <input
-              name="metaDescription"
-              defaultValue={post.metaDescription ?? ""}
-              maxLength={160}
-              placeholder="Overrides the excerpt in search results, if set."
-              className={`${fieldCls} w-full`}
-            />
-          </div>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" name="published" defaultChecked={post.published} /> Published
-          </label>
-          <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Save post</button>
-        </form>
+        <EditBlogPostForm post={post} />
       </div>
 
       {/* Cover image */}

@@ -33,6 +33,17 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
   });
   if (!product) notFound();
 
+  // Active/paused subscription counts per variant — surfaced in the delete
+  // confirmations below, since deleting a variant permanently cancels any
+  // subscription on it (no admin warning otherwise).
+  const subCounts = await prisma.subscription.groupBy({
+    by: ["variantId"],
+    where: { variantId: { in: product.variants.map((v) => v.id) }, status: { not: "CANCELLED" } },
+    _count: true,
+  });
+  const subCountByVariant = new Map(subCounts.map((s) => [s.variantId, s._count]));
+  const totalSubs = subCounts.reduce((sum, s) => sum + s._count, 0);
+
   return (
     <div>
       <Link href="/admin/products" className="smallcaps text-ink/60 transition-colors hover:text-forest">← Products</Link>
@@ -205,7 +216,11 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
               <form action={deleteVariant}>
                 <input type="hidden" name="variantId" value={v.id} />
                 <ConfirmSubmit
-                  message={`Permanently delete variant ${[v.fragrance, v.size].filter(Boolean).join(" · ")} (SKU ${v.sku})? Order history is kept. To just hide it from the store, untick Active instead.`}
+                  message={`Permanently delete variant ${[v.fragrance, v.size].filter(Boolean).join(" · ")} (SKU ${v.sku})? Order history is kept. To just hide it from the store, untick Active instead.${
+                    subCountByVariant.get(v.id)
+                      ? ` This will also CANCEL ${subCountByVariant.get(v.id)} active "subscribe & save" ${subCountByVariant.get(v.id) === 1 ? "subscription" : "subscriptions"} on this variant, with no notice to the customer.`
+                      : ""
+                  }`}
                   className="smallcaps text-xs text-red-600 hover:underline"
                 >
                   Delete variant
@@ -262,7 +277,11 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
         <form action={deleteProduct} className="mt-3">
           <input type="hidden" name="productId" value={product.id} />
           <ConfirmSubmit
-            message={`Permanently delete "${product.name}" and all its variants + images? This cannot be undone. Past orders are kept. To just hide it, untick Active instead.`}
+            message={`Permanently delete "${product.name}" and all its variants + images? This cannot be undone. Past orders are kept. To just hide it, untick Active instead.${
+              totalSubs > 0
+                ? ` This will also CANCEL ${totalSubs} active "subscribe & save" ${totalSubs === 1 ? "subscription" : "subscriptions"} across its variants, with no notice to the customer.`
+                : ""
+            }`}
             className="smallcaps border border-red-600 px-5 py-2 text-red-700 transition-colors hover:bg-red-600 hover:text-white"
           >
             Delete product

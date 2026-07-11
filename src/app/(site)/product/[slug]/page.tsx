@@ -23,8 +23,6 @@ export const dynamic = "force-dynamic";
 // compliant.
 function productJsonLd(product: Product, summary: ReviewSummary) {
   const prices = product.variants.map((v) => v.pricePaise);
-  const lowPaise = Math.min(...prices);
-  const highPaise = Math.max(...prices);
   // A variant is in stock when stock is unknown (static catalog) or positive.
   const inStock = product.variants.some(
     (v) => typeof v.stock !== "number" || v.stock > 0,
@@ -41,16 +39,21 @@ function productJsonLd(product: Product, summary: ReviewSummary) {
     image,
     brand: { "@type": "Brand", name: "Klenich" },
     url: `${SITE_URL}/product/${product.slug}`,
-    offers: {
-      "@type": "AggregateOffer",
-      priceCurrency: "INR",
-      lowPrice: (lowPaise / 100).toFixed(2),
-      highPrice: (highPaise / 100).toFixed(2),
-      offerCount: product.variants.length,
-      availability: inStock
-        ? "https://schema.org/InStock"
-        : "https://schema.org/OutOfStock",
-    },
+    // Omitted entirely (not emitted with degenerate values) when every
+    // variant has been deactivated — Math.min/max of an empty array is
+    // ±Infinity, which schema.org validators reject as invalid pricing.
+    ...(prices.length > 0 && {
+      offers: {
+        "@type": "AggregateOffer",
+        priceCurrency: "INR",
+        lowPrice: (Math.min(...prices) / 100).toFixed(2),
+        highPrice: (Math.max(...prices) / 100).toFixed(2),
+        offerCount: product.variants.length,
+        availability: inStock
+          ? "https://schema.org/InStock"
+          : "https://schema.org/OutOfStock",
+      },
+    }),
     ...(summary.count > 0 && {
       aggregateRating: {
         "@type": "AggregateRating",

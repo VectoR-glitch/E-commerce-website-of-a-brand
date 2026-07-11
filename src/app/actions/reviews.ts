@@ -9,14 +9,16 @@ import { getSession } from "@/lib/session";
 
 export type ReviewState = { ok?: boolean; error?: string } | undefined;
 
-// Has this customer bought the product? Any non-cancelled order of theirs that
-// contains a variant of the product counts. (variantId can be null once a
-// variant is deleted, but the join simply won't match those — acceptable.)
+// Has this customer bought the product? Only a DELIVERED order counts — a
+// PENDING/ON_HOLD order hasn't reached them yet, and a RETURNED one was
+// refunded, so neither is a legitimate "verified purchase". (variantId can be
+// null once a variant is deleted, but the join simply won't match those —
+// acceptable.)
 async function hasPurchased(customerId: string, productId: string): Promise<boolean> {
   const item = await prisma.orderItem.findFirst({
     where: {
       variant: { productId },
-      order: { customerId, status: { not: "CANCELLED" } },
+      order: { customerId, status: "DELIVERED" },
     },
     select: { id: true },
   });

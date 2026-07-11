@@ -11,6 +11,12 @@ const PAYMENT_STATUSES = Object.values(PaymentStatus);
 const PAYMENT_METHODS = Object.values(PaymentMethod);
 const PAGE_SIZE = 100;
 
+// Matches the dashboard's "Needs fulfilment" tile link (admin/page.tsx) — a
+// real <option> for this exact value so the dropdown reflects the active
+// filter instead of falling back to "All", and resubmitting the form (e.g.
+// adding a search term) doesn't silently drop it.
+const NEEDS_FULFILMENT_STATUS = "CONFIRMED,ON_HOLD,PACKED";
+
 type SP = { status?: string; payment?: string; method?: string; q?: string; page?: string };
 
 // Builds a pagination link preserving the current filters, only overriding `page`.
@@ -104,6 +110,7 @@ export default async function OrdersPage(props: { searchParams: Promise<SP> }) {
           <label className={labelCls}>Status</label>
           <select name="status" defaultValue={sp.status ?? ""} className={fieldCls}>
             <option value="">All</option>
+            <option value={NEEDS_FULFILMENT_STATUS}>Needs fulfilment</option>
             {ORDER_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
           </select>
         </div>

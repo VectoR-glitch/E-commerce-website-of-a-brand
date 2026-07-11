@@ -131,6 +131,13 @@ export function CartProvider({
   // True once the user actually changes the cart — so the initial server-seed /
   // login-merge doesn't trigger a redundant write-back on every page load.
   const dirty = useRef(false);
+  // Always-current state, readable from inside the merge effect below without
+  // retriggering it — lets the merge tell whether the user changed the cart
+  // while the merge request was in flight.
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // Guest: reconcile the cart to localStorage. Runs on mount AND whenever we
   // become a guest — including right after logout, when this provider (it lives
@@ -165,10 +172,40 @@ export function CartProvider({
       } catch {
         // ignore corrupt storage
       }
+      // Snapshotted right before the merge request goes out, so we can tell
+      // afterward whether the user changed the cart (e.g. clicked "Add to
+      // cart" on the page they were redirected to) while it was in flight —
+      // blindly overwriting with the server's result would silently discard
+      // that action.
+      const preMergeItems = stateRef.current.items;
       if (guest.length) {
         try {
           const merged = await syncGuestCart(guest);
-          if (!cancelled) dispatch({ type: "HYDRATE", state: { items: merged } });
+          if (!cancelled) {
+            const latest = stateRef.current.items;
+            if (latest === preMergeItems) {
+              // Nothing changed while the merge was in flight.
+              dispatch({ type: "HYDRATE", state: { items: merged } });
+            } else {
+              // Reconcile: start from the server's authoritative merge, then
+              // re-apply whatever the user added/changed locally since the
+              // snapshot, and keep anything they removed, removed.
+              const byVariant = new Map(merged.map((i) => [i.variantId, i]));
+              const preByVariant = new Map(preMergeItems.map((i) => [i.variantId, i]));
+              for (const item of latest) {
+                const before = preByVariant.get(item.variantId);
+                if (!before || before.quantity !== item.quantity) {
+                  byVariant.set(item.variantId, item);
+                }
+              }
+              for (const before of preMergeItems) {
+                if (!latest.some((i) => i.variantId === before.variantId)) {
+                  byVariant.delete(before.variantId);
+                }
+              }
+              dispatch({ type: "HYDRATE", state: { items: [...byVariant.values()] } });
+            }
+          }
         } catch {
           // keep the server-seeded state on failure
         }
@@ -197,6 +234,31 @@ export function CartProvider({
     }, 500);
     return () => clearTimeout(t);
   }, [state, authenticated, synced]);
+
+  // The debounce above means a change made right before a tab close/switch
+  // can be lost — neither the server write nor (for signed-in customers) any
+  // local fallback has happened yet. Flush immediately when the tab is about
+  // to go away, using stateRef so this always sends the latest state
+  // regardless of when the listener was attached.
+  useEffect(() => {
+    if (!authenticated) return;
+    const flush = () => {
+      if (synced && dirty.current) {
+        persistCart(
+          stateRef.current.items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+        ).catch(() => {});
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [authenticated, synced]);
 
   const value = useMemo<CartContextValue>(() => {
     const count = state.items.reduce((n, i) => n + i.quantity, 0);

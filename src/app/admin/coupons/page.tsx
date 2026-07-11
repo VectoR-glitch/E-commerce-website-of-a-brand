@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
 import { createCoupon, toggleCoupon, deleteCoupon } from "@/app/admin/actions";
+import { isSystemCouponCode } from "@/lib/coupons";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 
 export const dynamic = "force-dynamic";
@@ -37,9 +38,17 @@ export default async function AdminCouponsPage() {
             {coupons.map((c) => {
               const expired = c.expiresAt != null && c.expiresAt.getTime() < now;
               const maxedOut = c.maxUses != null && c.usedCount >= c.maxUses;
+              const managed = isSystemCouponCode(c.code);
               return (
                 <tr key={c.id} className="border-t border-line">
-                  <td className="px-3 py-2 font-mono text-ink">{c.code}</td>
+                  <td className="px-3 py-2 font-mono text-ink">
+                    {c.code}
+                    {managed && (
+                      <span className="ml-2 smallcaps text-[10px] text-ink/45">
+                        {c.code.startsWith("KIT-") ? "· Managed by Kits" : "· Managed by Subscriptions"}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-3 py-2 text-ink/80">
                     {c.type === "PERCENT" ? `${c.value}%` : formatINR(c.value)}
                   </td>
@@ -74,15 +83,21 @@ export default async function AdminCouponsPage() {
                           {c.active ? "Disable" : "Enable"}
                         </button>
                       </form>
-                      <form action={deleteCoupon}>
-                        <input type="hidden" name="couponId" value={c.id} />
-                        <ConfirmSubmit
-                          message={`Delete coupon ${c.code}? Existing orders that used it are unaffected.`}
-                          className="text-xs text-red-600 hover:underline"
-                        >
+                      {managed ? (
+                        <span className="text-xs text-ink/35" title="Delete this from the Kits or Subscriptions page instead — it's kept in sync automatically.">
                           Delete
-                        </ConfirmSubmit>
-                      </form>
+                        </span>
+                      ) : (
+                        <form action={deleteCoupon}>
+                          <input type="hidden" name="couponId" value={c.id} />
+                          <ConfirmSubmit
+                            message={`Delete coupon ${c.code}? Existing orders that used it are unaffected.`}
+                            className="text-xs text-red-600 hover:underline"
+                          >
+                            Delete
+                          </ConfirmSubmit>
+                        </form>
+                      )}
                     </div>
                   </td>
                 </tr>

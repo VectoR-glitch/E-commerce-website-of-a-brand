@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -8,6 +9,7 @@ import { AddressForm } from "@/components/account/address-form";
 import { Kicker } from "@/components/kicker";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "My Account" };
 
 export default async function AccountPage() {
   const session = await requireSession("/account");

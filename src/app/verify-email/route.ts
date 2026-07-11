@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { hashToken } from "@/lib/auth";
+import { hashToken, safeNext } from "@/lib/auth";
 
 // GET target of the emailed verification link. Confirms the address, then
 // redirects to login with a status notice. A route handler (not a page) so the
@@ -8,14 +8,18 @@ import { hashToken } from "@/lib/auth";
 export async function GET(request: NextRequest) {
   const url = (path: string) => new URL(path, request.nextUrl.origin);
   const token = request.nextUrl.searchParams.get("token");
-  if (!token) return NextResponse.redirect(url("/login?notice=verify-invalid"));
+  // Carries a post-signup destination (e.g. registering mid-checkout) — see
+  // issueVerification in app/actions/account.ts, which embeds this in the link.
+  const next = safeNext(request.nextUrl.searchParams.get("next"));
+  const nextParam = next !== "/" ? `&next=${encodeURIComponent(next)}` : "";
+  if (!token) return NextResponse.redirect(url(`/login?notice=verify-invalid${nextParam}`));
 
   const row = await prisma.verificationToken.findUnique({
     where: { tokenHash: hashToken(token) },
     select: { customerId: true, expiresAt: true, customer: { select: { email: true } } },
   });
   if (!row || row.expiresAt < new Date()) {
-    return NextResponse.redirect(url("/login?notice=verify-expired"));
+    return NextResponse.redirect(url(`/login?notice=verify-expired${nextParam}`));
   }
 
   // Confirm the email, clear outstanding tokens, and CLAIM any past guest orders
@@ -30,5 +34,5 @@ export async function GET(request: NextRequest) {
     }),
   ]);
 
-  return NextResponse.redirect(url("/login?notice=verified"));
+  return NextResponse.redirect(url(`/login?notice=verified${nextParam}`));
 }

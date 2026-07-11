@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireSession } from "@/lib/session";
@@ -7,6 +8,7 @@ import { ORDER_STATUS_LABEL, orderStatusBadgeClass } from "@/lib/order-display";
 import { ReorderButton } from "@/components/reorder-button";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Order History" };
 
 export default async function AccountOrdersPage() {
   const session = await requireSession("/account/orders");

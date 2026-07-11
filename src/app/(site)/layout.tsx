@@ -12,6 +12,7 @@ import { RecentlyViewedProvider } from "@/lib/recently-viewed";
 import { getSession } from "@/lib/session";
 import { loadServerCartItems } from "@/lib/server-cart";
 import { loadServerWishlistItems } from "@/lib/server-wishlist";
+import { getFooterShopLinks } from "@/lib/products";
 
 export default async function SiteLayout({
   children,
@@ -26,6 +27,7 @@ export default async function SiteLayout({
   const [initialItems, initialWishlist] = session
     ? await Promise.all([loadServerCartItems(session.sub), loadServerWishlistItems(session.sub)])
     : [[], []];
+  const shopLinks = await getFooterShopLinks();
 
   return (
     <CartProvider authenticated={Boolean(session)} initialItems={initialItems}>
@@ -43,7 +45,7 @@ export default async function SiteLayout({
         {children}
       </main>
       <CleaningFact />
-      <SiteFooter />
+      <SiteFooter shopLinks={shopLinks} />
       <BackToTop />
       <CartDrawer />
       <MapleEasterEgg />

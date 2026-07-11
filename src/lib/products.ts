@@ -120,6 +120,24 @@ export async function getProducts(): Promise<Product[]> {
   return [...curated, ...extras];
 }
 
+// The flagship products the site footer highlights. Queried directly (not via
+// getProducts()) since the footer only needs slug+name for a fixed 3 products,
+// not the full hydrated catalog shape every page would otherwise pay for.
+const FOOTER_SHOP_SLUGS = ["dishwash-gel-lime", "floor-cleaner", "toilet-cleaner"];
+
+export async function getFooterShopLinks(): Promise<{ href: string; label: string }[]> {
+  const rows = await prisma.product.findMany({
+    where: { slug: { in: FOOTER_SHOP_SLUGS }, active: true },
+    select: { slug: true, name: true },
+  });
+  const bySlug = new Map(rows.map((r) => [r.slug, r]));
+  // Keep FOOTER_SHOP_SLUGS' curated order rather than the DB's row order; a
+  // deactivated product is simply absent from `rows` and drops out here.
+  return FOOTER_SHOP_SLUGS.map((slug) => bySlug.get(slug))
+    .filter((r): r is { slug: string; name: string } => Boolean(r))
+    .map((r) => ({ href: `/product/${r.slug}`, label: r.name }));
+}
+
 export async function getProduct(slug: string): Promise<Product | undefined> {
   const db = await prisma.product.findUnique({
     where: { slug },

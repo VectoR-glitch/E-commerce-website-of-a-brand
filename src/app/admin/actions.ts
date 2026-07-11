@@ -813,7 +813,9 @@ export async function createBlogPost(
     return { error: "Slug may only contain lowercase letters, numbers, and hyphens." };
   }
 
-  const clash = await prisma.blogPost.findUnique({ where: { slug } });
+  const clash = await prisma.blogPost.findFirst({
+    where: { OR: [{ slug }, { previousSlugs: { has: slug } }] },
+  });
   if (clash) return { error: `Slug "${slug}" is already used by another post.` };
 
   // Created as an empty draft; the edit page fills in excerpt/body/cover next.
@@ -844,12 +846,14 @@ export async function updateBlogPost(
 
   const existing = await prisma.blogPost.findUnique({
     where: { id },
-    select: { slug: true, publishedAt: true },
+    select: { slug: true, publishedAt: true, previousSlugs: true },
   });
   if (!existing) return { error: "Post not found." };
 
   if (slug !== existing.slug) {
-    const clash = await prisma.blogPost.findUnique({ where: { slug } });
+    const clash = await prisma.blogPost.findFirst({
+      where: { OR: [{ slug }, { previousSlugs: { has: slug } }] },
+    });
     if (clash) return { error: `Slug "${slug}" is already used by another post.` };
   }
 
@@ -858,6 +862,12 @@ export async function updateBlogPost(
     data: {
       title,
       slug,
+      // Remember the old slug so a bookmarked/indexed URL still redirects
+      // instead of 404ing once the post moves to a new one.
+      previousSlugs:
+        slug !== existing.slug
+          ? [...existing.previousSlugs.filter((s) => s !== slug), existing.slug]
+          : existing.previousSlugs,
       excerpt,
       body,
       metaDescription,

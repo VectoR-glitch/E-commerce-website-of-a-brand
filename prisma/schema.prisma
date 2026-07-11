@@ -511,6 +511,7 @@ model Subscription {
 model BlogPost {
   id              String    @id @default(cuid())
   slug            String    @unique
+  previousSlugs   String[]  @default([]) // old slugs this post has held — redirected to the current slug
   title           String
   excerpt         String // card blurb + meta description fallback
   body            String

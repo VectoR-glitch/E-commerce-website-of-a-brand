@@ -40,7 +40,12 @@ export function QuantityStepper({
       <button
         type="button"
         aria-label="Decrease quantity"
-        onClick={() => onChange(value - 1)}
+        onClick={() => {
+          // At qty 1, − removes the line entirely — confirm so a stray click
+          // (easy to make right next to +) doesn't silently drop the item.
+          if (value === 1 && !window.confirm("Remove this item from your cart?")) return;
+          onChange(value - 1);
+        }}
         className="px-3 py-1.5 text-lg hover:bg-bone"
       >
         −

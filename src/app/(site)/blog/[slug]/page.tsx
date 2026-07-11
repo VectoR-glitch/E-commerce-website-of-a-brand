@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { Ornament } from "@/components/ornament";
 import { Kicker } from "@/components/kicker";
 import { BlogCard } from "@/components/blog-card";
-import { getPublishedPost, getPublishedPosts, bodyParagraphs } from "@/lib/blog";
+import { getPublishedPost, getPublishedPosts, findRedirectSlug, bodyParagraphs } from "@/lib/blog";
 import { SITE_URL } from "@/lib/constants";
 import { jsonLdHtml } from "@/lib/json-ld";
 
@@ -72,7 +72,11 @@ function breadcrumbJsonLd(post: { title: string; slug: string }) {
 export default async function BlogPostPage(props: PageProps<"/blog/[slug]">) {
   const { slug } = await props.params;
   const post = await getPublishedPost(slug);
-  if (!post) notFound();
+  if (!post) {
+    const newSlug = await findRedirectSlug(slug);
+    if (newSlug) redirect(`/blog/${newSlug}`);
+    notFound();
+  }
 
   const dateLabel = post.publishedAt.toLocaleDateString("en-IN", {
     day: "numeric",

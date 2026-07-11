@@ -78,6 +78,18 @@ export async function getPublishedPost(slug: string): Promise<BlogPostDetail | n
   };
 }
 
+// Looks up the current slug for a post that used to live at `slug`, so a
+// renamed post's old URL (bookmarked, indexed, linked externally) redirects
+// instead of 404ing. Only matches published posts — an unpublished post's old
+// slug shouldn't resurrect a dead link.
+export async function findRedirectSlug(slug: string): Promise<string | null> {
+  const post = await prisma.blogPost.findFirst({
+    where: { previousSlugs: { has: slug }, published: true },
+    select: { slug: true },
+  });
+  return post?.slug ?? null;
+}
+
 // Splits stored body text on blank lines into paragraphs for rendering.
 export function bodyParagraphs(body: string): string[] {
   return body

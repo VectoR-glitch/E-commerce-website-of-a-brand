@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { createBlogPost } from "@/app/admin/actions";
+import { NewBlogPostForm } from "@/components/new-blog-post-form";
 
 export const dynamic = "force-dynamic";
-
-const fieldCls = "border border-line bg-white px-3 py-2 text-sm outline-none focus:border-forest";
 
 const dateFmt = (d: Date) =>
   d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
@@ -65,18 +63,7 @@ export default async function AdminBlogPage() {
 
       <div className="mt-8 max-w-lg border border-line bg-paper p-5">
         <h2 className="smallcaps text-brass-deep">New post</h2>
-        <form action={createBlogPost} className="mt-3 space-y-3">
-          <input name="title" required placeholder="Title" className={`${fieldCls} w-full`} />
-          <input
-            name="slug"
-            required
-            pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
-            placeholder="slug (e.g. why-plant-powered-cleaning-matters)"
-            className={`${fieldCls} w-full`}
-          />
-          <p className="text-xs text-ink/55">Add the excerpt, body and cover photo after creating it.</p>
-          <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Create draft</button>
-        </form>
+        <NewBlogPostForm />
       </div>
     </div>
   );

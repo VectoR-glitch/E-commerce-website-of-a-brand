@@ -8,6 +8,14 @@ import { createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from
 export const SESSION_COOKIE = "klenich_session";
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+// Only allow same-origin internal redirect targets — prevents an open
+// redirect via a crafted ?next=https://evil.com. Shared by every flow that
+// threads a post-auth destination through (login, register, email
+// verification), so they can't drift out of sync with each other.
+export function safeNext(next: string | undefined | null): string {
+  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
+}
+
 // ── One-time tokens (email verification, password reset) ─────────────────────
 // The raw token goes in the emailed link; only its SHA-256 hash is stored, so a
 // leaked DB row can't be replayed as a valid link. Lookups hash the incoming

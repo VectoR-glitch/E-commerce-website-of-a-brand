@@ -5,6 +5,7 @@ import { Ornament } from "@/components/ornament";
 import { Kicker } from "@/components/kicker";
 import { LoginForm } from "@/components/login-form";
 import { getSession } from "@/lib/session";
+import { safeNext } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,6 @@ export const metadata: Metadata = {
   title: "Log In",
   robots: { index: false, follow: false },
 };
-
-function safeNext(next: string | undefined): string {
-  return next && next.startsWith("/") && !next.startsWith("//") ? next : "/";
-}
 
 // Status banners shown above the form after a verification link / signup.
 const NOTICES: Record<string, { tone: "ok" | "info" | "warn"; text: string }> = {

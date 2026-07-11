@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
@@ -8,6 +9,7 @@ import { ORDER_STATUS_LABEL, orderStatusBadgeClass, paymentMethodLabel } from "@
 import { ReorderButton } from "@/components/reorder-button";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Order Details" };
 
 export default async function AccountOrderDetail(props: { params: Promise<{ id: string }> }) {
   const session = await requireSession("/account/orders");

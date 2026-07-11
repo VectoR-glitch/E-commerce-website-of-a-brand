@@ -96,6 +96,7 @@ export function LoginForm({ next }: { next: string }) {
       {state?.unverified && state.email && (
         <form action={resendAction} className="mt-4 text-center">
           <input type="hidden" name="email" value={state.email} />
+          <input type="hidden" name="next" value={next} />
           {resend?.ok ? (
             <p className="text-sm text-forest">Verification email sent — check your inbox.</p>
           ) : (

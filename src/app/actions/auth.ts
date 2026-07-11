@@ -2,19 +2,13 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword, DUMMY_PASSWORD_HASH } from "@/lib/auth";
+import { verifyPassword, DUMMY_PASSWORD_HASH, safeNext } from "@/lib/auth";
 import { setSessionCookie, clearSessionCookie } from "@/lib/session";
 import { rateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
 
 // `unverified` lets the login form offer a "resend verification" action for a
 // correct-but-unconfirmed customer account (carrying the email it was for).
 export type LoginState = { error?: string; unverified?: boolean; email?: string } | undefined;
-
-// Only allow same-origin internal redirect targets (prevents open-redirect via
-// a crafted ?next=https://evil.com).
-function safeNext(next: string): string {
-  return next.startsWith("/") && !next.startsWith("//") ? next : "/";
-}
 
 export async function loginAction(
   _prev: LoginState,

@@ -8,12 +8,13 @@ import { INDIAN_STATES } from "@/lib/constants";
 const field =
   "mt-2 w-full border border-line bg-white px-3.5 py-3 text-sm outline-none focus:border-forest";
 
-export function RegisterForm({ referral }: { referral?: string }) {
+export function RegisterForm({ referral, next }: { referral?: string; next?: string }) {
   const [state, action, pending] = useActionState<RegisterState, FormData>(registerAction, undefined);
 
   return (
     <form action={action} className="mt-10 space-y-5">
       {referral && <input type="hidden" name="ref" value={referral} />}
+      {next && <input type="hidden" name="next" value={next} />}
       <div>
         <label htmlFor="name" className="smallcaps text-brass-deep">Name</label>
         <input id="name" name="name" type="text" autoComplete="name" required className={field} />
@@ -116,7 +117,12 @@ export function RegisterForm({ referral }: { referral?: string }) {
 
       <p className="text-center text-sm text-ink/60">
         Already have an account?{" "}
-        <Link href="/login" className="text-forest hover:underline">Sign in</Link>
+        <Link
+          href={next ? `/login?next=${encodeURIComponent(next)}` : "/login"}
+          className="text-forest hover:underline"
+        >
+          Sign in
+        </Link>
       </p>
     </form>
   );

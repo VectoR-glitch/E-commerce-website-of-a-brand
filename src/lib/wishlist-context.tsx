@@ -93,6 +93,13 @@ export function WishlistProvider({
   // True once the user actually changes the wishlist — so the initial
   // server-seed / login-merge doesn't trigger a redundant write-back on load.
   const dirty = useRef(false);
+  // Always-current state, readable from inside the merge effect below without
+  // retriggering it — lets the merge tell whether the user changed the
+  // wishlist while the merge request was in flight.
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   // Guest: reconcile to localStorage. Runs on mount AND whenever we become a
   // guest — including right after logout, when this provider (it lives in a
@@ -126,10 +133,40 @@ export function WishlistProvider({
       } catch {
         // ignore corrupt storage
       }
+      // Snapshotted right before the merge request goes out, so we can tell
+      // afterward whether the user changed the wishlist (e.g. saved another
+      // item on the page they were redirected to) while it was in flight —
+      // blindly overwriting with the server's result would silently discard
+      // that action.
+      const preMergeItems = stateRef.current.items;
       if (guest.length) {
         try {
           const merged = await syncGuestWishlist(guest);
-          if (!cancelled) dispatch({ type: "HYDRATE", state: { items: merged } });
+          if (!cancelled) {
+            const latest = stateRef.current.items;
+            if (latest === preMergeItems) {
+              // Nothing changed while the merge was in flight.
+              dispatch({ type: "HYDRATE", state: { items: merged } });
+            } else {
+              // Reconcile: start from the server's authoritative merge, then
+              // re-apply whatever the user toggled locally since the
+              // snapshot, and keep anything they removed, removed.
+              const byKey = new Map(merged.map((i) => [wishlistKey(i.slug, i.fragrance), i]));
+              const preByKey = new Map(
+                preMergeItems.map((i) => [wishlistKey(i.slug, i.fragrance), i]),
+              );
+              for (const item of latest) {
+                const key = wishlistKey(item.slug, item.fragrance);
+                if (!preByKey.has(key)) byKey.set(key, item);
+              }
+              for (const before of preMergeItems) {
+                const key = wishlistKey(before.slug, before.fragrance);
+                const stillThere = latest.some((i) => wishlistKey(i.slug, i.fragrance) === key);
+                if (!stillThere) byKey.delete(key);
+              }
+              dispatch({ type: "HYDRATE", state: { items: [...byKey.values()] } });
+            }
+          }
         } catch {
           // keep the server-seeded state on failure
         }
@@ -158,6 +195,28 @@ export function WishlistProvider({
     }, 500);
     return () => clearTimeout(t);
   }, [state, authenticated, synced]);
+
+  // The debounce above means a change made right before a tab close/switch
+  // can be lost. Flush immediately when the tab is about to go away, using
+  // stateRef so this always sends the latest state regardless of when the
+  // listener was attached.
+  useEffect(() => {
+    if (!authenticated) return;
+    const flush = () => {
+      if (synced && dirty.current) {
+        persistWishlist(toWire(stateRef.current.items)).catch(() => {});
+      }
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [authenticated, synced]);
 
   const value = useMemo<WishlistContextValue>(() => {
     const keys = new Set(state.items.map((i) => wishlistKey(i.slug, i.fragrance)));

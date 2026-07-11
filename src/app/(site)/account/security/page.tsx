@@ -1,8 +1,10 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession } from "@/lib/session";
 import { ChangePasswordForm } from "@/components/account/change-password-form";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Account Security" };
 
 export default async function AccountSecurityPage() {
   await requireSession("/account/security");

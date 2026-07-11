@@ -88,6 +88,9 @@ export async function pauseSubscription(formData: FormData): Promise<void> {
   const sub = await ownedSub(id, session.sub);
   if (!sub || sub.status === "CANCELLED") return;
   await prisma.subscription.update({ where: { id }, data: { status: "PAUSED" } });
+  // Deactivate the private coupon too — otherwise it keeps discounting any
+  // order indefinitely while the account page shows "Paused."
+  await syncSubscriptionCoupon(id, sub.discountPercent, false);
   revalidatePath("/account/subscriptions");
 }
 
@@ -100,6 +103,7 @@ export async function resumeSubscription(formData: FormData): Promise<void> {
   // Push the next delivery to a fresh full interval from today.
   const nextDeliveryAt = new Date(Date.now() + sub.intervalDays * DAY_MS);
   await prisma.subscription.update({ where: { id }, data: { status: "ACTIVE", nextDeliveryAt } });
+  await syncSubscriptionCoupon(id, sub.discountPercent, true);
   revalidatePath("/account/subscriptions");
 }
 

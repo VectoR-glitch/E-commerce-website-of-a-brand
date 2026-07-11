@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
 import { requireSession } from "@/lib/session";
@@ -13,6 +14,7 @@ import { ConfirmSubmit } from "@/components/confirm-submit";
 import { SubscriptionOrderNow } from "@/components/subscription-order-now";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { title: "Subscribe & Save" };
 
 const dateFmt = (d: Date) =>
   d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });

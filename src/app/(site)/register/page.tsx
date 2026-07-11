@@ -4,6 +4,7 @@ import { Ornament } from "@/components/ornament";
 import { Kicker } from "@/components/kicker";
 import { RegisterForm } from "@/components/register-form";
 import { getSession } from "@/lib/session";
+import { safeNext } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +22,11 @@ export default async function RegisterPage(props: PageProps<"/register">) {
 
   // A friend's referral link lands here as ?ref=CODE — carry it into the form
   // so registration can attribute the referral.
-  const { ref } = await props.searchParams;
+  const { ref, next } = await props.searchParams;
   const referral = typeof ref === "string" ? ref : undefined;
+  // Signing up mid-checkout (e.g. /register?next=/checkout) should return the
+  // shopper there after they verify + log in, same as the /login?next= path.
+  const target = safeNext(typeof next === "string" ? next : undefined);
 
   return (
     <div className="mx-auto max-w-md px-8 py-20">
@@ -40,7 +44,7 @@ export default async function RegisterPage(props: PageProps<"/register">) {
           </p>
         )}
       </header>
-      <RegisterForm referral={referral} />
+      <RegisterForm referral={referral} next={target} />
     </div>
   );
 }

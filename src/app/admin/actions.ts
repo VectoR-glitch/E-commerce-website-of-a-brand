@@ -10,8 +10,9 @@ import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
 import { sendOrderStatusWhatsApp } from "@/lib/whatsapp";
 import { awardLoyaltyForDeliveredOrder, reverseLoyaltyForOrder } from "@/lib/loyalty";
 import { bundleCouponCode } from "@/lib/bundles";
-import { sendDueSubscriptionReminders } from "@/lib/subscriptions";
+import { sendDueSubscriptionReminders, subscriptionCouponCode } from "@/lib/subscriptions";
 import { notifyBackInStockForVariant } from "@/lib/back-in-stock";
+import { isSystemCouponCode } from "@/lib/coupons";
 
 const ORDER_STATUSES = Object.values(OrderStatus);
 const PAYMENT_STATUSES = Object.values(PaymentStatus);
@@ -424,6 +425,20 @@ export async function createVariant(formData: FormData): Promise<void> {
   revalidatePath("/admin/stock");
 }
 
+// Deactivates the private SUB-<id> coupon for every non-cancelled subscription
+// on the given variants, so a variant/product delete never leaves an orphaned
+// coupon that keeps discounting orders with no subscription left to cancel it.
+async function cancelSubscriptionCouponsForVariants(variantIds: string[]): Promise<void> {
+  const subs = await prisma.subscription.findMany({
+    where: { variantId: { in: variantIds }, status: { not: "CANCELLED" } },
+    select: { id: true },
+  });
+  if (subs.length === 0) return;
+  await prisma.coupon.deleteMany({
+    where: { code: { in: subs.map((s) => subscriptionCouponCode(s.id)) } },
+  });
+}
+
 // Permanently remove a variant. Safe for order history: OrderItem.variantId is
 // optional (nulled on delete) and each OrderItem keeps its own snapshot (sku,
 // name, size, price); cart references cascade away. To just hide a variant from
@@ -437,6 +452,13 @@ export async function deleteVariant(formData: FormData): Promise<void> {
     select: { productId: true },
   });
   if (!variant) return;
+
+  // Deleting the variant cascades away any Subscription row for it (required
+  // FK), but NOT that subscription's private SUB-<id> coupon — Coupon has no
+  // FK relation, so without this it would stay active forever with no
+  // subscription left to cancel it from.
+  await cancelSubscriptionCouponsForVariants([id]);
+
   await prisma.variant.delete({ where: { id } });
   revalidatePath(`/admin/products/${variant.productId}`);
   revalidatePath("/admin/stock");
@@ -450,8 +472,14 @@ export async function deleteProduct(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("productId") ?? "");
   if (!id) return;
-  const product = await prisma.product.findUnique({ where: { id }, select: { id: true } });
+  const product = await prisma.product.findUnique({
+    where: { id },
+    select: { id: true, variants: { select: { id: true } } },
+  });
   if (!product) return;
+
+  await cancelSubscriptionCouponsForVariants(product.variants.map((v) => v.id));
+
   await prisma.$transaction([
     prisma.variant.deleteMany({ where: { productId: id } }),
     prisma.product.delete({ where: { id } }),
@@ -599,6 +627,8 @@ export async function deleteCoupon(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("couponId") ?? "");
   if (!id) return;
+  const c = await prisma.coupon.findUnique({ where: { id }, select: { code: true } });
+  if (!c || isSystemCouponCode(c.code)) return;
   await prisma.coupon.delete({ where: { id } });
   revalidatePath("/admin/coupons");
 }
@@ -769,14 +799,22 @@ export async function removeBundleImage(formData: FormData): Promise<void> {
 // ── Blog / journal ───────────────────────────────────────────────────────────
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-export async function createBlogPost(formData: FormData): Promise<void> {
+export type BlogPostState = { error?: string } | undefined;
+
+export async function createBlogPost(
+  _prev: BlogPostState,
+  formData: FormData,
+): Promise<BlogPostState> {
   await requireAdmin();
   const title = String(formData.get("title") ?? "").trim();
   const slug = String(formData.get("slug") ?? "").trim().toLowerCase();
-  if (!title || !SLUG_RE.test(slug)) return;
+  if (!title) return { error: "Enter a title." };
+  if (!SLUG_RE.test(slug)) {
+    return { error: "Slug may only contain lowercase letters, numbers, and hyphens." };
+  }
 
   const clash = await prisma.blogPost.findUnique({ where: { slug } });
-  if (clash) return;
+  if (clash) return { error: `Slug "${slug}" is already used by another post.` };
 
   // Created as an empty draft; the edit page fills in excerpt/body/cover next.
   const post = await prisma.blogPost.create({ data: { title, slug, excerpt: "", body: "" } });
@@ -784,7 +822,10 @@ export async function createBlogPost(formData: FormData): Promise<void> {
   redirect(`/admin/blog/${post.id}`);
 }
 
-export async function updateBlogPost(formData: FormData): Promise<void> {
+export async function updateBlogPost(
+  _prev: BlogPostState,
+  formData: FormData,
+): Promise<BlogPostState> {
   await requireAdmin();
   const id = String(formData.get("blogPostId") ?? "");
   const title = String(formData.get("title") ?? "").trim();
@@ -793,17 +834,23 @@ export async function updateBlogPost(formData: FormData): Promise<void> {
   const body = String(formData.get("body") ?? "").trim();
   const metaDescription = String(formData.get("metaDescription") ?? "").trim() || null;
   const published = formData.get("published") === "on";
-  if (!id || !title || !SLUG_RE.test(slug) || !excerpt || !body) return;
+  if (!id) return { error: "Missing post." };
+  if (!title) return { error: "Enter a title." };
+  if (!SLUG_RE.test(slug)) {
+    return { error: "Slug may only contain lowercase letters, numbers, and hyphens." };
+  }
+  if (!excerpt) return { error: "Enter an excerpt." };
+  if (!body) return { error: "Enter the post body." };
 
   const existing = await prisma.blogPost.findUnique({
     where: { id },
     select: { slug: true, publishedAt: true },
   });
-  if (!existing) return;
+  if (!existing) return { error: "Post not found." };
 
   if (slug !== existing.slug) {
     const clash = await prisma.blogPost.findUnique({ where: { slug } });
-    if (clash) return;
+    if (clash) return { error: `Slug "${slug}" is already used by another post.` };
   }
 
   await prisma.blogPost.update({
@@ -825,6 +872,7 @@ export async function updateBlogPost(formData: FormData): Promise<void> {
   revalidatePath("/blog");
   revalidatePath(`/blog/${existing.slug}`);
   if (slug !== existing.slug) revalidatePath(`/blog/${slug}`);
+  return {};
 }
 
 export async function deleteBlogPost(formData: FormData): Promise<void> {

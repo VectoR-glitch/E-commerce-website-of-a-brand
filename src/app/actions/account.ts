@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, generateToken, MAX_PASSWORD_LENGTH } from "@/lib/auth";
+import { hashPassword, generateToken, MAX_PASSWORD_LENGTH, safeNext } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { rateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
 import { sendVerificationEmail } from "@/lib/email";
@@ -29,13 +29,22 @@ async function originFromHeaders(): Promise<string> {
 
 // Issues a fresh verification token and emails the link. Old tokens are left in
 // place (they simply expire) so a resend never invalidates a link already sent.
-async function issueVerification(customerId: string, email: string, name: string | null): Promise<void> {
+// `next` (e.g. "/checkout") is embedded in the emailed link itself — it's the
+// only way to carry a post-signup destination across the redirect chain
+// (register -> verify-email link, clicked from the customer's inbox -> login).
+async function issueVerification(
+  customerId: string,
+  email: string,
+  name: string | null,
+  next?: string,
+): Promise<void> {
   const { token, tokenHash } = generateToken();
   await prisma.verificationToken.create({
     data: { customerId, tokenHash, expiresAt: new Date(Date.now() + VERIFY_TTL_MS) },
   });
   const origin = await originFromHeaders();
-  const link = `${origin}/verify-email?token=${token}`;
+  const nextParam = next && next !== "/" ? `&next=${encodeURIComponent(next)}` : "";
+  const link = `${origin}/verify-email?token=${token}${nextParam}`;
   await sendVerificationEmail(email, name, link);
   // Dev convenience: with no Resend key the email can't send, so surface the
   // link in the server log to complete the flow locally.
@@ -60,6 +69,7 @@ export async function registerAction(_prev: RegisterState, formData: FormData): 
   const city = String(formData.get("city") ?? "").trim();
   const state = String(formData.get("state") ?? "").trim();
   const pincode = String(formData.get("pincode") ?? "").trim();
+  const next = safeNext(String(formData.get("next") ?? ""));
 
   if (!name) return { error: "Please enter your name." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a valid email address." };
@@ -124,11 +134,12 @@ export async function registerAction(_prev: RegisterState, formData: FormData): 
     });
   }
 
-  await issueVerification(customer.id, email, name);
+  await issueVerification(customer.id, email, name, next);
 
   // Not signed in yet — email must be confirmed first. Send them to login with
-  // a "check your inbox" notice.
-  redirect("/login?notice=verify-sent");
+  // a "check your inbox" notice, carrying `next` in case they navigate back to
+  // login directly instead of clicking the emailed link.
+  redirect(`/login?notice=verify-sent${next !== "/" ? `&next=${encodeURIComponent(next)}` : ""}`);
 }
 
 export async function resendVerificationAction(_prev: ResendState, formData: FormData): Promise<ResendState> {
@@ -139,11 +150,12 @@ export async function resendVerificationAction(_prev: ResendState, formData: For
   if (!rl.ok) return { error: "Too many requests. Please wait a few minutes and try again." };
 
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const next = safeNext(String(formData.get("next") ?? ""));
   const customer = await prisma.customer.findUnique({ where: { email } });
   // Only (re)send for an unverified customer login account. Always report the
   // same success — never reveal whether an email is registered/verified.
   if (customer && customer.passwordHash && customer.role === "CUSTOMER" && !customer.emailVerified) {
-    await issueVerification(customer.id, email, customer.name);
+    await issueVerification(customer.id, email, customer.name, next);
   }
   return { ok: true };
 }

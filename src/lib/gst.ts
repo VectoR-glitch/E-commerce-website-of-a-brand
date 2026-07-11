@@ -16,6 +16,11 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { INDIAN_STATES } from "@/lib/constants";
 
+// Deliberately DIFFERENT from the address/phone/email shown on Privacy,
+// Terms, and Contact — this is the GST-registered supplier address, used only
+// on invoices/bills. The public-facing pages intentionally show a separate
+// customer correspondence address. Confirmed intentional 2026-07-11 — don't
+// "fix" by unifying the two; if either needs to change, change it here only.
 export const SUPPLIER = {
   legalName: "Bharat Bliss Private Limited",
   brand: "Klenich",

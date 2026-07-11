@@ -91,7 +91,16 @@ type InvoiceOrder = {
 function InvoiceDocument({ order }: { order: InvoiceOrder }) {
   const breakdown = computeInvoiceBreakdown(order);
   const placeOfSupplyCode = gstStateCode(order.shipState);
-  const dateLabel = order.invoiceGeneratedAt.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  // Explicit IST — without it this reads the server's LOCAL system timezone
+  // (UTC on Vercel), which could print a date that disagrees with the
+  // invoice NUMBER's financial-year series (that's computed via IST in
+  // gst.ts's financialYearLabel) during the window around midnight IST.
+  const dateLabel = order.invoiceGeneratedAt.toLocaleDateString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
   const codDue = order.totalPaise - order.amountPaidPaise;
   // Only show a rate suffix (e.g. "@9%") when every line shares one rate —
   // with mixed rates in a future order, the summed figure spans more than one

@@ -96,10 +96,21 @@ export function isIntraState(shipState: string): boolean {
   return shipState.trim().toLowerCase() === SUPPLIER.state.toLowerCase();
 }
 
-// Indian financial year: 1 April – 31 March, labelled e.g. "2026-27".
+// India's financial year boundary (1 April) is defined in IST — but
+// getFullYear()/getMonth() read the server's LOCAL system timezone, which is
+// UTC on Vercel. Shifting by the fixed IST offset and reading back via the
+// UTC getters makes this correct regardless of what timezone the process
+// actually runs in (unlike toLocaleString, this needs no Intl/ICU data).
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+export function toIST(date: Date): Date {
+  return new Date(date.getTime() + IST_OFFSET_MS);
+}
+
+// Indian financial year: 1 April – 31 March (IST), labelled e.g. "2026-27".
 export function financialYearLabel(date: Date): string {
-  const y = date.getFullYear();
-  const fyStart = date.getMonth() >= 3 ? y : y - 1; // getMonth() 3 = April
+  const ist = toIST(date);
+  const y = ist.getUTCFullYear();
+  const fyStart = ist.getUTCMonth() >= 3 ? y : y - 1; // getUTCMonth() 3 = April
   return `${fyStart}-${String((fyStart + 1) % 100).padStart(2, "0")}`;
 }
 

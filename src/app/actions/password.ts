@@ -2,7 +2,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, verifyPassword, generateToken, hashToken } from "@/lib/auth";
+import { hashPassword, verifyPassword, generateToken, hashToken, MAX_PASSWORD_LENGTH } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { rateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
 import { sendPasswordResetEmail } from "@/lib/email";
@@ -28,11 +28,18 @@ export async function changePasswordAction(
   const session = await getSession();
   if (!session) return { error: "You're not signed in." };
 
+  // Keyed on the account, not the IP — this guards a stolen session trying to
+  // brute-force the current password (the attacker already has the session,
+  // so an IP-based limit wouldn't help).
+  const rl = await rateLimit(`changepw:${session.sub}`, { limit: 10, windowMs: 10 * 60 * 1000 });
+  if (!rl.ok) return { error: "Too many attempts. Please wait a few minutes and try again." };
+
   const current = String(formData.get("currentPassword") ?? "");
   const next = String(formData.get("newPassword") ?? "");
   const confirm = String(formData.get("confirmPassword") ?? "");
 
   if (next.length < 8) return { error: "New password must be at least 8 characters." };
+  if (next.length > MAX_PASSWORD_LENGTH) return { error: `New password must be ${MAX_PASSWORD_LENGTH} characters or fewer.` };
   if (next !== confirm) return { error: "The new passwords don't match." };
 
   const customer = await prisma.customer.findUnique({ where: { id: session.sub } });
@@ -87,6 +94,7 @@ export async function resetPasswordAction(_prev: ResetState, formData: FormData)
 
   if (!token) return { error: "This reset link is invalid." };
   if (next.length < 8) return { error: "Password must be at least 8 characters." };
+  if (next.length > MAX_PASSWORD_LENGTH) return { error: `Password must be ${MAX_PASSWORD_LENGTH} characters or fewer.` };
   if (next !== confirm) return { error: "The passwords don't match." };
 
   const row = await prisma.passwordResetToken.findUnique({

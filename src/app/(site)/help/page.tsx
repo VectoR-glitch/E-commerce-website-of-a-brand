@@ -42,7 +42,7 @@ const faqs = [
   },
   {
     q: "How can I pay?",
-    a: "You can pay securely online via UPI, cards, and netbanking at checkout. (Online payment is being finalised.)",
+    a: "You can pay securely online via UPI, cards, and netbanking at checkout.",
   },
 ];
 

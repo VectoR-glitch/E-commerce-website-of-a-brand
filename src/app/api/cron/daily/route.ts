@@ -51,5 +51,10 @@ export async function GET(request: Request): Promise<Response> {
   const backInStock = await runTask("back-in-stock", runBackInStockSweep);
   const abandonedCart = await runTask("abandoned-cart", runAbandonedCartSweep);
 
+  // Individual send failures are logged where they happen; this summary line
+  // makes a systemic outage (e.g. sent:0 across the board) scannable in the
+  // server logs even though nothing currently reads the JSON response below.
+  console.log("Daily cron summary:", { subscriptions, backInStock, abandonedCart });
+
   return NextResponse.json({ ok: true, subscriptions, backInStock, abandonedCart });
 }

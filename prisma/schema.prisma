@@ -464,8 +464,15 @@ model Coupon {
   usedCount     Int          @default(0)
   active        Boolean      @default(true)
   expiresAt     DateTime? // null = never expires
+  // Set only for customer-specific codes (currently: loyalty-points vouchers,
+  // see redeemPoints in lib/loyalty.ts). Null for everything shareable — public
+  // promo codes, kit codes (KIT-<slug>), subscription codes (SUB-<id>). When
+  // set, validateCoupon only accepts the code from that exact customer.
+  customerId    String?
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
+
+  @@index([customerId])
 }
 
 /// A "subscribe & save" standing order. Managed + reminder model (no stored

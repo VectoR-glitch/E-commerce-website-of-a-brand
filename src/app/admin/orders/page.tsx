@@ -11,7 +11,19 @@ const PAYMENT_STATUSES = Object.values(PaymentStatus);
 const PAYMENT_METHODS = Object.values(PaymentMethod);
 const PAGE_SIZE = 100;
 
-type SP = { status?: string; payment?: string; method?: string; q?: string };
+type SP = { status?: string; payment?: string; method?: string; q?: string; page?: string };
+
+// Builds a pagination link preserving the current filters, only overriding `page`.
+function pageHref(sp: SP, page: number): string {
+  const params = new URLSearchParams();
+  if (sp.status) params.set("status", sp.status);
+  if (sp.payment) params.set("payment", sp.payment);
+  if (sp.method) params.set("method", sp.method);
+  if (sp.q) params.set("q", sp.q);
+  if (page > 1) params.set("page", String(page));
+  const qs = params.toString();
+  return qs ? `/admin/orders?${qs}` : "/admin/orders";
+}
 
 // toISOString() is always UTC — Klenich operates in IST (UTC+5:30), so that
 // silently showed a time 5.5 hours behind the actual order time.
@@ -32,8 +44,14 @@ export default async function OrdersPage(props: { searchParams: Promise<SP> }) {
   const sp = await props.searchParams;
 
   const where: Prisma.OrderWhereInput = {};
-  if (sp.status && ORDER_STATUSES.includes(sp.status as OrderStatus)) {
-    where.status = sp.status as OrderStatus;
+  // Comma-separated so dashboard tiles can link to a multi-status view (e.g.
+  // "Needs fulfilment" = CONFIRMED+ON_HOLD+PACKED) without a second filter UI.
+  const statuses = (sp.status ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s): s is OrderStatus => ORDER_STATUSES.includes(s as OrderStatus));
+  if (statuses.length > 0) {
+    where.status = { in: statuses };
   }
   if (sp.payment && PAYMENT_STATUSES.includes(sp.payment as PaymentStatus)) {
     where.paymentStatus = sp.payment as PaymentStatus;
@@ -50,15 +68,22 @@ export default async function OrdersPage(props: { searchParams: Promise<SP> }) {
     ];
   }
 
-  const orders = await prisma.order.findMany({
+  const page = Math.max(1, Math.floor(Number(sp.page)) || 1);
+
+  // Fetch one extra row to know whether a next page exists, avoiding a
+  // separate COUNT query against a table that only grows over time.
+  const rows = await prisma.order.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    take: PAGE_SIZE,
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE + 1,
     select: {
       id: true, orderNumber: true, createdAt: true, shipName: true, email: true,
       paymentMethod: true, paymentStatus: true, status: true, totalPaise: true,
     },
   });
+  const hasNext = rows.length > PAGE_SIZE;
+  const orders = rows.slice(0, PAGE_SIZE);
 
   const labelCls = "smallcaps text-brass-deep block mb-1";
   const fieldCls = "border border-line bg-white px-3 py-2 text-sm outline-none focus:border-forest";
@@ -67,7 +92,10 @@ export default async function OrdersPage(props: { searchParams: Promise<SP> }) {
     <div>
       <div className="flex items-baseline justify-between">
         <h1 className="font-serif text-3xl">Orders</h1>
-        <span className="text-sm text-ink/60">{orders.length}{orders.length === PAGE_SIZE ? "+" : ""} shown</span>
+        <span className="text-sm text-ink/60">
+          {page > 1 ? `Page ${page} · ` : ""}
+          {orders.length} shown
+        </span>
       </div>
 
       {/* GET form → server-side filtering, no client JS */}
@@ -139,6 +167,26 @@ export default async function OrdersPage(props: { searchParams: Promise<SP> }) {
           </tbody>
         </table>
       </div>
+
+      {(page > 1 || hasNext) && (
+        <div className="mt-4 flex items-center justify-between">
+          {page > 1 ? (
+            <Link href={pageHref(sp, page - 1)} className="smallcaps text-forest hover:underline">
+              ← Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-xs text-ink/50">Page {page}</span>
+          {hasNext ? (
+            <Link href={pageHref(sp, page + 1)} className="smallcaps text-forest hover:underline">
+              Next →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </div>
+      )}
     </div>
   );
 }

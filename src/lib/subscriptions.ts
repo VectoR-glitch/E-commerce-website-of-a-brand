@@ -127,7 +127,8 @@ export async function sendDueSubscriptionReminders(): Promise<{ sent: number; fa
         manageUrl: `${SITE_URL}/account/subscriptions`,
       });
       sent++;
-    } catch {
+    } catch (err) {
+      console.error(`Subscription reminder failed for subscription ${s.id} (${s.customer.email}):`, err);
       failed++;
     }
 

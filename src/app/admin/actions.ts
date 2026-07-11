@@ -19,9 +19,6 @@ const PAYMENT_STATUSES = Object.values(PaymentStatus);
 // Image upload constraints — stored directly in Postgres, so keep them small.
 const ALLOWED_IMAGE_TYPES = ["image/webp", "image/jpeg", "image/png", "image/avif"];
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024; // 5 MB
-function isAllowedImage(type: string, size: number): boolean {
-  return ALLOWED_IMAGE_TYPES.includes(type) && size > 0 && size <= MAX_IMAGE_BYTES;
-}
 
 // Statuses where stock has been committed (decremented at settlement). Moving
 // from one of these INTO a cancelled/returned state returns the units.
@@ -229,6 +226,9 @@ export async function updateProduct(formData: FormData): Promise<void> {
   revalidatePath(`/admin/products/${id}`);
 }
 
+// EAN-13 barcode, per the schema's documented format. Blank stays null.
+const BARCODE_RE = /^\d{13}$/;
+
 export async function updateVariant(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("variantId") ?? "");
@@ -241,12 +241,20 @@ export async function updateVariant(formData: FormData): Promise<void> {
       ? null
       : Math.floor(Number(weightRaw));
   const active = formData.get("active") === "on";
+  const barcode = String(formData.get("barcode") ?? "").trim() || null;
   if (!id || !size || !Number.isFinite(pricePaise) || pricePaise < 0) return;
   if (weightGrams !== null && (!Number.isFinite(weightGrams) || weightGrams < 0)) return;
+  if (barcode !== null && !BARCODE_RE.test(barcode)) return;
+
+  // Unique constraint guard — bail quietly rather than throwing, same as SKU.
+  if (barcode !== null) {
+    const clash = await prisma.variant.findFirst({ where: { barcode, id: { not: id } } });
+    if (clash) return;
+  }
 
   await prisma.variant.update({
     where: { id },
-    data: { fragrance, size, pricePaise, weightGrams, active },
+    data: { fragrance, size, pricePaise, weightGrams, active, barcode },
   });
   revalidatePath("/admin/products");
   revalidatePath("/admin/stock");
@@ -293,16 +301,36 @@ export async function updateVariantSku(
 }
 
 // ── Product images (stored as bytes in Postgres) ────────────────────────────
-export async function uploadProductImage(formData: FormData): Promise<void> {
+// Shared shape for the three image-upload actions below — lets the upload
+// forms surface a rejection (wrong type, too large) instead of silently
+// doing nothing, which is what a bare `Promise<void>` return produced before.
+export type ImageUploadState = { error?: string };
+
+function imageValidationError(file: FormDataEntryValue | null): string | undefined {
+  if (!(file instanceof File) || file.size === 0) return "Choose a file first.";
+  if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+    return "Unsupported file type — use WebP, JPEG, PNG, or AVIF.";
+  }
+  if (file.size > MAX_IMAGE_BYTES) return "Image is too large — 5 MB max.";
+  return undefined;
+}
+
+export async function uploadProductImage(
+  _prev: ImageUploadState | undefined,
+  formData: FormData,
+): Promise<ImageUploadState> {
   await requireAdmin();
   const productId = String(formData.get("productId") ?? "");
   const file = formData.get("file");
   const fragrance = String(formData.get("fragrance") ?? "").trim() || null;
   const size = String(formData.get("size") ?? "").trim() || null;
   const alt = String(formData.get("alt") ?? "").trim() || null;
-  if (!productId || !(file instanceof File) || !isAllowedImage(file.type, file.size)) return;
+  if (!productId) return { error: "Missing product." };
+  const fileError = imageValidationError(file);
+  if (fileError) return { error: fileError };
+  const image = file as File;
 
-  const data = Buffer.from(await file.arrayBuffer());
+  const data = Buffer.from(await image.arrayBuffer());
 
   // First image for a product becomes the primary (card/PDP default).
   const count = await prisma.productImage.count({ where: { productId } });
@@ -310,7 +338,7 @@ export async function uploadProductImage(formData: FormData): Promise<void> {
     data: {
       productId,
       data,
-      contentType: file.type,
+      contentType: image.type,
       alt,
       fragrance,
       size,
@@ -319,6 +347,7 @@ export async function uploadProductImage(formData: FormData): Promise<void> {
     },
   });
   revalidatePath(`/admin/products/${productId}`);
+  return {};
 }
 
 export async function deleteProductImage(formData: FormData): Promise<void> {
@@ -327,10 +356,25 @@ export async function deleteProductImage(formData: FormData): Promise<void> {
   if (!id) return;
   const img = await prisma.productImage.findUnique({
     where: { id },
-    select: { productId: true },
+    select: { productId: true, isPrimary: true },
   });
   if (!img) return;
   await prisma.productImage.delete({ where: { id } });
+
+  // Deleting the primary image left none flagged — promote the next one
+  // (by sort order) so the admin gallery always shows a clear primary, same
+  // as the storefront's own fallback in products.ts (hydrate: images[0]).
+  if (img.isPrimary) {
+    const next = await prisma.productImage.findFirst({
+      where: { productId: img.productId },
+      orderBy: { sortOrder: "asc" },
+      select: { id: true },
+    });
+    if (next) {
+      await prisma.productImage.update({ where: { id: next.id }, data: { isPrimary: true } });
+    }
+  }
+
   revalidatePath(`/admin/products/${img.productId}`);
 }
 
@@ -355,14 +399,26 @@ export async function createVariant(formData: FormData): Promise<void> {
   const size = String(formData.get("size") ?? "").trim();
   const pricePaise = Math.round(Number(formData.get("priceRupees")) * 100);
   const stock = Math.floor(Number(formData.get("stock")) || 0);
-  if (!productId || !sku || !size || !Number.isFinite(pricePaise) || pricePaise < 0) return;
+  const barcode = String(formData.get("barcode") ?? "").trim() || null;
+  if (!productId || !sku || !SKU_RE.test(sku) || !size || !Number.isFinite(pricePaise) || pricePaise < 0) return;
+  if (barcode !== null && !BARCODE_RE.test(barcode)) return;
 
   // Unique SKU — bail quietly if it already exists rather than throwing.
   const clash = await prisma.variant.findUnique({ where: { sku } });
   if (clash) return;
 
+  if (barcode !== null) {
+    const barcodeClash = await prisma.variant.findUnique({ where: { barcode } });
+    if (barcodeClash) return;
+  }
+
+  // Same product + fragrance + size would be indistinguishable to the
+  // storefront's variant picker (keyed on fragrance/size, not variant id).
+  const dupe = await prisma.variant.findFirst({ where: { productId, fragrance, size } });
+  if (dupe) return;
+
   await prisma.variant.create({
-    data: { productId, sku, fragrance, size, pricePaise, stock: Math.max(0, stock) },
+    data: { productId, sku, fragrance, size, pricePaise, stock: Math.max(0, stock), barcode },
   });
   revalidatePath(`/admin/products/${productId}`);
   revalidatePath("/admin/stock");
@@ -413,6 +469,22 @@ export async function approveReview(formData: FormData): Promise<void> {
   const review = await prisma.review.update({
     where: { id },
     data: { approved: true },
+    select: { product: { select: { slug: true } } },
+  });
+  revalidatePath("/admin/reviews");
+  revalidatePath(`/product/${review.product.slug}`);
+}
+
+// Pull an approved review back into the moderation queue without deleting it
+// — for a complaint or policy issue where the review itself is still worth
+// keeping on record. Mirrors unpublishQuestion below.
+export async function unapproveReview(formData: FormData): Promise<void> {
+  await requireAdmin();
+  const id = String(formData.get("reviewId") ?? "");
+  if (!id) return;
+  const review = await prisma.review.update({
+    where: { id },
+    data: { approved: false },
     select: { product: { select: { slug: true } } },
   });
   revalidatePath("/admin/reviews");
@@ -617,11 +689,29 @@ export async function addBundleItem(formData: FormData): Promise<void> {
   if (!bundleId) return;
 
   if (variantId) {
-    // Exact slot.
-    await prisma.bundleItem.create({ data: { bundleId, variantId, quantity } });
+    // Exact slot — merge into an existing identical slot instead of creating
+    // a second line item for the same variant.
+    const existing = await prisma.bundleItem.findFirst({ where: { bundleId, variantId } });
+    if (existing) {
+      await prisma.bundleItem.update({
+        where: { id: existing.id },
+        data: { quantity: existing.quantity + quantity },
+      });
+    } else {
+      await prisma.bundleItem.create({ data: { bundleId, variantId, quantity } });
+    }
   } else if (productId) {
-    // Flexible product slot (any variant of the product, optional size lock).
-    await prisma.bundleItem.create({ data: { bundleId, productId, size, quantity } });
+    // Flexible product slot (any variant of the product, optional size lock)
+    // — same merge, keyed on product + size lock.
+    const existing = await prisma.bundleItem.findFirst({ where: { bundleId, productId, size } });
+    if (existing) {
+      await prisma.bundleItem.update({
+        where: { id: existing.id },
+        data: { quantity: existing.quantity + quantity },
+      });
+    } else {
+      await prisma.bundleItem.create({ data: { bundleId, productId, size, quantity } });
+    }
   } else {
     return;
   }
@@ -633,25 +723,35 @@ export async function removeBundleItem(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("bundleItemId") ?? "");
   const bundleId = String(formData.get("bundleId") ?? "");
-  if (!id) return;
-  await prisma.bundleItem.delete({ where: { id } });
-  if (bundleId) revalidatePath(`/admin/bundles/${bundleId}`);
+  if (!id || !bundleId) return;
+  // Scope the delete to the posted bundle too — a stale/copy-pasted form
+  // shouldn't be able to delete an item from a different kit.
+  const { count } = await prisma.bundleItem.deleteMany({ where: { id, bundleId } });
+  if (count === 0) return;
+  revalidatePath(`/admin/bundles/${bundleId}`);
   revalidatePath("/shop");
 }
 
-export async function uploadBundleImage(formData: FormData): Promise<void> {
+export async function uploadBundleImage(
+  _prev: ImageUploadState | undefined,
+  formData: FormData,
+): Promise<ImageUploadState> {
   await requireAdmin();
   const bundleId = String(formData.get("bundleId") ?? "");
   const file = formData.get("file");
-  if (!bundleId || !(file instanceof File) || !isAllowedImage(file.type, file.size)) return;
+  if (!bundleId) return { error: "Missing kit." };
+  const fileError = imageValidationError(file);
+  if (fileError) return { error: fileError };
+  const image = file as File;
 
-  const data = Buffer.from(await file.arrayBuffer());
+  const data = Buffer.from(await image.arrayBuffer());
   await prisma.bundle.update({
     where: { id: bundleId },
-    data: { imageData: data, imageType: file.type },
+    data: { imageData: data, imageType: image.type },
   });
   revalidatePath(`/admin/bundles/${bundleId}`);
   revalidatePath("/shop");
+  return {};
 }
 
 export async function removeBundleImage(formData: FormData): Promise<void> {
@@ -740,21 +840,28 @@ export async function deleteBlogPost(formData: FormData): Promise<void> {
   redirect("/admin/blog");
 }
 
-export async function uploadBlogImage(formData: FormData): Promise<void> {
+export async function uploadBlogImage(
+  _prev: ImageUploadState | undefined,
+  formData: FormData,
+): Promise<ImageUploadState> {
   await requireAdmin();
   const blogPostId = String(formData.get("blogPostId") ?? "");
   const file = formData.get("file");
-  if (!blogPostId || !(file instanceof File) || !isAllowedImage(file.type, file.size)) return;
+  if (!blogPostId) return { error: "Missing post." };
+  const fileError = imageValidationError(file);
+  if (fileError) return { error: fileError };
+  const image = file as File;
 
-  const data = Buffer.from(await file.arrayBuffer());
+  const data = Buffer.from(await image.arrayBuffer());
   const post = await prisma.blogPost.update({
     where: { id: blogPostId },
-    data: { coverImageData: data, coverImageType: file.type },
+    data: { coverImageData: data, coverImageType: image.type },
     select: { slug: true },
   });
   revalidatePath(`/admin/blog/${blogPostId}`);
   revalidatePath("/blog");
   revalidatePath(`/blog/${post.slug}`);
+  return {};
 }
 
 export async function removeBlogImage(formData: FormData): Promise<void> {

@@ -2,7 +2,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { verifyPassword } from "@/lib/auth";
+import { verifyPassword, DUMMY_PASSWORD_HASH } from "@/lib/auth";
 import { setSessionCookie, clearSessionCookie } from "@/lib/session";
 import { rateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
 
@@ -34,8 +34,12 @@ export async function loginAction(
   if (!email || !password) return { error: "Email and password are required." };
 
   const user = await prisma.customer.findUnique({ where: { email } });
-  // Generic message — never reveal whether an email is registered.
-  if (!user || !verifyPassword(password, user.passwordHash)) {
+  // Always run the scrypt comparison, even for a nonexistent account (against
+  // a fixed dummy hash) — so this branch takes the same time either way and
+  // can't be used to enumerate which emails are registered. Generic message
+  // either way, for the same reason.
+  const passwordOk = verifyPassword(password, user?.passwordHash ?? DUMMY_PASSWORD_HASH);
+  if (!user || !passwordOk) {
     return { error: "Invalid email or password." };
   }
 

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { hashPassword, generateToken } from "@/lib/auth";
+import { hashPassword, generateToken, MAX_PASSWORD_LENGTH } from "@/lib/auth";
 import { getSession } from "@/lib/session";
 import { rateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
 import { sendVerificationEmail } from "@/lib/email";
@@ -64,6 +64,7 @@ export async function registerAction(_prev: RegisterState, formData: FormData): 
   if (!name) return { error: "Please enter your name." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { error: "Enter a valid email address." };
   if (password.length < 8) return { error: "Password must be at least 8 characters." };
+  if (password.length > MAX_PASSWORD_LENGTH) return { error: `Password must be ${MAX_PASSWORD_LENGTH} characters or fewer.` };
   if (!/^[6-9]\d{9}$/.test(phone)) return { error: "Enter a valid 10-digit mobile number." };
   if (!line1) return { error: "Enter your address (line 1)." };
   if (!city) return { error: "Enter your city / town." };

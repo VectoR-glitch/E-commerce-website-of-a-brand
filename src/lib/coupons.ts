@@ -53,12 +53,19 @@ export async function validateCoupon(
   rawCode: string,
   subtotalPaise: number,
   cart: CartLine[] = [],
+  customerId: string | null = null,
 ): Promise<CouponResult> {
   const code = rawCode.trim().toUpperCase();
   if (!code) return { ok: false, error: "Enter a code." };
 
   const c = await prisma.coupon.findUnique({ where: { code } });
   if (!c || !c.active) return { ok: false, error: "This code isn’t valid." };
+  // Customer-specific codes (loyalty vouchers) only redeem for the customer
+  // who earned them — otherwise a leaked/guessed code lets anyone else spend
+  // someone else's reward.
+  if (c.customerId && c.customerId !== customerId) {
+    return { ok: false, error: "This code isn’t valid." };
+  }
   if (c.expiresAt && c.expiresAt.getTime() < Date.now()) {
     return { ok: false, error: "This code has expired." };
   }

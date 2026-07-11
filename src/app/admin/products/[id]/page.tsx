@@ -6,7 +6,6 @@ import {
   updateProduct,
   updateVariant,
   createVariant,
-  uploadProductImage,
   deleteProductImage,
   setPrimaryImage,
   deleteVariant,
@@ -14,6 +13,7 @@ import {
 } from "@/app/admin/actions";
 import { SkuEditor } from "@/components/sku-editor";
 import { ConfirmSubmit } from "@/components/confirm-submit";
+import { ProductImageUpload } from "@/components/product-image-upload";
 
 export const dynamic = "force-dynamic";
 
@@ -122,7 +122,7 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
         </form>
       </div>
 
-      {/* Images (Cloudflare R2) */}
+      {/* Images (stored as bytes in Postgres, served via /api/product-image/[id]) */}
       <h2 className="mt-10 smallcaps text-brass-deep">Images</h2>
       {product.images.length > 0 ? (
         <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4">
@@ -153,30 +153,7 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
         <p className="mt-3 text-sm text-ink/50">No images yet.</p>
       )}
 
-      <div className="mt-4 max-w-2xl border border-line bg-paper p-5">
-        <h3 className="smallcaps text-brass-deep">Upload image</h3>
-        <form action={uploadProductImage} className="mt-3 flex flex-wrap items-end gap-3">
-          <input type="hidden" name="productId" value={product.id} />
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">File</label>
-            <input name="file" type="file" accept="image/webp,image/jpeg,image/png,image/avif" required className="text-sm" />
-          </div>
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">Fragrance</label>
-            <input name="fragrance" placeholder="(any)" className={`${fieldCls} w-28`} />
-          </div>
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">Size</label>
-            <input name="size" placeholder="(any)" className={`${fieldCls} w-20`} />
-          </div>
-          <div>
-            <label className="smallcaps mb-1 block text-brass-deep">Alt text</label>
-            <input name="alt" className={`${fieldCls} w-40`} />
-          </div>
-          <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Upload</button>
-        </form>
-        <p className="mt-2 text-xs text-ink/55">WebP/JPEG/PNG/AVIF, up to 5 MB. Leave fragrance/size blank for a product-wide image. First upload becomes the primary.</p>
-      </div>
+      <ProductImageUpload productId={product.id} />
 
       {/* Variants */}
       <h2 className="mt-10 smallcaps text-brass-deep">Variants</h2>
@@ -205,6 +182,17 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
               <div>
                 <label className="smallcaps mb-1 block text-brass-deep">Weight g</label>
                 <input name="weightGrams" type="number" min={0} defaultValue={v.weightGrams ?? ""} placeholder="—" className={`${fieldCls} w-20`} />
+              </div>
+              <div>
+                <label className="smallcaps mb-1 block text-brass-deep">Barcode</label>
+                <input
+                  name="barcode"
+                  defaultValue={v.barcode ?? ""}
+                  placeholder="EAN-13"
+                  pattern="\d{13}"
+                  title="13 digits"
+                  className={`${fieldCls} w-32 font-mono`}
+                />
               </div>
               <label className="flex items-center gap-1.5 pb-1.5 text-sm">
                 <input type="checkbox" name="active" defaultChecked={v.active} /> Active
@@ -253,6 +241,10 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
           <div>
             <label className="smallcaps mb-1 block text-brass-deep">Stock</label>
             <input name="stock" type="number" min={0} defaultValue={0} className={`${fieldCls} w-20`} />
+          </div>
+          <div>
+            <label className="smallcaps mb-1 block text-brass-deep">Barcode</label>
+            <input name="barcode" placeholder="EAN-13 (optional)" pattern="\d{13}" title="13 digits" className={`${fieldCls} w-32 font-mono`} />
           </div>
           <button className="smallcaps bg-forest px-5 py-2 text-bone btn-fill-forest">Add</button>
         </form>

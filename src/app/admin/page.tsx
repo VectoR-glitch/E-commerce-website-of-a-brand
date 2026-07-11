@@ -26,7 +26,7 @@ export default async function AdminOverview() {
 
   const cards = [
     { label: "Total orders", value: String(totalOrders), href: "/admin/orders" },
-    { label: "Needs fulfilment", value: String(openCount), href: "/admin/orders?status=CONFIRMED" },
+    { label: "Needs fulfilment", value: String(openCount), href: "/admin/orders?status=CONFIRMED,ON_HOLD,PACKED" },
     { label: "Collected", value: formatINR(collectedPaise), href: "/admin/orders" },
     { label: "Low stock", value: String(lowStock), href: "/admin/stock" },
   ];

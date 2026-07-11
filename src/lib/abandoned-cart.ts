@@ -60,8 +60,9 @@ export async function runAbandonedCartSweep(): Promise<{ sent: number; failed: n
       // this to null (writeCart), re-arming a fresh episode.
       await prisma.cart.update({ where: { id: cart.id }, data: { reminderSentAt: new Date() } });
       sent++;
-    } catch {
+    } catch (err) {
       // Leave reminderSentAt null so the next sweep retries (bounded by max age).
+      console.error(`Abandoned-cart email failed for cart ${cart.id} (${cart.customer.email}):`, err);
       failed++;
     }
   }

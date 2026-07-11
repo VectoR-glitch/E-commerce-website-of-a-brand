@@ -921,6 +921,9 @@ export default function CheckoutPage() {
               </div>
             )}
           </dl>
+          {shippingPaise != null && (
+            <p className="mt-2 text-xs text-ink/45">Delivery cost is confirmed at payment.</p>
+          )}
 
           {/* Coupon */}
           <div className="mt-4">

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateCoupon } from "@/lib/coupons";
 import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
+import { getSession } from "@/lib/session";
 
 // Live coupon check for the checkout UI. The checkout route re-validates
 // authoritatively at order creation, so this is purely for instant feedback.
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
   const cart = (body.items ?? [])
     .map((i) => ({ variantId: String(i.variantId ?? ""), quantity: Math.floor(Number(i.quantity) || 0) }))
     .filter((i) => i.variantId && i.quantity > 0);
-  const result = await validateCoupon(String(body.code ?? ""), subtotalPaise, cart);
+  const session = await getSession();
+  const result = await validateCoupon(String(body.code ?? ""), subtotalPaise, cart, session?.sub ?? null);
   return NextResponse.json(result);
 }

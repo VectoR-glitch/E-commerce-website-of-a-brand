@@ -45,7 +45,8 @@ export async function notifyBackInStockForVariant(variantId: string): Promise<{ 
       });
       await prisma.backInStockAlert.update({ where: { id: alert.id }, data: { notifiedAt: new Date() } });
       sent++;
-    } catch {
+    } catch (err) {
+      console.error(`Back-in-stock email failed for alert ${alert.id} (${alert.email}):`, err);
       failed++;
     }
   }

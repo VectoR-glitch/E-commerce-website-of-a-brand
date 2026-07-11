@@ -156,6 +156,11 @@ export async function POST(request: Request) {
   }
   const shippingPaise = isCod ? shipping.codPaise! : shipping.prepaidPaise;
 
+  // Attribute the order to the signed-in customer (if any) so it appears in
+  // their account history, and so a customer-specific coupon (loyalty
+  // voucher) can be checked against the right customer below.
+  const session = await getSession();
+
   // Apply a coupon against the goods subtotal. Re-validated server-side (the
   // client preview is advisory) so a tampered request can't fake a discount.
   let discountPaise = 0;
@@ -166,6 +171,7 @@ export async function POST(request: Request) {
       body.couponCode,
       subtotalPaise,
       items.map((i) => ({ variantId: i.variantId, quantity: Math.floor(Number(i.quantity)) })),
+      session?.sub ?? null,
     );
     if (!result.ok) return badRequest(result.error);
     discountPaise = result.discountPaise;
@@ -229,34 +235,46 @@ export async function POST(request: Request) {
     );
   }
 
-  // Attribute the order to the signed-in customer (if any) so it appears in
-  // their account history. Guest checkout leaves customerId null.
-  const session = await getSession();
-
   // Persist a PENDING order with the snapshotted shipping + line items.
   // amountPaidPaise stays 0 until settlement records what Razorpay captured.
-  const order = await prisma.order.create({
-    data: {
-      orderNumber,
-      customerId: session?.sub ?? null,
-      email: ship.email,
-      phone: ship.phone,
-      shipName: ship.fullName,
-      shipLine1: ship.line1,
-      shipLine2: ship.line2 || null,
-      shipCity: ship.city,
-      shipState: ship.state,
-      shipPincode: ship.pincode,
-      paymentMethod: isCod ? "COD" : "ONLINE",
-      subtotalPaise,
-      shippingPaise,
-      discountPaise,
-      couponCode,
-      totalPaise,
-      razorpayOrderId: rzpOrder.id,
-      items: { create: orderItems },
-    },
-  });
+  let order;
+  try {
+    order = await prisma.order.create({
+      data: {
+        orderNumber,
+        customerId: session?.sub ?? null,
+        email: ship.email,
+        phone: ship.phone,
+        shipName: ship.fullName,
+        shipLine1: ship.line1,
+        shipLine2: ship.line2 || null,
+        shipCity: ship.city,
+        shipState: ship.state,
+        shipPincode: ship.pincode,
+        paymentMethod: isCod ? "COD" : "ONLINE",
+        subtotalPaise,
+        shippingPaise,
+        discountPaise,
+        couponCode,
+        totalPaise,
+        razorpayOrderId: rzpOrder.id,
+        items: { create: orderItems },
+      },
+    });
+  } catch (err) {
+    // The Razorpay order above now exists with no matching DB row — it's
+    // harmless on its own (nothing charges without a completed checkout), but
+    // log the Razorpay order id so it's traceable if a customer ever manages
+    // to complete payment against it before this request's retry.
+    console.error(
+      `Order persistence failed after Razorpay order ${rzpOrder.id} (orderNumber ${orderNumber}):`,
+      err,
+    );
+    return NextResponse.json(
+      { error: "Could not create your order. Please try again." },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json({
     keyId: RAZORPAY_KEY_ID,

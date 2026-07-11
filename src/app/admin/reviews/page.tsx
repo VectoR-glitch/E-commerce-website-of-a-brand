@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
-import { approveReview, deleteReview } from "@/app/admin/actions";
+import { approveReview, unapproveReview, deleteReview } from "@/app/admin/actions";
 import { Stars } from "@/components/stars";
 import { ConfirmSubmit } from "@/components/confirm-submit";
 
@@ -48,10 +48,17 @@ export default async function AdminReviewsPage() {
         {r.customer.name || "—"} · {r.customer.email}
       </p>
       <div className="mt-3 flex gap-3">
-        {!r.approved && (
+        {!r.approved ? (
           <form action={approveReview}>
             <input type="hidden" name="reviewId" value={r.id} />
             <button className="smallcaps bg-forest px-4 py-1.5 text-bone btn-fill-forest">Approve</button>
+          </form>
+        ) : (
+          <form action={unapproveReview}>
+            <input type="hidden" name="reviewId" value={r.id} />
+            <button className="smallcaps border border-line px-4 py-1.5 text-ink/70 transition-colors hover:border-forest hover:text-forest">
+              Unpublish
+            </button>
           </form>
         )}
         <form action={deleteReview}>

@@ -95,6 +95,8 @@ export async function redeemPoints(
         maxUses: 1,
         active: true,
         expiresAt: new Date(Date.now() + LOYALTY_VOUCHER_TTL_DAYS * DAY_MS),
+        // Scoped to the customer who earned it — see customerId on Coupon.
+        customerId,
       },
     });
     return { code };

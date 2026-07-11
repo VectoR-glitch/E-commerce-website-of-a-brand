@@ -33,19 +33,31 @@ export type SessionPayload = {
 // (with a clear message) rather than crashing module import / the build.
 function secret(): string {
   const s = process.env.AUTH_SECRET;
-  if (!s || s.length < 16) {
+  if (!s || s.length < 32) {
     throw new Error("AUTH_SECRET is missing or too short (set a 32+ char random string).");
   }
   return s;
 }
 
 // ── Passwords ──────────────────────────────────────────────────────────────
+// No real reason to accept an unbounded password — every caller enforces this
+// alongside the 8-char minimum.
+export const MAX_PASSWORD_LENGTH = 128;
+
 // Stored as `scrypt$<saltHex>$<hashHex>`. scrypt is deliberately slow + salted.
 export function hashPassword(password: string): string {
   const salt = randomBytes(16);
   const hash = scryptSync(password, salt, 64);
   return `scrypt$${salt.toString("hex")}$${hash.toString("hex")}`;
 }
+
+// A pre-computed, unusable hash — pass this to verifyPassword when no account
+// exists for the attempted email, so a login attempt always pays the same
+// scrypt cost whether or not the account is real. Without this, "no such
+// user" returns near-instantly while "wrong password" takes the full scrypt
+// time, letting a timing attack enumerate registered emails. Computed once at
+// module load, not per-request.
+export const DUMMY_PASSWORD_HASH = hashPassword(randomBytes(32).toString("hex"));
 
 export function verifyPassword(password: string, stored: string | null): boolean {
   if (!stored) return false; // guest/order-only rows have no password → no login

@@ -8,7 +8,17 @@ export const dynamic = "force-dynamic";
 const ROLES = Object.values(Role);
 const PAGE_SIZE = 200;
 
-type SP = { q?: string; role?: string };
+type SP = { q?: string; role?: string; page?: string };
+
+// Builds a pagination link preserving the current filters, only overriding `page`.
+function pageHref(sp: SP, page: number): string {
+  const params = new URLSearchParams();
+  if (sp.role) params.set("role", sp.role);
+  if (sp.q) params.set("q", sp.q);
+  if (page > 1) params.set("page", String(page));
+  const qs = params.toString();
+  return qs ? `/admin/customers?${qs}` : "/admin/customers";
+}
 
 // toISOString() is always UTC — Klenich operates in IST (UTC+5:30).
 function fmtDate(d: Date): string {
@@ -40,10 +50,15 @@ export default async function CustomersPage(props: { searchParams: Promise<SP> }
     ];
   }
 
-  const customers = await prisma.customer.findMany({
+  const page = Math.max(1, Math.floor(Number(sp.page)) || 1);
+
+  // Fetch one extra row to know whether a next page exists, avoiding a
+  // separate COUNT query against a table that only grows over time.
+  const rows = await prisma.customer.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    take: PAGE_SIZE,
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE + 1,
     select: {
       id: true,
       name: true,
@@ -62,6 +77,8 @@ export default async function CustomersPage(props: { searchParams: Promise<SP> }
       },
     },
   });
+  const hasNext = rows.length > PAGE_SIZE;
+  const customers = rows.slice(0, PAGE_SIZE);
 
   const labelCls = "smallcaps text-brass-deep block mb-1";
   const fieldCls = "border border-line bg-white px-3 py-2 text-sm outline-none focus:border-forest";
@@ -71,7 +88,8 @@ export default async function CustomersPage(props: { searchParams: Promise<SP> }
       <div className="flex items-baseline justify-between">
         <h1 className="font-serif text-3xl">Customers</h1>
         <span className="text-sm text-ink/60">
-          {customers.length}{customers.length === PAGE_SIZE ? "+" : ""} account holders
+          {page > 1 ? `Page ${page} · ` : ""}
+          {customers.length} account holders
         </span>
       </div>
       <p className="mt-1 text-sm text-ink/55">
@@ -163,6 +181,26 @@ export default async function CustomersPage(props: { searchParams: Promise<SP> }
           </tbody>
         </table>
       </div>
+
+      {(page > 1 || hasNext) && (
+        <div className="mt-4 flex items-center justify-between">
+          {page > 1 ? (
+            <Link href={pageHref(sp, page - 1)} className="smallcaps text-forest hover:underline">
+              ← Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-xs text-ink/50">Page {page}</span>
+          {hasNext ? (
+            <Link href={pageHref(sp, page + 1)} className="smallcaps text-forest hover:underline">
+              Next →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </div>
+      )}
     </div>
   );
 }

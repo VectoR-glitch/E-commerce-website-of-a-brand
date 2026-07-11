@@ -4,6 +4,7 @@
 // boundary. A subscription mirrors a private per-subscription coupon (SUB-<id>)
 // so the discount flows through the existing checkout/settlement pipeline.
 import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { subscriptionCouponCode } from "@/lib/subscriptions";
@@ -14,10 +15,19 @@ export type SubscribeState = { ok?: boolean; error?: string } | undefined;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const validInterval = (days: number) => SUBSCRIBE_INTERVALS.some((i) => i.days === days);
 
-// Mirror (or refresh) the private coupon that carries this subscription's saving.
-async function syncSubscriptionCoupon(id: string, percent: number, active: boolean): Promise<void> {
+// Mirror (or refresh) the private coupon that carries this subscription's
+// saving. Takes the same `tx` as the subscription status write that calls it,
+// so the two commit or roll back together — a failure between them would
+// otherwise leave the subscription's displayed status (paused/cancelled) out
+// of sync with whether its discount is actually still live.
+async function syncSubscriptionCoupon(
+  tx: Prisma.TransactionClient,
+  id: string,
+  percent: number,
+  active: boolean,
+): Promise<void> {
   const code = subscriptionCouponCode(id);
-  await prisma.coupon.upsert({
+  await tx.coupon.upsert({
     where: { code },
     create: { code, type: "PERCENT", value: percent, minOrderPaise: 0, active },
     update: { value: percent, active },
@@ -53,23 +63,25 @@ export async function createSubscription(input: {
     select: { id: true },
   });
 
-  const sub = existing
-    ? await prisma.subscription.update({
-        where: { id: existing.id },
-        data: { intervalDays, quantity, discountPercent: SUBSCRIBE_SAVE_PERCENT, status: "ACTIVE", nextDeliveryAt },
-      })
-    : await prisma.subscription.create({
-        data: {
-          customerId: session.sub,
-          variantId,
-          quantity,
-          intervalDays,
-          discountPercent: SUBSCRIBE_SAVE_PERCENT,
-          nextDeliveryAt,
-        },
-      });
+  await prisma.$transaction(async (tx) => {
+    const sub = existing
+      ? await tx.subscription.update({
+          where: { id: existing.id },
+          data: { intervalDays, quantity, discountPercent: SUBSCRIBE_SAVE_PERCENT, status: "ACTIVE", nextDeliveryAt },
+        })
+      : await tx.subscription.create({
+          data: {
+            customerId: session.sub,
+            variantId,
+            quantity,
+            intervalDays,
+            discountPercent: SUBSCRIBE_SAVE_PERCENT,
+            nextDeliveryAt,
+          },
+        });
 
-  await syncSubscriptionCoupon(sub.id, SUBSCRIBE_SAVE_PERCENT, true);
+    await syncSubscriptionCoupon(tx, sub.id, SUBSCRIBE_SAVE_PERCENT, true);
+  });
   revalidatePath("/account/subscriptions");
   revalidatePath(`/product/${variant.product.slug}`);
   return { ok: true };
@@ -87,10 +99,12 @@ export async function pauseSubscription(formData: FormData): Promise<void> {
   const id = String(formData.get("subscriptionId") ?? "");
   const sub = await ownedSub(id, session.sub);
   if (!sub || sub.status === "CANCELLED") return;
-  await prisma.subscription.update({ where: { id }, data: { status: "PAUSED" } });
-  // Deactivate the private coupon too — otherwise it keeps discounting any
-  // order indefinitely while the account page shows "Paused."
-  await syncSubscriptionCoupon(id, sub.discountPercent, false);
+  await prisma.$transaction(async (tx) => {
+    await tx.subscription.update({ where: { id }, data: { status: "PAUSED" } });
+    // Deactivate the private coupon too — otherwise it keeps discounting any
+    // order indefinitely while the account page shows "Paused."
+    await syncSubscriptionCoupon(tx, id, sub.discountPercent, false);
+  });
   revalidatePath("/account/subscriptions");
 }
 
@@ -102,8 +116,10 @@ export async function resumeSubscription(formData: FormData): Promise<void> {
   if (!sub || sub.status !== "PAUSED") return;
   // Push the next delivery to a fresh full interval from today.
   const nextDeliveryAt = new Date(Date.now() + sub.intervalDays * DAY_MS);
-  await prisma.subscription.update({ where: { id }, data: { status: "ACTIVE", nextDeliveryAt } });
-  await syncSubscriptionCoupon(id, sub.discountPercent, true);
+  await prisma.$transaction(async (tx) => {
+    await tx.subscription.update({ where: { id }, data: { status: "ACTIVE", nextDeliveryAt } });
+    await syncSubscriptionCoupon(tx, id, sub.discountPercent, true);
+  });
   revalidatePath("/account/subscriptions");
 }
 
@@ -126,8 +142,10 @@ export async function cancelSubscription(formData: FormData): Promise<void> {
   const id = String(formData.get("subscriptionId") ?? "");
   const sub = await ownedSub(id, session.sub);
   if (!sub) return;
-  await prisma.subscription.update({ where: { id }, data: { status: "CANCELLED" } });
-  // Retire the private coupon so it can't be reused after cancelling.
-  await prisma.coupon.deleteMany({ where: { code: subscriptionCouponCode(id) } });
+  await prisma.$transaction([
+    prisma.subscription.update({ where: { id }, data: { status: "CANCELLED" } }),
+    // Retire the private coupon so it can't be reused after cancelling.
+    prisma.coupon.deleteMany({ where: { code: subscriptionCouponCode(id) } }),
+  ]);
   revalidatePath("/account/subscriptions");
 }

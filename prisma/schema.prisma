@@ -376,6 +376,10 @@ model Order {
   status        OrderStatus   @default(PENDING)
   paymentStatus PaymentStatus @default(PENDING)
   paymentMethod PaymentMethod @default(ONLINE)
+  // Why an ON_HOLD order is on hold — set at settlement time so staff don't
+  // have to manually diff variant stock vs. coupon usedCount/maxUses to
+  // figure out which guard actually tripped. Null for any other status.
+  holdReason    String?
 
   // money, all in paise
   subtotalPaise   Int

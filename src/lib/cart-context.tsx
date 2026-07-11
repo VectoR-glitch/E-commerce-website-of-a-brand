@@ -10,7 +10,8 @@ import {
   useState,
 } from "react";
 import { MAX_QTY_PER_ITEM } from "@/lib/constants";
-import { persistCart, syncGuestCart } from "@/app/actions/cart";
+import { persistCart, syncGuestCart, loadCurrentCart } from "@/app/actions/cart";
+import { reconcileCartMerge } from "@/lib/cart-reconcile";
 
 export type CartItem = {
   /**
@@ -183,65 +184,53 @@ export function CartProvider({
         } catch {
           // ignore corrupt storage
         }
-        // Snapshotted right before the merge request goes out, so we can tell
+        // Snapshotted right before the request goes out, so we can tell
         // afterward whether the user changed the cart (e.g. clicked "Add to
         // cart" on the page they were redirected to) while it was in flight —
         // blindly overwriting with the server's result would silently discard
         // that action.
         const preMergeItems = stateRef.current.items;
-        if (guest.length) {
-          try {
-            const merged = await syncGuestCart(guest);
-            if (!cancelled) {
-              const latest = stateRef.current.items;
-              if (latest === preMergeItems) {
-                // Nothing changed while the merge was in flight.
-                dispatch({ type: "HYDRATE", state: { items: merged } });
-              } else {
-                // Reconcile by DELTA, not by absolute value: for each variant,
-                // however much the user's local quantity moved during the
-                // merge window (latest − preMerge) is applied on top of the
-                // server's authoritative merged quantity. This matters
-                // specifically when the touched variant was ALSO part of the
-                // guest cart just merged in — e.g. guest cart had 2 of a
-                // variant, merged becomes 2, and the user adds 1 more of that
-                // SAME variant mid-merge (so it looks "new" locally, absent
-                // from preMergeItems). Overwriting with the local value would
-                // silently drop the guest's 2 down to 1; applying the delta
-                // (+1) on top of merged's 2 correctly yields 3.
-                const mergedByVariant = new Map(merged.map((i) => [i.variantId, i]));
-                const preByVariant = new Map(preMergeItems.map((i) => [i.variantId, i.quantity]));
-                const latestByVariant = new Map(latest.map((i) => [i.variantId, i]));
-                const allIds = new Set([
-                  ...mergedByVariant.keys(),
-                  ...preByVariant.keys(),
-                  ...latestByVariant.keys(),
-                ]);
-                const reconciled: CartItem[] = [];
-                for (const id of allIds) {
-                  const mergedItem = mergedByVariant.get(id);
-                  const localItem = latestByVariant.get(id);
-                  const delta = (localItem?.quantity ?? 0) - (preByVariant.get(id) ?? 0);
-                  const quantity = Math.min(
-                    MAX_QTY_PER_ITEM,
-                    Math.max(0, (mergedItem?.quantity ?? 0) + delta),
-                  );
-                  if (quantity <= 0) continue;
-                  const base = mergedItem ?? localItem;
-                  if (base) reconciled.push({ ...base, quantity });
-                }
-                dispatch({ type: "HYDRATE", state: { items: reconciled } });
-              }
+        try {
+          // ALWAYS reconcile against a fresh server read, even when this tab
+          // has no guest items to merge (guest.length === 0) — e.g. another
+          // tab already consumed the shared guest-cart storage under the lock
+          // above. Without this, a tab that skipped merging would keep acting
+          // on its stale pre-merge snapshot and could later silently
+          // overwrite the other tab's just-landed merge via persistCart's
+          // full-replace write. syncGuestCart([]) would also work (it's a
+          // no-op merge) but loadCurrentCart skips its wasted delete+rewrite.
+          const merged = guest.length ? await syncGuestCart(guest) : await loadCurrentCart();
+          if (!cancelled) {
+            const latest = stateRef.current.items;
+            if (latest === preMergeItems) {
+              // Nothing changed while the request was in flight.
+              dispatch({ type: "HYDRATE", state: { items: merged } });
+            } else {
+              dispatch({
+                type: "HYDRATE",
+                state: { items: reconcileCartMerge(merged, preMergeItems, latest) },
+              });
             }
-          } catch {
-            // keep the server-seeded state on failure
           }
+        } catch {
+          // keep the server-seeded state on failure
         }
         if (!cancelled) setSynced(true);
       };
 
       if (typeof navigator !== "undefined" && navigator.locks) {
-        await navigator.locks.request("klenich-cart-merge", run);
+        // Bound how long we hold the lock — a hung request must not block
+        // every other tab's own merge/refresh indefinitely. If the timeout
+        // wins, the lock releases; `run()` keeps executing in the background
+        // and (guarded by `cancelled`) still dispatches its result if it
+        // eventually resolves, it just won't hold up other tabs meanwhile. A
+        // tab that starts after this timeout-triggered release still finds
+        // localStorage already cleared (read+clear is synchronous, ahead of
+        // any network call), so it can never double-merge even in this
+        // degraded path.
+        await navigator.locks.request("klenich-cart-merge", () =>
+          Promise.race([run(), new Promise<void>((resolve) => setTimeout(resolve, 15000))]),
+        );
       } else {
         await run();
       }

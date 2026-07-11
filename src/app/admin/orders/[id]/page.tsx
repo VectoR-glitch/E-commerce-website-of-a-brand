@@ -91,6 +91,12 @@ export default async function OrderDetail(props: { params: Promise<{ id: string 
 
         {/* Status controls */}
         <div className="space-y-6">
+          {order.holdReason && (
+            <div className="border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="smallcaps text-amber-700">On hold because</p>
+              <p className="mt-1">{order.holdReason}</p>
+            </div>
+          )}
           <div className="border border-line bg-paper p-5">
             <h2 className="smallcaps text-brass-deep">Fulfilment status</h2>
             <p className="mt-1 text-xs text-ink/55">Cancelling/returning a committed order restocks its items.</p>

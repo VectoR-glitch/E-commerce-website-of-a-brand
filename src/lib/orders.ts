@@ -90,14 +90,18 @@ export async function settleOrderPaid(params: {
     // We won the claim: decrement each line with a GUARDED update that only
     // matches rows with enough stock — so it can never go negative. A line that
     // can't be satisfied flags the whole order for staff review (ON_HOLD).
-    let shortfall = false;
+    // Reasons accumulate (rather than a single boolean) so an order held for
+    // BOTH a stock shortfall and a coupon-cap overage doesn't leave staff
+    // guessing which guard actually tripped — that ambiguity only grows now
+    // that there are two distinct causes funneling into the same status.
+    const holdReasons: string[] = [];
     for (const item of existing.items) {
       if (!item.variantId) continue;
       const dec = await tx.variant.updateMany({
         where: { id: item.variantId, stock: { gte: item.quantity } },
         data: { stock: { decrement: item.quantity } },
       });
-      if (dec.count === 0) shortfall = true;
+      if (dec.count === 0) holdReasons.push(`Insufficient stock for ${item.sku} (need ${item.quantity})`);
     }
 
     // Count the coupon redemption exactly once, here in the winning claim, so a
@@ -117,13 +121,18 @@ export async function settleOrderPaid(params: {
               data: { usedCount: { increment: 1 } },
             })
           : { count: 0 };
-        if (claimedRedemption.count === 0) shortfall = true;
+        if (claimedRedemption.count === 0) {
+          holdReasons.push(`Coupon ${existing.couponCode} redemption cap reached`);
+        }
       }
     }
 
     await tx.order.update({
       where: { id: existing.id },
-      data: { status: shortfall ? "ON_HOLD" : "CONFIRMED" },
+      data: {
+        status: holdReasons.length ? "ON_HOLD" : "CONFIRMED",
+        holdReason: holdReasons.length ? holdReasons.join("; ") : null,
+      },
     });
 
     // Loyalty is NOT credited here — it's awarded only once the order is later

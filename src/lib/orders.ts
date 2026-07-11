@@ -64,11 +64,15 @@ export async function settleOrderPaid(params: {
     const isCod = existing.paymentMethod === "COD";
     const amountPaidPaise = isCod ? existing.shippingPaise : existing.totalPaise;
 
-    // Claim the settlement by flipping paymentStatus off PENDING. The final
-    // order status is set AFTER the stock check below, so we don't confirm an
-    // order we then find we can't fulfill.
+    // Claim the settlement by flipping paymentStatus off PENDING *or* FAILED.
+    // FAILED is set by the verify route on a bad signature, but that's just a
+    // local guess (a stray retry, a network hiccup, tampering) — Razorpay's own
+    // webhook is the actual source of truth for whether money moved, so a real
+    // payment must still be able to settle an order this route previously
+    // marked FAILED. The final order status is set AFTER the stock check
+    // below, so we don't confirm an order we then find we can't fulfill.
     const claimed = await tx.order.updateMany({
-      where: { razorpayOrderId, paymentStatus: "PENDING" },
+      where: { razorpayOrderId, paymentStatus: { in: ["PENDING", "FAILED"] } },
       data: {
         paymentStatus: isCod ? "PARTIALLY_PAID" : "PAID",
         amountPaidPaise,
@@ -96,19 +100,31 @@ export async function settleOrderPaid(params: {
       if (dec.count === 0) shortfall = true;
     }
 
+    // Count the coupon redemption exactly once, here in the winning claim, so a
+    // concurrent verify+webhook can't double-count it. Guarded the same way as
+    // stock above: only claim a redemption slot if the cap hasn't been reached,
+    // via a compare-and-swap on the usedCount just read — so two concurrent
+    // settlements racing the same single-use code can't both commit. The
+    // payment is already captured, so a lost race doesn't block the order,
+    // just flags it (like a stock shortfall) for staff to review.
+    if (existing.couponCode) {
+      const coupon = await tx.coupon.findUnique({ where: { code: existing.couponCode } });
+      if (coupon) {
+        const capOk = coupon.maxUses == null || coupon.usedCount < coupon.maxUses;
+        const claimedRedemption = capOk
+          ? await tx.coupon.updateMany({
+              where: { code: existing.couponCode, usedCount: coupon.usedCount },
+              data: { usedCount: { increment: 1 } },
+            })
+          : { count: 0 };
+        if (claimedRedemption.count === 0) shortfall = true;
+      }
+    }
+
     await tx.order.update({
       where: { id: existing.id },
       data: { status: shortfall ? "ON_HOLD" : "CONFIRMED" },
     });
-
-    // Count the coupon redemption exactly once, here in the winning claim, so a
-    // concurrent verify+webhook can't double-count it.
-    if (existing.couponCode) {
-      await tx.coupon.updateMany({
-        where: { code: existing.couponCode },
-        data: { usedCount: { increment: 1 } },
-      });
-    }
 
     // Loyalty is NOT credited here — it's awarded only once the order is later
     // marked DELIVERED (see awardLoyaltyForDeliveredOrder in admin/actions.ts),

@@ -161,56 +161,90 @@ export function CartProvider({
     if (!authenticated) return;
     let cancelled = false;
     (async () => {
-      let guest: { variantId: string; quantity: number }[] = [];
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) {
-          const parsed = JSON.parse(raw) as CartState;
-          guest = (parsed.items ?? []).map((i) => ({ variantId: i.variantId, quantity: i.quantity }));
-        }
-        localStorage.removeItem(STORAGE_KEY);
-      } catch {
-        // ignore corrupt storage
-      }
-      // Snapshotted right before the merge request goes out, so we can tell
-      // afterward whether the user changed the cart (e.g. clicked "Add to
-      // cart" on the page they were redirected to) while it was in flight —
-      // blindly overwriting with the server's result would silently discard
-      // that action.
-      const preMergeItems = stateRef.current.items;
-      if (guest.length) {
+      // Guard the read-clear-merge sequence with a cross-tab lock: two tabs
+      // open at login both race this effect, and each independently reads its
+      // own snapshot of the SAME localStorage guest cart before either clears
+      // it. Without serializing them, both can call syncGuestCart with the
+      // same guest quantities — the second call reads the server cart AFTER
+      // the first's merge already landed, then adds the guest quantity again
+      // on top, doubling it. Locking makes the second tab's localStorage read
+      // happen only after the first tab's removeItem has completed, so it
+      // sees nothing left to merge. Falls back to unlocked (rare browsers
+      // without the Web Locks API) rather than breaking the merge outright.
+      const run = async () => {
+        let guest: { variantId: string; quantity: number }[] = [];
         try {
-          const merged = await syncGuestCart(guest);
-          if (!cancelled) {
-            const latest = stateRef.current.items;
-            if (latest === preMergeItems) {
-              // Nothing changed while the merge was in flight.
-              dispatch({ type: "HYDRATE", state: { items: merged } });
-            } else {
-              // Reconcile: start from the server's authoritative merge, then
-              // re-apply whatever the user added/changed locally since the
-              // snapshot, and keep anything they removed, removed.
-              const byVariant = new Map(merged.map((i) => [i.variantId, i]));
-              const preByVariant = new Map(preMergeItems.map((i) => [i.variantId, i]));
-              for (const item of latest) {
-                const before = preByVariant.get(item.variantId);
-                if (!before || before.quantity !== item.quantity) {
-                  byVariant.set(item.variantId, item);
-                }
-              }
-              for (const before of preMergeItems) {
-                if (!latest.some((i) => i.variantId === before.variantId)) {
-                  byVariant.delete(before.variantId);
-                }
-              }
-              dispatch({ type: "HYDRATE", state: { items: [...byVariant.values()] } });
-            }
+          const raw = localStorage.getItem(STORAGE_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw) as CartState;
+            guest = (parsed.items ?? []).map((i) => ({ variantId: i.variantId, quantity: i.quantity }));
           }
+          localStorage.removeItem(STORAGE_KEY);
         } catch {
-          // keep the server-seeded state on failure
+          // ignore corrupt storage
         }
+        // Snapshotted right before the merge request goes out, so we can tell
+        // afterward whether the user changed the cart (e.g. clicked "Add to
+        // cart" on the page they were redirected to) while it was in flight —
+        // blindly overwriting with the server's result would silently discard
+        // that action.
+        const preMergeItems = stateRef.current.items;
+        if (guest.length) {
+          try {
+            const merged = await syncGuestCart(guest);
+            if (!cancelled) {
+              const latest = stateRef.current.items;
+              if (latest === preMergeItems) {
+                // Nothing changed while the merge was in flight.
+                dispatch({ type: "HYDRATE", state: { items: merged } });
+              } else {
+                // Reconcile by DELTA, not by absolute value: for each variant,
+                // however much the user's local quantity moved during the
+                // merge window (latest − preMerge) is applied on top of the
+                // server's authoritative merged quantity. This matters
+                // specifically when the touched variant was ALSO part of the
+                // guest cart just merged in — e.g. guest cart had 2 of a
+                // variant, merged becomes 2, and the user adds 1 more of that
+                // SAME variant mid-merge (so it looks "new" locally, absent
+                // from preMergeItems). Overwriting with the local value would
+                // silently drop the guest's 2 down to 1; applying the delta
+                // (+1) on top of merged's 2 correctly yields 3.
+                const mergedByVariant = new Map(merged.map((i) => [i.variantId, i]));
+                const preByVariant = new Map(preMergeItems.map((i) => [i.variantId, i.quantity]));
+                const latestByVariant = new Map(latest.map((i) => [i.variantId, i]));
+                const allIds = new Set([
+                  ...mergedByVariant.keys(),
+                  ...preByVariant.keys(),
+                  ...latestByVariant.keys(),
+                ]);
+                const reconciled: CartItem[] = [];
+                for (const id of allIds) {
+                  const mergedItem = mergedByVariant.get(id);
+                  const localItem = latestByVariant.get(id);
+                  const delta = (localItem?.quantity ?? 0) - (preByVariant.get(id) ?? 0);
+                  const quantity = Math.min(
+                    MAX_QTY_PER_ITEM,
+                    Math.max(0, (mergedItem?.quantity ?? 0) + delta),
+                  );
+                  if (quantity <= 0) continue;
+                  const base = mergedItem ?? localItem;
+                  if (base) reconciled.push({ ...base, quantity });
+                }
+                dispatch({ type: "HYDRATE", state: { items: reconciled } });
+              }
+            }
+          } catch {
+            // keep the server-seeded state on failure
+          }
+        }
+        if (!cancelled) setSynced(true);
+      };
+
+      if (typeof navigator !== "undefined" && navigator.locks) {
+        await navigator.locks.request("klenich-cart-merge", run);
+      } else {
+        await run();
       }
-      if (!cancelled) setSynced(true);
     })();
     return () => {
       cancelled = true;

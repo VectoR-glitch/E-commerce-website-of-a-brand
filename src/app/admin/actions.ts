@@ -39,6 +39,7 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
   // `changed` holds the pre-update snapshot only on a real transition, so we email
   // the customer just once when the status actually moves.
   const changed = !order || order.status === status ? null : order;
+  let won = false;
 
   if (changed) {
     // Restock when leaving a stock-committed status for CANCELLED/RETURNED, so
@@ -47,14 +48,22 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
     const wasCommitted = STOCK_COMMITTED.includes(changed.status);
     const nowFreed = status === "CANCELLED" || status === "RETURNED";
 
-    // One short-lived interactive transaction: restock (if any), the guarded
-    // status write, and — only on a real transition INTO DELIVERED, or back
-    // OUT of a stock-committed status into CANCELLED/RETURNED — the matching
-    // loyalty credit/reversal, all commit together atomically. The status
-    // write is guarded on the value we read, so a concurrent admin transition
-    // can't re-write it — matches 0 rows instead, and we skip the loyalty side
-    // effect for a claim we lost.
-    await prisma.$transaction(async (tx) => {
+    // One short-lived interactive transaction: the guarded status write, then
+    // — only once that write actually wins — restock (if any) and, only on a
+    // real transition INTO DELIVERED or back OUT of a stock-committed status
+    // into CANCELLED/RETURNED, the matching loyalty credit/reversal, all
+    // commit together atomically. The status write is guarded on the value we
+    // read, so a concurrent admin transition can't re-write it — matches 0
+    // rows instead, and everything below (restock included) is skipped for a
+    // claim we lost, so a losing request can never mutate stock/loyalty for a
+    // status change that didn't actually happen.
+    won = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.order.updateMany({
+        where: { id, status: changed.status },
+        data: { status },
+      });
+      if (claimed.count === 0) return false;
+
       if (wasCommitted && nowFreed) {
         for (const it of changed.items.filter((it) => it.variantId)) {
           await tx.variant.update({
@@ -63,12 +72,6 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
           });
         }
       }
-
-      const claimed = await tx.order.updateMany({
-        where: { id, status: changed.status },
-        data: { status },
-      });
-      if (claimed.count === 0) return;
 
       // Loyalty points are granted only once an order is actually DELIVERED —
       // not at payment settlement — so a returned/cancelled order never earns
@@ -89,6 +92,7 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
       if (wasCommitted && nowFreed) {
         await reverseLoyaltyForOrder(tx, changed.id);
       }
+      return true;
     });
   }
 
@@ -96,10 +100,11 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
   revalidatePath("/admin/orders");
   revalidatePath("/admin");
 
-  // Notify the customer of the new status. Best-effort: never let a
-  // notification failure surface as a failed status update (the change is
-  // already committed).
-  if (changed) {
+  // Notify the customer of the new status — but only if our write actually
+  // won the race; a losing request must not tell the customer their order
+  // moved to a status the database never actually recorded. Best-effort:
+  // never let a notification failure surface as a failed status update.
+  if (changed && won) {
     try {
       await sendOrderStatusEmail(toOrderForEmail(changed), status);
     } catch (err) {
@@ -428,13 +433,19 @@ export async function createVariant(formData: FormData): Promise<void> {
 // Deactivates the private SUB-<id> coupon for every non-cancelled subscription
 // on the given variants, so a variant/product delete never leaves an orphaned
 // coupon that keeps discounting orders with no subscription left to cancel it.
-async function cancelSubscriptionCouponsForVariants(variantIds: string[]): Promise<void> {
-  const subs = await prisma.subscription.findMany({
+// Takes the same `tx` as the delete that calls it, so the cleanup and the
+// delete commit or roll back together — a failed delete after this runs can
+// never leave the coupon gone while the variant/subscription still exist.
+async function cancelSubscriptionCouponsForVariants(
+  tx: Prisma.TransactionClient,
+  variantIds: string[],
+): Promise<void> {
+  const subs = await tx.subscription.findMany({
     where: { variantId: { in: variantIds }, status: { not: "CANCELLED" } },
     select: { id: true },
   });
   if (subs.length === 0) return;
-  await prisma.coupon.deleteMany({
+  await tx.coupon.deleteMany({
     where: { code: { in: subs.map((s) => subscriptionCouponCode(s.id)) } },
   });
 }
@@ -456,10 +467,12 @@ export async function deleteVariant(formData: FormData): Promise<void> {
   // Deleting the variant cascades away any Subscription row for it (required
   // FK), but NOT that subscription's private SUB-<id> coupon — Coupon has no
   // FK relation, so without this it would stay active forever with no
-  // subscription left to cancel it from.
-  await cancelSubscriptionCouponsForVariants([id]);
-
-  await prisma.variant.delete({ where: { id } });
+  // subscription left to cancel it from. Same transaction as the delete so
+  // the two can never partially apply.
+  await prisma.$transaction(async (tx) => {
+    await cancelSubscriptionCouponsForVariants(tx, [id]);
+    await tx.variant.delete({ where: { id } });
+  });
   revalidatePath(`/admin/products/${variant.productId}`);
   revalidatePath("/admin/stock");
 }
@@ -478,12 +491,11 @@ export async function deleteProduct(formData: FormData): Promise<void> {
   });
   if (!product) return;
 
-  await cancelSubscriptionCouponsForVariants(product.variants.map((v) => v.id));
-
-  await prisma.$transaction([
-    prisma.variant.deleteMany({ where: { productId: id } }),
-    prisma.product.delete({ where: { id } }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    await cancelSubscriptionCouponsForVariants(tx, product.variants.map((v) => v.id));
+    await tx.variant.deleteMany({ where: { productId: id } });
+    await tx.product.delete({ where: { id } });
+  });
   revalidatePath("/admin/products");
   revalidatePath("/admin/stock");
   redirect("/admin/products");
@@ -592,6 +604,12 @@ export async function createCoupon(formData: FormData): Promise<void> {
   const expiresRaw = String(formData.get("expiresAt") ?? "").trim();
 
   if (!COUPON_CODE_RE.test(code)) return; // letters/numbers/hyphens, 2–24 chars
+  // KIT-/SUB- codes are managed by the Bundles/Subscriptions pages, which
+  // upsert on that exact code — a manually-created coupon with a reserved
+  // prefix would either get silently overwritten by that sync the moment a
+  // matching bundle/subscription exists, or sit permanently undeletable
+  // (deleteCoupon refuses these prefixes) if it never matches anything real.
+  if (isSystemCouponCode(code)) return;
   if (type !== "PERCENT" && type !== "FIXED") return;
   if (!Number.isFinite(valueRaw) || valueRaw <= 0) return;
   if (type === "PERCENT" && valueRaw > 100) return;

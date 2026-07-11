@@ -2,15 +2,21 @@ import Link from "next/link";
 import Image from "next/image";
 import { Ornament } from "@/components/ornament";
 
-const columns = [
-  {
-    title: "Shop",
-    links: [
-      { href: "/product/dishwash-gel-lime", label: "Dishwash Gel" },
-      { href: "/product/floor-cleaner", label: "Floor Cleaner" },
-      { href: "/product/toilet-cleaner", label: "Toilet Cleaner" },
-    ],
-  },
+export type FooterShopLink = { href: string; label: string };
+
+// Static fallback — used when no live shopLinks prop is passed (the root
+// error/not-found boundaries render SiteFooter without a Server Component
+// ancestor to fetch from, and shouldn't add a DB dependency to an
+// already-degraded page anyway). The real (site) layout passes live,
+// active-only links via getFooterShopLinks() below, so a product an admin
+// deactivates drops out of the footer there instead of leaving a dead link.
+const FALLBACK_SHOP_LINKS: FooterShopLink[] = [
+  { href: "/product/dishwash-gel-lime", label: "Dishwash Gel" },
+  { href: "/product/floor-cleaner", label: "Floor Cleaner" },
+  { href: "/product/toilet-cleaner", label: "Toilet Cleaner" },
+];
+
+const otherColumns = [
   {
     title: "Company",
     links: [
@@ -30,7 +36,9 @@ const columns = [
   },
 ];
 
-export function SiteFooter() {
+export function SiteFooter({ shopLinks = FALLBACK_SHOP_LINKS }: { shopLinks?: FooterShopLink[] }) {
+  const columns = [{ title: "Shop", links: shopLinks }, ...otherColumns];
+
   return (
     <footer className="border-t border-line bg-bone">
       <Ornament className="pt-12" />

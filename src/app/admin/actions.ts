@@ -60,7 +60,10 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
     won = await prisma.$transaction(async (tx) => {
       const claimed = await tx.order.updateMany({
         where: { id, status: changed.status },
-        data: { status },
+        // Clear any stale holdReason from settlement once an admin manually
+        // moves the order to a new status — it only describes why the order
+        // landed ON_HOLD in the first place, not the status being set now.
+        data: { status, holdReason: null },
       });
       if (claimed.count === 0) return false;
 
@@ -720,8 +723,15 @@ export async function deleteBundle(formData: FormData): Promise<void> {
   if (!id) return;
   const bundle = await prisma.bundle.findUnique({ where: { id }, select: { slug: true } });
   if (!bundle) return;
-  await prisma.bundle.delete({ where: { id } }); // items cascade
-  await prisma.coupon.deleteMany({ where: { code: bundleCouponCode(bundle.slug) } });
+  // Same transaction as the delete: an orphaned KIT-<slug> coupon (bundle
+  // gone, coupon still there) is explicitly treated as a normal, UNGATED
+  // coupon by bundleGate() — a failure between these two statements would
+  // leave a permanent, storewide discount active with nothing left to
+  // deactivate it.
+  await prisma.$transaction([
+    prisma.bundle.delete({ where: { id } }), // items cascade
+    prisma.coupon.deleteMany({ where: { code: bundleCouponCode(bundle.slug) } }),
+  ]);
   revalidatePath("/admin/bundles");
   revalidatePath("/shop");
   redirect("/admin/bundles");

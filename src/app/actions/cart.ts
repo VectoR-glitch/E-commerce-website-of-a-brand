@@ -61,6 +61,18 @@ export async function persistCart(items: WireItem[]): Promise<void> {
   await writeCart(session.sub, toMap(items, false));
 }
 
+// Re-fetches the signed-in customer's authoritative server cart with no write.
+// Used by the login-merge effect when THIS tab has nothing to merge (e.g.
+// another tab already consumed the shared guest-cart storage) — without this,
+// the tab would keep acting on its possibly-stale pre-merge snapshot and could
+// later silently overwrite another tab's just-landed merge via persistCart's
+// full-replace write.
+export async function loadCurrentCart(): Promise<CartItem[]> {
+  const session = await getSession();
+  if (!session) return [];
+  return loadServerCartItems(session.sub);
+}
+
 // One-time on login: merge the guest (localStorage) cart into the server cart
 // (summing quantities), then return the hydrated, authoritative cart.
 export async function syncGuestCart(guestItems: WireItem[]): Promise<CartItem[]> {

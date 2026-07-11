@@ -85,7 +85,7 @@ export default async function OrdersPage(props: { searchParams: Promise<SP> }) {
     take: PAGE_SIZE + 1,
     select: {
       id: true, orderNumber: true, createdAt: true, shipName: true, email: true,
-      paymentMethod: true, paymentStatus: true, status: true, totalPaise: true,
+      paymentMethod: true, paymentStatus: true, status: true, totalPaise: true, holdReason: true,
     },
   });
   const hasNext = rows.length > PAGE_SIZE;
@@ -164,7 +164,12 @@ export default async function OrdersPage(props: { searchParams: Promise<SP> }) {
                 </td>
                 <td className="px-3 py-2 text-ink/70">{o.paymentMethod}</td>
                 <td className="px-3 py-2 text-ink/70">{o.paymentStatus}</td>
-                <td className="px-3 py-2 text-ink/70">{o.status}</td>
+                <td className="px-3 py-2 text-ink/70">
+                  {o.status}
+                  {o.holdReason && (
+                    <span title={o.holdReason} className="ml-1 cursor-help text-amber-600">⚠</span>
+                  )}
+                </td>
                 <td className="px-3 py-2 text-right whitespace-nowrap text-ink">{formatINR(o.totalPaise)}</td>
               </tr>
             ))}

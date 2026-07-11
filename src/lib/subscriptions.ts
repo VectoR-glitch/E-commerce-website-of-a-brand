@@ -6,6 +6,8 @@ import { SUBSCRIBE_INTERVALS, SITE_URL } from "@/lib/constants";
 import type { SubscriptionStatus } from "@prisma/client";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Claim window for sendDueSubscriptionReminders — see its guard below.
+const CLAIM_WINDOW_MS = 10 * 60 * 1000;
 
 // A subscription's discount is realised through a private, per-subscription
 // coupon so the existing checkout/settlement discount pipeline is reused
@@ -112,6 +114,21 @@ export async function sendDueSubscriptionReminders(): Promise<{ sent: number; fa
   for (const s of due) {
     // Skip items that went inactive — don't nudge a customer toward a dead SKU.
     if (!s.variant.active || !s.variant.product.active) continue;
+
+    // Claim this subscription's reminder before sending: a guarded update
+    // that only succeeds if nobody has claimed it in the last
+    // CLAIM_WINDOW_MS — so the daily cron and a manual admin "send due
+    // reminders" click racing each other can't both email the same customer
+    // for the same cycle. The window is far shorter than any subscription's
+    // interval, so it never blocks a genuine next-day retry of a failed send.
+    const claimed = await prisma.subscription.updateMany({
+      where: {
+        id: s.id,
+        OR: [{ lastReminderAt: null }, { lastReminderAt: { lt: new Date(Date.now() - CLAIM_WINDOW_MS) } }],
+      },
+      data: { lastReminderAt: new Date() },
+    });
+    if (claimed.count === 0) continue;
 
     const variantLabel = [s.variant.fragrance, s.variant.size].filter(Boolean).join(" · ");
     const unitDiscountedPaise = Math.round(s.variant.pricePaise * (1 - s.discountPercent / 100));

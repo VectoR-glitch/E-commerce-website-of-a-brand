@@ -106,8 +106,10 @@ export async function getActiveBundles(): Promise<BundleView[]> {
 
       for (const it of b.items) {
         if (it.variantId && it.variant) {
-          // Exact slot — skip if the variant went inactive.
-          if (!it.variant.active) continue;
+          // Exact slot — skip if the variant OR its parent product went
+          // inactive (the two are independent booleans; deactivating a whole
+          // product doesn't cascade to its variants).
+          if (!it.variant.active || !it.variant.product.active) continue;
           slots.push({
             kind: "exact",
             id: it.id,
@@ -118,10 +120,13 @@ export async function getActiveBundles(): Promise<BundleView[]> {
           });
         } else if (it.productId && it.product) {
           // Product slot — offer the product's active variants (matching the
-          // size lock, if any). Skip the slot if nothing qualifies.
-          const options = it.product.variants
-            .filter((v) => v.active && (!it.size || v.size === it.size))
-            .map(optionOf);
+          // size lock, if any). Skip the slot if the product itself is
+          // inactive or nothing qualifies.
+          const options = it.product.active
+            ? it.product.variants
+                .filter((v) => v.active && (!it.size || v.size === it.size))
+                .map(optionOf)
+            : [];
           if (options.length === 0) continue;
           const prices = options.map((o) => o.pricePaise);
           if (new Set(prices).size > 1) variablePricing = true;

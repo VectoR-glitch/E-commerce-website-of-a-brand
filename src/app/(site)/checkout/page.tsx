@@ -362,16 +362,21 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subtotalPaise]);
 
-  // Populate the "available offers" dropdown whenever the subtotal changes —
-  // a coupon's eligibility (minOrderPaise) and a redeemable points value both
-  // depend on it. Account-aware server-side: guests get `coupons` only.
+  // Populate the "available offers" dropdown whenever the subtotal or cart
+  // contents change — a coupon's eligibility depends on subtotal
+  // (minOrderPaise) and a redeemable points value on it too, while a kit
+  // coupon's eligibility depends on which exact items are in the cart (see
+  // bundleGate). Account-aware server-side: guests get `coupons` only.
   useEffect(() => {
     if (subtotalPaise <= 0) return;
     let cancelled = false;
     fetch("/api/coupon/available", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subtotalPaise }),
+      body: JSON.stringify({
+        subtotalPaise,
+        items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
+      }),
     })
       .then((r) => r.json())
       .then((data: { coupons?: typeof availableCoupons; loyalty?: LoyaltyOffer | null }) => {
@@ -383,7 +388,8 @@ export default function CheckoutPage() {
     return () => {
       cancelled = true;
     };
-  }, [subtotalPaise]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotalPaise, itemsKey]);
 
   // "Add kit to cart" stashes the bundle's coupon code; apply it once on arrival
   // at checkout, then clear it so a later manual visit isn't re-couponed. The

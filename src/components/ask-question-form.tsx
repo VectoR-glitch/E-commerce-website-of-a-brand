@@ -26,7 +26,9 @@ export function AskQuestionForm({ productId, slug }: { productId: string; slug: 
         We&rsquo;ll answer publicly here so it helps the next shopper too.
       </p>
 
+      <label htmlFor="question-body" className="sr-only">Your question</label>
       <textarea
+        id="question-body"
         name="question"
         placeholder="e.g. Is the floor cleaner safe to use around pets?"
         rows={3}

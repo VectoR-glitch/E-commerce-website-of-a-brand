@@ -53,7 +53,9 @@ export function BackInStockForm({
             moment it&rsquo;s back — no spam, just this one alert.
           </p>
           <form onSubmit={submit} className="mt-4 flex flex-wrap gap-2">
+            <label htmlFor="back-in-stock-email" className="sr-only">Email address</label>
             <input
+              id="back-in-stock-email"
               type="email"
               required
               value={email}

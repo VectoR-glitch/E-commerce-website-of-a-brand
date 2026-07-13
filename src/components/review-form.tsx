@@ -70,14 +70,18 @@ export function ReviewForm({
         ))}
       </div>
 
+      <label htmlFor="review-title" className="sr-only">Review title (optional)</label>
       <input
+        id="review-title"
         name="title"
         defaultValue={existing?.title ?? ""}
         placeholder="Title (optional)"
         maxLength={120}
         className={field}
       />
+      <label htmlFor="review-body" className="sr-only">Your review</label>
       <textarea
+        id="review-body"
         name="body"
         defaultValue={existing?.body ?? ""}
         placeholder="How did it work for you?"

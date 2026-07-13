@@ -37,6 +37,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Don't advertise the framework in an `X-Powered-By: Next.js` response header.
+  poweredByHeader: false,
   // Allow phones/other devices on the LAN to load the dev server's /_next
   // resources (JS chunks, HMR). Without this, Next 16 blocks them cross-origin
   // and the page can't hydrate. Dev-only; ignored in production builds.

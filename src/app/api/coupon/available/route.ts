@@ -22,16 +22,21 @@ export async function POST(request: Request) {
   });
   if (!rl.ok) return tooManyRequests(rl.retryAfter, "Too many attempts. Please wait a moment.");
 
-  let body: { subtotalPaise?: number };
+  let body: { subtotalPaise?: number; items?: { variantId?: string; quantity?: number }[] };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ coupons: [], loyalty: null });
   }
   const subtotalPaise = Math.max(0, Math.floor(Number(body.subtotalPaise) || 0));
+  // Needed so a KIT- coupon only shows up once the kit's own items are
+  // actually in the cart — see bundleGate in lib/coupons.ts.
+  const cart = (body.items ?? [])
+    .map((i) => ({ variantId: String(i.variantId ?? ""), quantity: Math.floor(Number(i.quantity) || 0) }))
+    .filter((i) => i.variantId && i.quantity > 0);
 
   const [coupons, session] = await Promise.all([
-    listAvailableCoupons(subtotalPaise),
+    listAvailableCoupons(subtotalPaise, cart),
     getSession(),
   ]);
 

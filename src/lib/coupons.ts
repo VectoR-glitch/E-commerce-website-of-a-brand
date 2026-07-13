@@ -116,17 +116,25 @@ function computeDiscount(
 
 export type AvailableCoupon = { code: string; label: string; discountPaise: number };
 
-// Every active, publicly shareable coupon that currently qualifies for this
-// cart — for the checkout "available offers" dropdown. Excludes KIT-/SUB-/
-// LOYAL- codes (see isSystemCouponCode) and anything else customer-specific.
-// The isSystemCouponCode check matters here even though the query already
-// filters `customerId: null`: a LOYAL- coupon is SUPPOSED to always carry a
-// customerId, but a null-customerId LOYAL- row was found in production
-// 2026-07-13 (likely hand-created via the generic admin create-coupon form,
-// which didn't reject that prefix before this fix) — without this filter it
-// would have been listed here as a "public" coupon, exposing one specific
-// customer's reward to every checkout visitor.
-export async function listAvailableCoupons(subtotalPaise: number): Promise<AvailableCoupon[]> {
+// Every active coupon that currently qualifies for this cart — for the
+// checkout "available offers" dropdown. Two different exclusion reasons here,
+// don't conflate them:
+//  - SUB-/LOYAL- are hard-excluded, always. Both are genuinely private:
+//    SUB- codes are meant to stay unguessable (only ever shown in the
+//    customer's own reminder email/account), and LOYAL- codes are scoped to
+//    the specific customer who redeemed them via `customerId`. Listing either
+//    here would hand one customer's private code/reward to every visitor —
+//    exactly the shape of a null-customerId LOYAL- row found in production
+//    2026-07-13 (see isSystemCouponCode).
+//  - KIT- codes are NOT excluded — they're already meant to be publicly
+//    visible (shown on the kit's own page), gated by cart contents rather
+//    than customer identity. They're only included here when `bundleGate`
+//    actually passes for the current cart, so the dropdown never offers a
+//    kit discount the customer can't actually use yet.
+export async function listAvailableCoupons(
+  subtotalPaise: number,
+  cart: CartLine[] = [],
+): Promise<AvailableCoupon[]> {
   const now = new Date();
   const candidates = await prisma.coupon.findMany({
     where: {
@@ -135,9 +143,14 @@ export async function listAvailableCoupons(subtotalPaise: number): Promise<Avail
       OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
     },
   });
-  return candidates
-    .filter((c) => !isSystemCouponCode(c.code))
-    .filter((c) => c.maxUses == null || c.usedCount < c.maxUses)
-    .filter((c) => subtotalPaise >= c.minOrderPaise)
-    .map((c) => ({ code: c.code, ...computeDiscount(c, subtotalPaise) }));
+
+  const results: AvailableCoupon[] = [];
+  for (const c of candidates) {
+    if (c.code.startsWith("SUB-") || c.code.startsWith("LOYAL-")) continue;
+    if (c.maxUses != null && c.usedCount >= c.maxUses) continue;
+    if (subtotalPaise < c.minOrderPaise) continue;
+    if (c.code.startsWith("KIT-") && (await bundleGate(c.code, cart))) continue;
+    results.push({ code: c.code, ...computeDiscount(c, subtotalPaise) });
+  }
+  return results;
 }

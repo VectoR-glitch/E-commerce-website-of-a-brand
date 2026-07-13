@@ -97,3 +97,22 @@ export const LOYALTY_VOUCHER_TTL_DAYS = 60;
 export const SITE_URL = (
   process.env.NEXT_PUBLIC_SITE_URL ?? "https://klenich.com"
 ).replace(/\/$/, "");
+
+// Legal Metrology (Packaged Commodities) Rules, 2011 mandatory declarations,
+// shown on every PDP. Deliberately mirrors the GST-registered SUPPLIER
+// address in gst.ts (same legal entity's manufacturing address) rather than
+// the separate public correspondence address on Privacy/Terms/Contact — but
+// duplicated here (not imported) since gst.ts is server-only and this needs
+// to render in the client PDP. If SUPPLIER's address ever changes, update
+// both. Month/year of manufacture/packing is intentionally NOT stated here —
+// it's printed on the physical product label instead (confirmed 2026-07-13).
+export const MANUFACTURER_DECLARATION = {
+  name: "Bharat Bliss Private Limited",
+  addressLines: [
+    "C/O Debu Mondal, Kanjial Para, Reckjoani,",
+    "Rajarhat, New Town, North Twenty Four Parganas,",
+    "West Bengal 700135",
+  ],
+  consumerCareEmail: "bharatblissofficial@gmail.com",
+  consumerCarePhone: "+91 89812 21994",
+};

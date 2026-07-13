@@ -4,7 +4,12 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { FRAGRANCE_HEX, formatINR, type Product } from "@/lib/catalog";
-import { LOW_STOCK_THRESHOLD, SUBSCRIBE_SAVE_PERCENT, SUBSCRIBE_INTERVALS } from "@/lib/constants";
+import {
+  LOW_STOCK_THRESHOLD,
+  SUBSCRIBE_SAVE_PERCENT,
+  SUBSCRIBE_INTERVALS,
+  MANUFACTURER_DECLARATION,
+} from "@/lib/constants";
 import { useCart } from "@/lib/cart-context";
 import { flyToCart } from "@/lib/fly-to-cart";
 import { createSubscription } from "@/app/actions/subscriptions";
@@ -490,6 +495,26 @@ export function ProductDetail({
         </div>
       ))}
     </div>
+
+    {/* Legal Metrology (Packaged Commodities) Rules, 2011 declarations —
+        mandatory for pre-packaged consumer goods. */}
+    {selected && (
+      <div className="mt-10 border border-line bg-paper/60 p-5 text-xs leading-relaxed text-ink/60">
+        <p className="smallcaps mb-2 text-ink/70">Product declarations</p>
+        <p>
+          MRP {formatINR(selected.pricePaise)} (incl. of all taxes) · Net Qty {size}
+        </p>
+        <p className="mt-1">
+          Manufactured &amp; packed by: {MANUFACTURER_DECLARATION.name},{" "}
+          {MANUFACTURER_DECLARATION.addressLines.join(" ")}
+        </p>
+        <p className="mt-1">Month &amp; year of manufacture/packing: see product label</p>
+        <p className="mt-1">
+          Consumer care: {MANUFACTURER_DECLARATION.consumerCareEmail} ·{" "}
+          {MANUFACTURER_DECLARATION.consumerCarePhone}
+        </p>
+      </div>
+    )}
 
     {/* Mobile sticky add-to-cart — appears after the main row scrolls away */}
     <div

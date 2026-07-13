@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useCart } from "@/lib/cart-context";
-import { PENDING_COUPON_KEY } from "@/components/kit-picker";
+import { PENDING_COUPON_KEY } from "@/lib/constants";
 
 // Adds a subscription's item to the cart and stashes its private discount code
 // so checkout auto-applies the saved price (same mechanism as kits). This is the

@@ -57,6 +57,20 @@ export const SUBSCRIBE_INTERVALS = [
   { days: 60, label: "Every 2 months" },
 ];
 
+// sessionStorage handoff for "add items to cart on one page, auto-apply a
+// discount at checkout on the next" — used by kits (KIT- coupon), subscription
+// reorders (SUB-/SUBPLAN- coupon), and read once (then cleared) on checkout
+// mount. Not kit-specific despite the historical name — kept generic since
+// only one such handoff is ever in flight at a time.
+export const PENDING_COUPON_KEY = "klenich.pendingCoupon";
+
+// sessionStorage handoff from /subscribe's plan builder to checkout: presence
+// of this key (read once, then cleared, on checkout mount) means "this
+// checkout should start a multi-item subscription plan at this cadence" — see
+// SubscriptionPlan in prisma/schema.prisma. No coupon is involved for this
+// first order; the discount is computed automatically in /api/checkout.
+export const PENDING_SUBSCRIPTION_INTERVAL_KEY = "klenich.pendingSubscriptionIntervalDays";
+
 // Below this many units in stock (and above zero) the storefront shows an
 // urgency cue ("Only N left"). One source of truth for cards + PDP.
 export const LOW_STOCK_THRESHOLD = 10;

@@ -11,20 +11,29 @@ export type CouponResult =
 
 export type CartLine = { variantId: string; quantity: number };
 
-// KIT-<slug>, SUB-<id>, and LOYAL-<suffix> codes are all system-managed —
-// never hand-creatable or hand-deletable via the generic Coupons admin page.
-// KIT-/SUB- are kept in sync by the Bundles/Subscriptions admin pages
-// (syncBundleCoupon in admin/actions.ts, syncSubscriptionCoupon in
+// KIT-<slug>, SUB-<id>, SUBPLAN-<id>, and LOYAL-<suffix> codes are all
+// system-managed — never hand-creatable or hand-deletable via the generic
+// Coupons admin page. KIT-/SUB- are kept in sync by the Bundles/Subscriptions
+// admin pages (syncBundleCoupon in admin/actions.ts, syncSubscriptionCoupon in
 // app/actions/subscriptions.ts); deleting one via the generic page leaves its
 // bundle/subscription still showing "Active" with a discount that silently
 // stops applying. LOYAL- codes are minted by redeemPoints (lib/loyalty.ts),
 // always scoped to the customer who earned them via `customerId` — a
 // hand-created LOYAL- coupon on the generic form defaults customerId to null,
-// bypassing that scoping and making one customer's reward usable by anyone.
-// Manage all three from their own page instead (Bundles / Subscriptions / the
-// customer's loyalty ledger).
+// bypassing that scoping and making one customer's reward usable by anyone
+// (this exact gap caused a real production incident — a null-customerId
+// LOYAL- row was found and fixed 2026-07-13). SUBPLAN- codes are minted by
+// settleOrderPaid (lib/orders.ts) for multi-item subscription plans; they DO
+// set customerId at creation, but are blocked here too, defense-in-depth.
+// Manage all four from their own page instead (Bundles / Subscriptions /
+// Subscription plans / the customer's loyalty ledger).
 export function isSystemCouponCode(code: string): boolean {
-  return code.startsWith("KIT-") || code.startsWith("SUB-") || code.startsWith("LOYAL-");
+  return (
+    code.startsWith("KIT-") ||
+    code.startsWith("SUB-") ||
+    code.startsWith("SUBPLAN-") ||
+    code.startsWith("LOYAL-")
+  );
 }
 
 // A bundle's discount is realised through a coupon whose code (KIT-<slug>) is

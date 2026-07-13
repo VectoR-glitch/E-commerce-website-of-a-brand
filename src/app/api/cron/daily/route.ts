@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { sendDueSubscriptionReminders } from "@/lib/subscriptions";
+import { sendDuePlanReminders } from "@/lib/subscription-plans";
 import { runBackInStockSweep } from "@/lib/back-in-stock";
 import { runAbandonedCartSweep } from "@/lib/abandoned-cart";
 
@@ -48,13 +49,14 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const subscriptions = await runTask("subscription-reminders", sendDueSubscriptionReminders);
+  const subscriptionPlans = await runTask("subscription-plan-reminders", sendDuePlanReminders);
   const backInStock = await runTask("back-in-stock", runBackInStockSweep);
   const abandonedCart = await runTask("abandoned-cart", runAbandonedCartSweep);
 
   // Individual send failures are logged where they happen; this summary line
   // makes a systemic outage (e.g. sent:0 across the board) scannable in the
   // server logs even though nothing currently reads the JSON response below.
-  console.log("Daily cron summary:", { subscriptions, backInStock, abandonedCart });
+  console.log("Daily cron summary:", { subscriptions, subscriptionPlans, backInStock, abandonedCart });
 
-  return NextResponse.json({ ok: true, subscriptions, backInStock, abandonedCart });
+  return NextResponse.json({ ok: true, subscriptions, subscriptionPlans, backInStock, abandonedCart });
 }

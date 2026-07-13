@@ -4,6 +4,10 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { nextInvoiceNumber } from "@/lib/gst";
+import { subscriptionPlanCouponCode } from "@/lib/subscription-plans";
+import { SUBSCRIBE_SAVE_PERCENT } from "@/lib/constants";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
@@ -134,6 +138,43 @@ export async function settleOrderPaid(params: {
         holdReason: holdReasons.length ? holdReasons.join("; ") : null,
       },
     });
+
+    // "Build a box" checkout: create the recurring SubscriptionPlan only now
+    // that the founding order genuinely settled CONFIRMED (no holdReasons) —
+    // an order that goes ON_HOLD for a stock shortfall must not spawn a plan
+    // promising deliveries it just failed to fulfill. There's no "pending"
+    // state to clean up either way: nothing is written here at all unless
+    // this exact condition is met, so an abandoned/failed checkout leaves no
+    // subscription-plan residue, same as any other abandoned order today.
+    if (existing.subscriptionIntervalDays != null && holdReasons.length === 0) {
+      const plan = await tx.subscriptionPlan.create({
+        data: {
+          customerId: existing.customerId!, // guaranteed by /api/checkout's session check
+          intervalDays: existing.subscriptionIntervalDays,
+          discountPercent: SUBSCRIBE_SAVE_PERCENT,
+          nextDeliveryAt: new Date(Date.now() + existing.subscriptionIntervalDays * DAY_MS),
+          couponCode: `PENDING-${existing.id}`, // placeholder, overwritten immediately below
+          items: {
+            create: existing.items
+              .filter((it) => it.variantId)
+              .map((it) => ({ variantId: it.variantId!, quantity: it.quantity })),
+          },
+        },
+      });
+      const couponCode = subscriptionPlanCouponCode(plan.id);
+      await tx.subscriptionPlan.update({ where: { id: plan.id }, data: { couponCode } });
+      await tx.coupon.create({
+        data: {
+          code: couponCode,
+          type: "PERCENT",
+          value: SUBSCRIBE_SAVE_PERCENT,
+          minOrderPaise: 0,
+          active: true,
+          customerId: existing.customerId,
+        },
+      });
+      await tx.order.update({ where: { id: existing.id }, data: { subscriptionPlanId: plan.id } });
+    }
 
     // Loyalty is NOT credited here — it's awarded only once the order is later
     // marked DELIVERED (see awardLoyaltyForDeliveredOrder in admin/actions.ts),

@@ -419,6 +419,7 @@ model Order {
 
   @@index([customerId])
   @@index([status])
+  @@index([paymentStatus, createdAt])
 }
 
 model OrderItem {
@@ -503,6 +504,7 @@ model Subscription {
 
   @@index([customerId])
   @@index([status, nextDeliveryAt])
+  @@index([variantId])
 }
 
 /// A journal/blog post — Klenich's own SEO content, admin-authored directly
@@ -528,6 +530,10 @@ model BlogPost {
   updatedAt       DateTime  @updatedAt
 
   @@index([published, publishedAt])
+  // GIN index for the `previousSlugs: { has: slug }` old-URL redirect lookup
+  // (blog.ts, admin/actions.ts) — without it, Postgres has to sequential-scan
+  // every post's array on every 404-candidate slug.
+  @@index([previousSlugs(ops: ArrayOps)], type: Gin)
 }
 
 enum SubscriptionStatus {

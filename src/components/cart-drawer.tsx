@@ -14,6 +14,8 @@ export function CartDrawer() {
   const { items, subtotalPaise, setQuantity, removeItem } = useCart();
   const [open, setOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
 
   // Open on the header's request.
   useEffect(() => {
@@ -22,19 +24,51 @@ export function CartDrawer() {
     return () => window.removeEventListener("klen:cart-open", onOpen);
   }, []);
 
-  // While open: lock body scroll, close on Esc, move focus into the panel.
+  // While open: lock body scroll, close on Esc, move focus into the panel,
+  // trap Tab within it (the rest of the page is only visually obscured by
+  // the overlay — without this, Tab can walk past the drawer's last link
+  // into the hidden header/main content behind it), and restore focus to
+  // whatever triggered the drawer (the header cart button) on close.
   useEffect(() => {
     if (!open) return;
+    previouslyFocused.current = document.activeElement as HTMLElement | null;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+
+    function focusable(): HTMLElement[] {
+      const panel = panelRef.current;
+      if (!panel) return [];
+      return Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+    }
+
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const els = focusable();
+      if (els.length === 0) return;
+      const first = els[0];
+      const last = els[els.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     closeRef.current?.focus();
     return () => {
       document.body.style.overflow = prevOverflow;
       window.removeEventListener("keydown", onKey);
+      previouslyFocused.current?.focus();
     };
   }, [open]);
 
@@ -54,6 +88,7 @@ export function CartDrawer() {
 
       {/* Panel */}
       <aside
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="Shopping cart"

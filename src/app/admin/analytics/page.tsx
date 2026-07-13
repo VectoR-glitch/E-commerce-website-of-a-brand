@@ -1,4 +1,4 @@
-import { PaymentStatus } from "@prisma/client";
+import { PaymentStatus, OrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
@@ -10,6 +10,12 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 // (PENDING), failed payments, and refunds, so revenue/AOV/retention all mean
 // "real, kept business" rather than raw order-row volume.
 const SETTLED: PaymentStatus[] = [PaymentStatus.PAID, PaymentStatus.PARTIALLY_PAID];
+// paymentStatus alone isn't enough: cancelling/returning an order doesn't
+// automatically flip paymentStatus to REFUNDED (that's a separate manual
+// admin step), so a cancelled order can sit PAID/PARTIALLY_PAID indefinitely
+// while its refund is pending — excluding these order statuses stops that
+// from silently inflating revenue/AOV/top-products/coupon stats.
+const NOT_VOIDED: OrderStatus[] = [OrderStatus.CANCELLED, OrderStatus.RETURNED];
 
 function deltaNode(curr: number, prev: number): React.ReactNode {
   if (prev <= 0) {
@@ -47,11 +53,19 @@ export default async function AdminAnalytics() {
     couponUsage,
   ] = await Promise.all([
     prisma.order.findMany({
-      where: { paymentStatus: { in: SETTLED }, createdAt: { gte: windowStart, lt: windowEnd } },
+      where: {
+        paymentStatus: { in: SETTLED },
+        status: { notIn: NOT_VOIDED },
+        createdAt: { gte: windowStart, lt: windowEnd },
+      },
       select: { totalPaise: true, createdAt: true },
     }),
     prisma.order.aggregate({
-      where: { paymentStatus: { in: SETTLED }, createdAt: { gte: prevWindowStart, lt: windowStart } },
+      where: {
+        paymentStatus: { in: SETTLED },
+        status: { notIn: NOT_VOIDED },
+        createdAt: { gte: prevWindowStart, lt: windowStart },
+      },
       _sum: { totalPaise: true },
       _count: true,
     }),
@@ -59,13 +73,14 @@ export default async function AdminAnalytics() {
       by: ["customerId"],
       where: {
         paymentStatus: { in: SETTLED },
+        status: { notIn: NOT_VOIDED },
         customerId: { not: null },
         createdAt: { gte: windowStart, lt: windowEnd },
       },
     }),
     prisma.order.groupBy({
       by: ["customerId"],
-      where: { paymentStatus: { in: SETTLED }, customerId: { not: null } },
+      where: { paymentStatus: { in: SETTLED }, status: { notIn: NOT_VOIDED }, customerId: { not: null } },
       _count: true,
       _min: { createdAt: true },
     }),
@@ -75,14 +90,20 @@ export default async function AdminAnalytics() {
     }),
     prisma.orderItem.groupBy({
       by: ["productName"],
-      where: { order: { paymentStatus: { in: SETTLED }, createdAt: { gte: topProductsSince, lt: windowEnd } } },
+      where: {
+        order: {
+          paymentStatus: { in: SETTLED },
+          status: { notIn: NOT_VOIDED },
+          createdAt: { gte: topProductsSince, lt: windowEnd },
+        },
+      },
       _sum: { linePaise: true, quantity: true },
       orderBy: { _sum: { linePaise: "desc" } },
       take: 6,
     }),
     prisma.order.groupBy({
       by: ["couponCode"],
-      where: { paymentStatus: { in: SETTLED }, couponCode: { not: null } },
+      where: { paymentStatus: { in: SETTLED }, status: { notIn: NOT_VOIDED }, couponCode: { not: null } },
       _sum: { discountPaise: true },
       _count: true,
       orderBy: { _sum: { discountPaise: "desc" } },
@@ -259,6 +280,7 @@ export default async function AdminAnalytics() {
 
       {/* Coupon performance */}
       <h2 className="mt-10 smallcaps text-brass-deep">Coupon performance</h2>
+      <p className="mt-1 text-xs text-ink/50">All-time, not limited to the last 30 days.</p>
       {couponUsage.length === 0 ? (
         <p className="mt-4 text-sm text-ink/50">No coupons redeemed yet.</p>
       ) : (

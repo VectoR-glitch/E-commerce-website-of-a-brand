@@ -463,7 +463,13 @@ export default function CheckoutPage() {
 
   // Validate + apply a coupon against the current subtotal. The checkout route
   // re-validates authoritatively at pay time; this is the instant preview.
-  async function applyCoupon(code: string) {
+  // `fromRedemption`: the code was just minted by redeeming loyalty points
+  // (real points already debited server-side) — if it fails to apply here
+  // (e.g. the cart changed in the moment between redeeming and applying), the
+  // voucher itself is still live and unused, just not usable on THIS cart
+  // right now. Say so explicitly rather than showing the generic invalid-code
+  // message, which would read as "your points vanished for nothing."
+  async function applyCoupon(code: string, opts?: { fromRedemption?: boolean }) {
     const trimmed = code.trim();
     if (!trimmed) return;
     setCouponInput(trimmed);
@@ -485,7 +491,11 @@ export default function CheckoutPage() {
         setCouponError(null);
       } else {
         setCoupon(null);
-        setCouponError(data?.error ?? "This code isn’t valid.");
+        setCouponError(
+          opts?.fromRedemption
+            ? `Your points were redeemed, but this voucher doesn't apply to your cart right now (${(data?.error ?? "it no longer qualifies").toLowerCase()}). It's still saved to your account — check /account/loyalty to use it another time.`
+            : (data?.error ?? "This code isn’t valid."),
+        );
       }
     } catch {
       setCouponError("Couldn’t check that code. Please try again.");
@@ -976,7 +986,7 @@ export default function CheckoutPage() {
                     maxRedeemablePaise={subtotalPaise}
                     onApply={(code, pointsUsed) => {
                       setLoyaltyPoints((p) => p - pointsUsed);
-                      applyCoupon(code);
+                      applyCoupon(code, { fromRedemption: true });
                     }}
                   />
                 )}
@@ -993,7 +1003,9 @@ export default function CheckoutPage() {
                   </p>
                 )}
                 <div className="flex gap-2">
+                  <label htmlFor="coupon-code" className="sr-only">Discount code</label>
                   <input
+                    id="coupon-code"
                     value={couponInput}
                     onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
                     onKeyDown={(e) => {

@@ -9,6 +9,7 @@ import { rateLimit, getClientIpFromHeaders } from "@/lib/rate-limit";
 import { sendVerificationEmail } from "@/lib/email";
 import { resolveReferralCode } from "@/lib/loyalty";
 import { INDIAN_STATES } from "@/lib/constants";
+import { upsertDefaultAddress } from "@/lib/address";
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -115,24 +116,11 @@ export async function registerAction(_prev: RegisterState, formData: FormData): 
         data: { name, email, phone, passwordHash, role: "CUSTOMER", referredById: referrerId },
       });
 
-  // Save the address given at signup as the default shipping address (same
-  // upsert-by-isDefault shape as saveAddressAction), so checkout's prefill
-  // picks it up immediately — a guest/order-only row upgrading here may
-  // already have one (unlikely, but handled the same way for safety).
-  const existingAddress = await prisma.address.findFirst({
-    where: { customerId: customer.id, isDefault: true },
-    select: { id: true },
-  });
-  if (existingAddress) {
-    await prisma.address.update({
-      where: { id: existingAddress.id },
-      data: { line1, line2, city, state, pincode, phone },
-    });
-  } else {
-    await prisma.address.create({
-      data: { customerId: customer.id, line1, line2, city, state, pincode, phone, isDefault: true },
-    });
-  }
+  // Save the address given at signup as the default shipping address, so
+  // checkout's prefill picks it up immediately — a guest/order-only row
+  // upgrading here may already have one (unlikely, but handled the same way
+  // for safety).
+  await upsertDefaultAddress(customer.id, { line1, line2, city, state, pincode, phone });
 
   await issueVerification(customer.id, email, name, next);
 
@@ -202,21 +190,7 @@ export async function saveAddressAction(_prev: AddressState, formData: FormData)
     return { error: "Enter a valid 10-digit mobile, or leave it blank." };
   }
 
-  const existing = await prisma.address.findFirst({
-    where: { customerId: session.sub, isDefault: true },
-    select: { id: true },
-  });
-
-  if (existing) {
-    await prisma.address.update({
-      where: { id: existing.id },
-      data: { line1, line2, city, state, pincode, phone },
-    });
-  } else {
-    await prisma.address.create({
-      data: { customerId: session.sub, line1, line2, city, state, pincode, phone, isDefault: true },
-    });
-  }
+  await upsertDefaultAddress(session.sub, { line1, line2, city, state, pincode, phone });
 
   revalidatePath("/account");
   return { ok: true };

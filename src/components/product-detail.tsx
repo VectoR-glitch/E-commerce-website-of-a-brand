@@ -30,6 +30,8 @@ export function ProductDetail({
   const [justAdded, setJustAdded] = useState(false);
   const [showSticky, setShowSticky] = useState(false);
   const [zoomed, setZoomed] = useState(false);
+  const lightboxCloseRef = useRef<HTMLButtonElement>(null);
+  const zoomTriggerRef = useRef<HTMLButtonElement>(null);
   // Hover-to-zoom: magnify the image toward the cursor on desktop. `null` while
   // the pointer is away; otherwise the cursor position as 0–100% of the frame,
   // used as the transform-origin so the area under the cursor scales up.
@@ -86,18 +88,28 @@ export function ProductDetail({
     return () => io.disconnect();
   }, []);
 
-  // Lightbox: lock body scroll and close on Esc while the zoomed view is open.
+  // Lightbox: lock body scroll, trap focus, and close on Esc while the zoomed
+  // view is open. The close button is the only focusable element inside, so
+  // trapping just means keeping focus pinned there rather than letting Tab
+  // escape to the page underneath; focus returns to the zoom trigger on close.
   useEffect(() => {
     if (!zoomed) return;
+    const trigger = zoomTriggerRef.current;
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    lightboxCloseRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setZoomed(false);
+      else if (e.key === "Tab") {
+        e.preventDefault();
+        lightboxCloseRef.current?.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => {
       document.body.style.overflow = prevOverflow;
       window.removeEventListener("keydown", onKey);
+      trigger?.focus();
     };
   }, [zoomed]);
 
@@ -134,13 +146,33 @@ export function ProductDetail({
   }
 
   // Switching the variant invalidates the "Subscribed ✓" confirmation.
+  // Fragrance/size options are the UNION across all of a product's variants,
+  // not a per-variant cross product — so a fragrance and a size can each be
+  // individually valid while their combination isn't (e.g. one fragrance only
+  // ships in a size the other doesn't). Snap the OTHER axis to a size/
+  // fragrance that's actually available for the one just picked, instead of
+  // silently landing on a dead combination (price "—", Add to Cart disabled
+  // with no explanation).
   function pickFragrance(f: string) {
     setFragrance(f);
+    const availableSizes = product.variants.filter((v) => v.fragrance === f).map((v) => v.size);
+    if (availableSizes.length > 0 && !availableSizes.includes(size)) {
+      setSize(availableSizes[0]);
+    }
     setSubOk(false);
     setSubError(null);
   }
   function pickSize(s: string) {
     setSize(s);
+    if (hasFragrance) {
+      const availableFragrances = product.variants
+        .filter((v) => v.size === s)
+        .map((v) => v.fragrance)
+        .filter((f): f is string => Boolean(f));
+      if (availableFragrances.length > 0 && fragrance && !availableFragrances.includes(fragrance)) {
+        setFragrance(availableFragrances[0]);
+      }
+    }
     setSubOk(false);
     setSubError(null);
   }
@@ -186,6 +218,7 @@ export function ProductDetail({
             />
             {/* Tap/click to enlarge — full-cover button keeps it keyboard-accessible. */}
             <button
+              ref={zoomTriggerRef}
               type="button"
               onClick={() => setZoomed(true)}
               aria-label="Zoom image"
@@ -225,6 +258,7 @@ export function ProductDetail({
                     <button
                       key={f}
                       type="button"
+                      aria-pressed={active}
                       onClick={() => pickFragrance(f)}
                       className={`flex items-center gap-2 border px-4 py-2.5 text-sm transition-colors ${
                         active
@@ -253,6 +287,7 @@ export function ProductDetail({
                   <button
                     key={s}
                     type="button"
+                    aria-pressed={active}
                     onClick={() => pickSize(s)}
                     className={`border px-5 py-2.5 text-sm transition-colors ${
                       active
@@ -276,7 +311,7 @@ export function ProductDetail({
                 {selected ? formatINR(selected.pricePaise) : "—"}
               </span>
               {selected && (
-                <span className="smallcaps mt-1.5 text-ink/40">
+                <span className="smallcaps mt-1.5 text-ink/60">
                   SKU {selected.sku}
                 </span>
               )}
@@ -497,6 +532,7 @@ export function ProductDetail({
         className="fade-in fixed inset-0 z-[70] flex items-center justify-center bg-ink/90 p-6 backdrop-blur-sm"
       >
         <button
+          ref={lightboxCloseRef}
           type="button"
           onClick={() => setZoomed(false)}
           aria-label="Close zoom"

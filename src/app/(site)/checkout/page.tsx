@@ -10,7 +10,7 @@ import { Ornament } from "@/components/ornament";
 import { Kicker } from "@/components/kicker";
 import { TrustBadges } from "@/components/trust-badges";
 import { PENDING_COUPON_KEY } from "@/components/kit-picker";
-import { CheckoutRedeemPoints } from "@/components/checkout-redeem-points";
+import type { LoyaltyOffer } from "@/app/api/coupon/available/route";
 
 
 // Minimal shape of the Razorpay Checkout we use.
@@ -177,6 +177,13 @@ export default function CheckoutPage() {
   // even after it's consumed so the customer can switch back to it after
   // trying loyalty points instead — the two are mutually exclusive discounts.
   const [kitCouponCode, setKitCouponCode] = useState<string | null>(null);
+  // "Available offers" dropdown — every public promo code that currently
+  // qualifies for this cart, plus (signed in) the best loyalty option. Account-
+  // aware: guests only ever see `coupons` (loyalty stays null server-side).
+  const [availableCoupons, setAvailableCoupons] = useState<
+    { code: string; label: string; discountPaise: number }[]
+  >([]);
+  const [loyaltyOffer, setLoyaltyOffer] = useState<LoyaltyOffer | null>(null);
 
   // On mount, ask the server for the signed-in customer's saved address. Fails
   // silently — a guest (or no saved address) simply gets no prompt.
@@ -355,6 +362,29 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subtotalPaise]);
 
+  // Populate the "available offers" dropdown whenever the subtotal changes —
+  // a coupon's eligibility (minOrderPaise) and a redeemable points value both
+  // depend on it. Account-aware server-side: guests get `coupons` only.
+  useEffect(() => {
+    if (subtotalPaise <= 0) return;
+    let cancelled = false;
+    fetch("/api/coupon/available", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subtotalPaise }),
+    })
+      .then((r) => r.json())
+      .then((data: { coupons?: typeof availableCoupons; loyalty?: LoyaltyOffer | null }) => {
+        if (cancelled) return;
+        setAvailableCoupons(data.coupons ?? []);
+        setLoyaltyOffer(data.loyalty ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [subtotalPaise]);
+
   // "Add kit to cart" stashes the bundle's coupon code; apply it once on arrival
   // at checkout, then clear it so a later manual visit isn't re-couponed. The
   // kit coupon wins the pre-applied slot by default. We still always fetch the
@@ -508,6 +538,45 @@ export default function CheckoutPage() {
     setCoupon(null);
     setCouponInput("");
     setCouponError(null);
+  }
+
+  // Handles a selection from the "available offers" dropdown. A regular
+  // coupon just applies directly; an already-redeemed loyalty voucher applies
+  // by code; "redeemable" points haven't been converted into a voucher yet, so
+  // redeem first (same mint step CheckoutRedeemPoints used to do inline), then
+  // apply the freshly-minted code.
+  async function selectOffer(value: string) {
+    if (!value) return;
+    if (value !== "__loyalty__") {
+      applyCoupon(value);
+      return;
+    }
+    if (!loyaltyOffer) return;
+    if (loyaltyOffer.kind === "existing") {
+      applyCoupon(loyaltyOffer.code);
+      return;
+    }
+    setCouponChecking(true);
+    setCouponError(null);
+    try {
+      const res = await fetch("/api/account/redeem-points", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ points: loyaltyOffer.pointsToRedeem }),
+      });
+      const data = await res.json();
+      if (data?.ok && data.code) {
+        setLoyaltyPoints((p) => p - loyaltyOffer.pointsToRedeem);
+        setCouponChecking(false);
+        await applyCoupon(data.code, { fromRedemption: true });
+      } else {
+        setCouponError(data?.error ?? "Couldn’t redeem those points. Please try again.");
+        setCouponChecking(false);
+      }
+    } catch {
+      setCouponError("Couldn’t redeem those points. Please try again.");
+      setCouponChecking(false);
+    }
   }
 
   // Live cross-checks for inline feedback (validate() enforces them on submit).
@@ -978,17 +1047,37 @@ export default function CheckoutPage() {
               </div>
             ) : (
               <>
-                {authenticated && loyaltyLoaded && (
-                  <CheckoutRedeemPoints
-                    balance={loyaltyPoints}
-                    minPoints={LOYALTY_MIN_REDEEM_POINTS}
-                    pointValuePaise={POINT_VALUE_PAISE}
-                    maxRedeemablePaise={subtotalPaise}
-                    onApply={(code, pointsUsed) => {
-                      setLoyaltyPoints((p) => p - pointsUsed);
-                      applyCoupon(code, { fromRedemption: true });
-                    }}
-                  />
+                {(availableCoupons.length > 0 || (authenticated && loyaltyOffer)) && (
+                  <div className="mb-3">
+                    <label htmlFor="available-offers" className="smallcaps mb-2 block text-ink/70">
+                      Available offers
+                    </label>
+                    <select
+                      id="available-offers"
+                      value=""
+                      disabled={couponChecking}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        e.target.value = "";
+                        selectOffer(value);
+                      }}
+                      className="w-full border border-line bg-white px-3.5 py-2.5 text-sm outline-none focus:border-forest"
+                    >
+                      <option value="">Select an offer…</option>
+                      {authenticated && loyaltyOffer && (
+                        <option value="__loyalty__">
+                          {loyaltyOffer.kind === "existing"
+                            ? `Loyalty voucher — ${formatINR(loyaltyOffer.valuePaise)} off`
+                            : `Use ${loyaltyOffer.pointsToRedeem} points — ${formatINR(loyaltyOffer.valuePaise)} off`}
+                        </option>
+                      )}
+                      {availableCoupons.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} — {c.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 )}
                 {kitCouponCode && (
                   <p className="mb-2 text-xs text-ink/55">
@@ -1014,7 +1103,7 @@ export default function CheckoutPage() {
                         applyCoupon(couponInput);
                       }
                     }}
-                    placeholder="Discount code"
+                    placeholder="Or enter a code"
                     className="w-full border border-line bg-white px-3 py-2 text-sm uppercase outline-none focus:border-forest"
                   />
                   <button

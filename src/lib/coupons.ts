@@ -1,4 +1,5 @@
 import "server-only";
+import type { Coupon } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatINR } from "@/lib/catalog";
 
@@ -10,14 +11,20 @@ export type CouponResult =
 
 export type CartLine = { variantId: string; quantity: number };
 
-// KIT-<slug> and SUB-<id> codes are system-managed — kept in sync by the
-// Bundles/Subscriptions admin pages (syncBundleCoupon in admin/actions.ts,
-// syncSubscriptionCoupon in app/actions/subscriptions.ts). Deleting one via
-// the generic Coupons admin page leaves its bundle/subscription still
-// showing "Active" with a discount that silently stops applying — manage
-// those from their own admin page instead.
+// KIT-<slug>, SUB-<id>, and LOYAL-<suffix> codes are all system-managed —
+// never hand-creatable or hand-deletable via the generic Coupons admin page.
+// KIT-/SUB- are kept in sync by the Bundles/Subscriptions admin pages
+// (syncBundleCoupon in admin/actions.ts, syncSubscriptionCoupon in
+// app/actions/subscriptions.ts); deleting one via the generic page leaves its
+// bundle/subscription still showing "Active" with a discount that silently
+// stops applying. LOYAL- codes are minted by redeemPoints (lib/loyalty.ts),
+// always scoped to the customer who earned them via `customerId` — a
+// hand-created LOYAL- coupon on the generic form defaults customerId to null,
+// bypassing that scoping and making one customer's reward usable by anyone.
+// Manage all three from their own page instead (Bundles / Subscriptions / the
+// customer's loyalty ledger).
 export function isSystemCouponCode(code: string): boolean {
-  return code.startsWith("KIT-") || code.startsWith("SUB-");
+  return code.startsWith("KIT-") || code.startsWith("SUB-") || code.startsWith("LOYAL-");
 }
 
 // A bundle's discount is realised through a coupon whose code (KIT-<slug>) is
@@ -91,12 +98,46 @@ export async function validateCoupon(
   const gate = await bundleGate(code, cart);
   if (gate) return { ok: false, error: gate };
 
-  // PERCENT → % of subtotal; FIXED → flat paise. Never exceed the subtotal
-  // (a discount can zero the goods but not the shipping).
-  const raw =
-    c.type === "PERCENT" ? Math.round(subtotalPaise * (c.value / 100)) : c.value;
+  return { ok: true, code, ...computeDiscount(c, subtotalPaise) };
+}
+
+// PERCENT → % of subtotal; FIXED → flat paise. Never exceed the subtotal (a
+// discount can zero the goods but not the shipping). Shared by validateCoupon
+// and listAvailableCoupons so the two can never disagree on a coupon's worth.
+function computeDiscount(
+  c: Pick<Coupon, "type" | "value">,
+  subtotalPaise: number,
+): { discountPaise: number; label: string } {
+  const raw = c.type === "PERCENT" ? Math.round(subtotalPaise * (c.value / 100)) : c.value;
   const discountPaise = Math.min(raw, subtotalPaise);
   const label = c.type === "PERCENT" ? `${c.value}% off` : `${formatINR(c.value)} off`;
+  return { discountPaise, label };
+}
 
-  return { ok: true, code, discountPaise, label };
+export type AvailableCoupon = { code: string; label: string; discountPaise: number };
+
+// Every active, publicly shareable coupon that currently qualifies for this
+// cart — for the checkout "available offers" dropdown. Excludes KIT-/SUB-/
+// LOYAL- codes (see isSystemCouponCode) and anything else customer-specific.
+// The isSystemCouponCode check matters here even though the query already
+// filters `customerId: null`: a LOYAL- coupon is SUPPOSED to always carry a
+// customerId, but a null-customerId LOYAL- row was found in production
+// 2026-07-13 (likely hand-created via the generic admin create-coupon form,
+// which didn't reject that prefix before this fix) — without this filter it
+// would have been listed here as a "public" coupon, exposing one specific
+// customer's reward to every checkout visitor.
+export async function listAvailableCoupons(subtotalPaise: number): Promise<AvailableCoupon[]> {
+  const now = new Date();
+  const candidates = await prisma.coupon.findMany({
+    where: {
+      active: true,
+      customerId: null,
+      OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+    },
+  });
+  return candidates
+    .filter((c) => !isSystemCouponCode(c.code))
+    .filter((c) => c.maxUses == null || c.usedCount < c.maxUses)
+    .filter((c) => subtotalPaise >= c.minOrderPaise)
+    .map((c) => ({ code: c.code, ...computeDiscount(c, subtotalPaise) }));
 }

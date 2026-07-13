@@ -74,7 +74,7 @@ export default function PrivacyPage() {
           In accordance with applicable Indian law, grievances or complaints
           regarding this policy may be addressed to our Grievance Officer:
           <br />
-          Name: <span className="text-brass-deep">[Grievance Officer name — to be designated]</span>
+          Name: <span className="text-brass-deep">Alok Subhash Das</span>
           <br />
           Email: bharatblissofficial@gmail.com · Phone: +91 89812 21994
         </Section>

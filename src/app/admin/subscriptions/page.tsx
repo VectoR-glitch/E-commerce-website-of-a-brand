@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
 import { intervalLabel } from "@/lib/subscriptions";
-import { runSubscriptionReminders } from "@/app/admin/actions";
+import { runSubscriptionReminders, runSubscriptionPlanReminders } from "@/app/admin/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +24,17 @@ export default async function AdminSubscriptions() {
 
   const activeCount = subs.filter((s) => s.status === "ACTIVE").length;
   const dueCount = subs.filter((s) => s.status === "ACTIVE" && s.nextDeliveryAt <= now).length;
+
+  const plans = await prisma.subscriptionPlan.findMany({
+    where: { status: { not: "CANCELLED" } },
+    orderBy: [{ status: "asc" }, { nextDeliveryAt: "asc" }],
+    include: {
+      customer: { select: { email: true, name: true } },
+      items: { include: { variant: { include: { product: { select: { name: true } } } } } },
+    },
+  });
+  const activePlanCount = plans.filter((p) => p.status === "ACTIVE").length;
+  const duePlanCount = plans.filter((p) => p.status === "ACTIVE" && p.nextDeliveryAt <= now).length;
 
   return (
     <div>
@@ -101,6 +112,84 @@ export default async function AdminSubscriptions() {
                         }`}
                       >
                         {s.status === "ACTIVE" ? "Active" : "Paused"}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="mt-14 flex flex-wrap items-end justify-between gap-4 border-t border-line pt-8">
+        <div>
+          <h2 className="font-serif text-2xl">Subscription boxes</h2>
+          <p className="mt-1 text-sm text-ink/55">
+            {activePlanCount} active · {plans.length - activePlanCount} paused ·{" "}
+            <span className={duePlanCount > 0 ? "text-brass-deep" : ""}>{duePlanCount} due now</span>
+          </p>
+        </div>
+        <form action={runSubscriptionPlanReminders}>
+          <button
+            className="smallcaps bg-forest px-5 py-2.5 text-bone btn-fill-forest disabled:opacity-50"
+            disabled={duePlanCount === 0}
+          >
+            Send {duePlanCount > 0 ? `${duePlanCount} ` : ""}due plan reminder{duePlanCount === 1 ? "" : "s"}
+          </button>
+        </form>
+      </div>
+
+      {plans.length === 0 ? (
+        <p className="mt-6 text-sm text-ink/50">No subscription boxes yet.</p>
+      ) : (
+        <div className="mt-6 overflow-x-auto border border-line">
+          <table className="w-full min-w-[720px] text-sm">
+            <thead className="bg-paper text-left smallcaps text-ink/60">
+              <tr>
+                <th className="px-4 py-3 font-normal">Customer</th>
+                <th className="px-4 py-3 font-normal">Items</th>
+                <th className="px-4 py-3 font-normal">Cadence</th>
+                <th className="px-4 py-3 font-normal">Next</th>
+                <th className="px-4 py-3 font-normal">Save</th>
+                <th className="px-4 py-3 font-normal">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {plans.map((p) => {
+                const isDue = p.status === "ACTIVE" && p.nextDeliveryAt <= now;
+                const totalDiscountedPaise = p.items.reduce(
+                  (sum, it) => sum + Math.round(it.variant.pricePaise * (1 - p.discountPercent / 100)) * it.quantity,
+                  0,
+                );
+                return (
+                  <tr key={p.id} className="border-t border-line/70">
+                    <td className="px-4 py-3">
+                      <div className="text-ink">{p.customer.name ?? "—"}</div>
+                      <div className="text-xs text-ink/55">{p.customer.email}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-xs text-ink/55">
+                        {p.items.map((it) => it.variant.product.name).join(", ")}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-ink/70">{intervalLabel(p.intervalDays)}</td>
+                    <td className={`px-4 py-3 ${isDue ? "font-medium text-brass-deep" : "text-ink/70"}`}>
+                      {dateFmt(p.nextDeliveryAt)}
+                      {isDue ? " · due" : ""}
+                    </td>
+                    <td className="px-4 py-3 text-ink/70">
+                      {p.discountPercent}% ({formatINR(totalDiscountedPaise)})
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`smallcaps border px-2 py-0.5 text-xs ${
+                          p.status === "ACTIVE"
+                            ? "border-forest/40 bg-forest/5 text-forest"
+                            : "border-line bg-bone text-ink/55"
+                        }`}
+                      >
+                        {p.status === "ACTIVE" ? "Active" : "Paused"}
                       </span>
                     </td>
                   </tr>

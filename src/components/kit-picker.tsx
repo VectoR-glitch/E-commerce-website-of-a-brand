@@ -3,11 +3,8 @@ import { useRef, useState } from "react";
 import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/catalog";
 import { flyToCart } from "@/lib/fly-to-cart";
+import { PENDING_COUPON_KEY } from "@/lib/constants";
 import type { BundleSlot } from "@/lib/bundles";
-
-// "Add kit to cart" stashes the kit's coupon so checkout auto-applies the
-// discount (gated server-side on the kit's items being present).
-export const PENDING_COUPON_KEY = "klenich.pendingCoupon";
 
 export function KitPicker({
   slots,

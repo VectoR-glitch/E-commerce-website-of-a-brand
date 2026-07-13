@@ -3,7 +3,13 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { razorpay, RAZORPAY_KEY_ID } from "@/lib/razorpay";
 import { formatINR } from "@/lib/catalog";
-import { MAX_ORDER_PAISE, MAX_QTY_PER_ITEM, MAX_COD_ORDER_PAISE } from "@/lib/constants";
+import {
+  MAX_ORDER_PAISE,
+  MAX_QTY_PER_ITEM,
+  MAX_COD_ORDER_PAISE,
+  SUBSCRIBE_SAVE_PERCENT,
+  SUBSCRIBE_INTERVALS,
+} from "@/lib/constants";
 import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { resolveShipping } from "@/lib/shiprocket";
 import { getSession } from "@/lib/session";
@@ -52,6 +58,12 @@ export async function POST(request: Request) {
     shipping?: IncomingShipping;
     paymentMethod?: "ONLINE" | "COD";
     couponCode?: string;
+    // Present only when this checkout should START a multi-item subscription
+    // plan (the "build a box" flow at /subscribe) — see subscription-plans.ts.
+    // Mutually exclusive with couponCode: when set, the discount is computed
+    // automatically below and any couponCode is ignored (the UI never sends
+    // both; this is just a defensive server-side stance).
+    subscriptionIntervalDays?: number;
   };
   try {
     body = await request.json();
@@ -161,11 +173,27 @@ export async function POST(request: Request) {
   // voucher) can be checked against the right customer below.
   const session = await getSession();
 
+  // "Build a box" subscription-plan checkout: the discount is automatic (not
+  // a swappable coupon — see prisma schema's SubscriptionPlan comment for
+  // why), and requires a signed-in customer since a plan is tied to one.
+  const subscriptionIntervalDays = body.subscriptionIntervalDays;
+  if (subscriptionIntervalDays != null) {
+    if (!session) return badRequest("Please sign in to start a subscription.");
+    if (!SUBSCRIBE_INTERVALS.some((i) => i.days === subscriptionIntervalDays)) {
+      return badRequest("Please choose a valid delivery frequency.");
+    }
+  }
+
   // Apply a coupon against the goods subtotal. Re-validated server-side (the
   // client preview is advisory) so a tampered request can't fake a discount.
+  // Skipped entirely for a subscription-plan checkout — its discount is
+  // computed below instead, and any couponCode sent alongside is ignored
+  // (the UI never sends both; this is just a defensive server-side stance).
   let discountPaise = 0;
   let couponCode: string | null = null;
-  if (body.couponCode?.trim()) {
+  if (subscriptionIntervalDays != null) {
+    discountPaise = Math.min(Math.round(subtotalPaise * (SUBSCRIBE_SAVE_PERCENT / 100)), subtotalPaise);
+  } else if (body.couponCode?.trim()) {
     // Pass the cart so a bundle (KIT-) code is gated on its items being present.
     const result = await validateCoupon(
       body.couponCode,
@@ -257,6 +285,7 @@ export async function POST(request: Request) {
         discountPaise,
         couponCode,
         totalPaise,
+        subscriptionIntervalDays: subscriptionIntervalDays ?? null,
         razorpayOrderId: rzpOrder.id,
         items: { create: orderItems },
       },

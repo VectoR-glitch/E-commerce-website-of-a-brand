@@ -132,6 +132,7 @@ model Variant {
   cartItems         CartItem[]
   bundleItems       BundleItem[]
   subscriptions     Subscription[]
+  subscriptionPlanItems SubscriptionPlanItem[]
   backInStockAlerts BackInStockAlert[]
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
@@ -235,6 +236,7 @@ model Customer {
   reviews             Review[]
   questions           ProductQuestion[]
   subscriptions       Subscription[]
+  subscriptionPlans   SubscriptionPlan[]
   wishlist            WishlistItem[]
   loyaltyLedger       LoyaltyLedger[]
   verificationTokens  VerificationToken[]
@@ -413,6 +415,16 @@ model Order {
   razorpayPaymentId String?
   razorpaySignature String?
 
+  // Set at checkout time when this order is meant to START a multi-item
+  // subscription plan (the customer's chosen cadence) — the discount for
+  // THIS order is computed automatically from it (see /api/checkout), not
+  // via `couponCode`. Once the order settles cleanly (CONFIRMED, no
+  // holdReasons), settleOrderPaid creates the SubscriptionPlan and backfills
+  // subscriptionPlanId below. Null for every ordinary order.
+  subscriptionIntervalDays Int?
+  subscriptionPlan         SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id])
+  subscriptionPlanId       String?
+
   items     OrderItem[]
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
@@ -507,6 +519,48 @@ model Subscription {
   @@index([variantId])
 }
 
+/// A multi-item "build your own box" subscription — the bigger sibling of
+/// `Subscription` (which is strictly one variant). A customer picks several
+/// products+quantities and pays for the FIRST delivery immediately through a
+/// normal checkout; this row is only ever created AFTER that founding order
+/// settles cleanly (see settleOrderPaid in lib/orders.ts) — there is no
+/// "pending" state, so an abandoned checkout leaves no residue here at all.
+/// Future cycles are reminder-only, same as `Subscription`: `couponCode`
+/// (SUBPLAN-<id-suffix>) is a private coupon for those later reorders only —
+/// unlike the existing SUB- codes, this one has `customerId` set explicitly
+/// (see Coupon.customerId comment — a null-customerId LOYAL- row caused a
+/// real production incident, so new private codes set it from day one).
+model SubscriptionPlan {
+  id              String                 @id @default(cuid())
+  customer        Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  customerId      String
+  intervalDays    Int
+  discountPercent Int // snapshotted SUBSCRIBE_SAVE_PERCENT at creation
+  status          SubscriptionPlanStatus @default(ACTIVE)
+  couponCode      String                 @unique // SUBPLAN-<suffix>, for FUTURE reorders only
+  nextDeliveryAt  DateTime
+  lastReminderAt  DateTime?
+  items           SubscriptionPlanItem[]
+  orders          Order[] // the founding order + admin visibility
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([customerId])
+  @@index([status, nextDeliveryAt])
+}
+
+model SubscriptionPlanItem {
+  id        String           @id @default(cuid())
+  plan      SubscriptionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  planId    String
+  variant   Variant          @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variantId String
+  quantity  Int              @default(1)
+
+  @@index([planId])
+  @@index([variantId])
+}
+
 /// A journal/blog post — Klenich's own SEO content, admin-authored directly
 /// (no separate CMS). `body` is long-form copy, blank-line-separated
 /// paragraphs. `published` gates public visibility; `publishedAt` is set once,
@@ -537,6 +591,12 @@ model BlogPost {
 }
 
 enum SubscriptionStatus {
+  ACTIVE
+  PAUSED
+  CANCELLED
+}
+
+enum SubscriptionPlanStatus {
   ACTIVE
   PAUSED
   CANCELLED

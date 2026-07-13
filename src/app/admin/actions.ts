@@ -11,6 +11,7 @@ import { sendOrderStatusWhatsApp } from "@/lib/whatsapp";
 import { awardLoyaltyForDeliveredOrder, reverseLoyaltyForOrder } from "@/lib/loyalty";
 import { bundleCouponCode } from "@/lib/bundles";
 import { sendDueSubscriptionReminders, subscriptionCouponCode } from "@/lib/subscriptions";
+import { sendDuePlanReminders } from "@/lib/subscription-plans";
 import { notifyBackInStockForVariant } from "@/lib/back-in-stock";
 import { isSystemCouponCode } from "@/lib/coupons";
 
@@ -971,5 +972,12 @@ export async function removeBlogImage(formData: FormData): Promise<void> {
 export async function runSubscriptionReminders(): Promise<void> {
   await requireAdmin();
   await sendDueSubscriptionReminders();
+  revalidatePath("/admin/subscriptions");
+}
+
+// Same as above but for multi-item subscription plans (the "build a box" feature).
+export async function runSubscriptionPlanReminders(): Promise<void> {
+  await requireAdmin();
+  await sendDuePlanReminders();
   revalidatePath("/admin/subscriptions");
 }

@@ -666,3 +666,67 @@ export async function sendSubscriptionReminder(input: {
     ),
   });
 }
+
+// ── Subscription plan reminder (multi-item "build a box") ──────────────────
+// Same managed/reminder model as sendSubscriptionReminder above, generalized
+// to a plan's several items with one combined total.
+export async function sendSubscriptionPlanReminder(input: {
+  to: string;
+  name: string | null;
+  discountPercent: number;
+  items: { productName: string; variantLabel: string; quantity: number; unitDiscountedPaise: number }[];
+  totalDiscountedPaise: number;
+  manageUrl: string;
+}): Promise<void> {
+  if (!resend) return; // no key → safe no-op until configured
+  const hi = input.name ? `Hi ${escapeHtml(input.name)},` : "Hi,";
+
+  const textLines = input.items.map((it) => {
+    const qty = it.quantity > 1 ? ` × ${it.quantity}` : "";
+    return `- ${it.productName} (${it.variantLabel})${qty} — ${formatINR(it.unitDiscountedPaise)} each`;
+  });
+  const htmlRows = input.items
+    .map((it) => {
+      const qty = it.quantity > 1 ? ` × ${it.quantity}` : "";
+      return `<li style="color:${C.ink};font-size:14px;margin:0 0 6px;line-height:1.5;">
+        <strong>${escapeHtml(it.productName)}</strong> (${escapeHtml(it.variantLabel)})${qty} — ${formatINR(it.unitDiscountedPaise)} each
+      </li>`;
+    })
+    .join("");
+
+  await resend.emails.send({
+    from: FROM,
+    to: input.to,
+    subject: "Time to restock your subscription?",
+    text: [
+      input.name ? `Hi ${input.name},` : "Hi,",
+      "",
+      "Your subscription box is due for its next delivery:",
+      ...textLines,
+      "",
+      `As a subscriber you save ${input.discountPercent}% — total ${formatINR(input.totalDiscountedPaise)}.`,
+      "",
+      "Nothing is charged automatically. Place the order whenever you're ready:",
+      input.manageUrl,
+      "",
+      "Klenich · Plant-powered home care, made in India",
+      SITE_URL,
+    ].join("\n"),
+    html: shell(
+      `Subscribe & save · ${input.discountPercent}% off`,
+      "Ready for a refill?",
+      `<p style="color:${C.ink};font-size:15px;margin:0 0 14px;">${hi}</p>
+       <p style="color:${C.ink};font-size:15px;margin:0 0 10px;line-height:1.6;">
+         Your subscription box is due for its next delivery:
+       </p>
+       <ul style="margin:0 0 14px;padding-left:18px;">${htmlRows}</ul>
+       <p style="color:${C.muted};font-size:14px;margin:0 0 20px;">
+         As a subscriber you save ${input.discountPercent}% — total <strong style="color:${C.ink};">${formatINR(input.totalDiscountedPaise)}</strong>.
+       </p>
+       ${ctaButton(input.manageUrl, "Order now")}
+       <p style="color:${C.muted};font-size:13px;margin:0;line-height:1.6;">
+         Nothing is charged automatically — order only when you're ready. You can skip, pause or cancel anytime from your account.
+       </p>`,
+    ),
+  });
+}

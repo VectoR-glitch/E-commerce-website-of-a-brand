@@ -4,12 +4,19 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/catalog";
-import { INDIAN_STATES, LOYALTY_MIN_REDEEM_POINTS, POINT_VALUE_PAISE } from "@/lib/constants";
+import {
+  INDIAN_STATES,
+  LOYALTY_MIN_REDEEM_POINTS,
+  POINT_VALUE_PAISE,
+  PENDING_COUPON_KEY,
+  PENDING_SUBSCRIPTION_INTERVAL_KEY,
+  SUBSCRIBE_SAVE_PERCENT,
+  SUBSCRIBE_INTERVALS,
+} from "@/lib/constants";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
 import { Kicker } from "@/components/kicker";
 import { TrustBadges } from "@/components/trust-badges";
-import { PENDING_COUPON_KEY } from "@/components/kit-picker";
 import type { LoyaltyOffer } from "@/app/api/coupon/available/route";
 
 
@@ -184,6 +191,12 @@ export default function CheckoutPage() {
     { code: string; label: string; discountPaise: number }[]
   >([]);
   const [loyaltyOffer, setLoyaltyOffer] = useState<LoyaltyOffer | null>(null);
+  // Set (read once from sessionStorage on mount) when this checkout arrived
+  // from /subscribe's "build a box" picker — this checkout starts a
+  // multi-item SubscriptionPlan once it settles. Its discount is automatic
+  // (computed below), not a coupon — the whole coupon/loyalty UI is hidden
+  // for this checkout.
+  const [subscriptionIntervalDays, setSubscriptionIntervalDays] = useState<number | null>(null);
 
   // On mount, ask the server for the signed-in customer's saved address. Fails
   // silently — a guest (or no saved address) simply gets no prompt.
@@ -400,6 +413,24 @@ export default function CheckoutPage() {
   // when there's no kit coupon to apply — visibly, via the same "applied"
   // banner with a Remove option, so a saved reward is never left unused.
   useEffect(() => {
+    // A "build a box" checkout from /subscribe carries no coupon at all — its
+    // discount is automatic (computed below) — so skip the kit/loyalty
+    // auto-apply dance entirely for this checkout.
+    let subDays: string | null = null;
+    try {
+      subDays = sessionStorage.getItem(PENDING_SUBSCRIPTION_INTERVAL_KEY);
+      if (subDays) sessionStorage.removeItem(PENDING_SUBSCRIPTION_INTERVAL_KEY);
+    } catch {
+      // ignore storage errors
+    }
+    if (subDays) {
+      const days = Math.floor(Number(subDays));
+      if (SUBSCRIBE_INTERVALS.some((i) => i.days === days)) {
+        setTimeout(() => setSubscriptionIntervalDays(days), 0);
+      }
+      return;
+    }
+
     let kitCode: string | null = null;
     try {
       kitCode = sessionStorage.getItem(PENDING_COUPON_KEY);
@@ -454,8 +485,16 @@ export default function CheckoutPage() {
     : method === "COD"
       ? (quote?.codPaise ?? null)
       : (quote?.prepaidPaise ?? null);
-  // Coupon discount, capped at the subtotal (never discounts shipping).
-  const discountPaise = Math.min(coupon?.discountPaise ?? 0, subtotalPaise);
+  // Coupon discount, capped at the subtotal (never discounts shipping). A
+  // subscription-plan checkout has no coupon at all — its discount is this
+  // same automatic formula the server applies in /api/checkout.
+  const subscriptionDiscountPaise = subscriptionIntervalDays != null
+    ? Math.round(subtotalPaise * (SUBSCRIBE_SAVE_PERCENT / 100))
+    : 0;
+  const discountPaise = Math.min(
+    subscriptionIntervalDays != null ? subscriptionDiscountPaise : (coupon?.discountPaise ?? 0),
+    subtotalPaise,
+  );
   const totalPaise =
     (shippingPaise == null ? subtotalPaise : subtotalPaise + shippingPaise) - discountPaise;
   // Can we take payment? Need a serviceable quote with a usable charge.
@@ -614,7 +653,8 @@ export default function CheckoutPage() {
           items: items.map((i) => ({ variantId: i.variantId, quantity: i.quantity })),
           shipping: form,
           paymentMethod: method,
-          couponCode: coupon?.code,
+          couponCode: subscriptionIntervalDays != null ? undefined : coupon?.code,
+          subscriptionIntervalDays: subscriptionIntervalDays ?? undefined,
         }),
       });
       const data = await res.json();
@@ -1001,7 +1041,14 @@ export default function CheckoutPage() {
             </div>
             {discountPaise > 0 && (
               <div className="flex justify-between text-forest">
-                <dt>Discount{coupon ? ` (${coupon.code})` : ""}</dt>
+                <dt>
+                  Discount
+                  {subscriptionIntervalDays != null
+                    ? ` (Subscribe & Save ${SUBSCRIBE_SAVE_PERCENT}%)`
+                    : coupon
+                      ? ` (${coupon.code})`
+                      : ""}
+                </dt>
                 <dd>−{formatINR(discountPaise)}</dd>
               </div>
             )}
@@ -1010,7 +1057,21 @@ export default function CheckoutPage() {
             <p className="mt-2 text-xs text-ink/45">Delivery cost is confirmed at payment.</p>
           )}
 
-          {/* Coupon */}
+          {/* Subscription-plan checkout: automatic, non-removable discount —
+              no coupon/loyalty UI at all for this checkout. */}
+          {subscriptionIntervalDays != null ? (
+            <div className="mt-4 border border-brass/30 bg-brass/[0.06] px-3 py-2 text-sm">
+              <span className="text-brass-deep">
+                <strong>Subscribe &amp; Save {SUBSCRIBE_SAVE_PERCENT}%</strong> — applied automatically
+              </span>
+              <p className="mt-1 text-xs text-ink/55">
+                This starts a recurring subscription
+                {" "}({SUBSCRIBE_INTERVALS.find((i) => i.days === subscriptionIntervalDays)?.label.toLowerCase() ?? `every ${subscriptionIntervalDays} days`})
+                {" "}once this delivery is confirmed. Manage it anytime from your account.
+              </p>
+            </div>
+          ) : (
+          /* Coupon */
           <div className="mt-4">
             {coupon ? (
               <div className="border border-forest/30 bg-forest/5 px-3 py-2 text-sm">
@@ -1125,6 +1186,7 @@ export default function CheckoutPage() {
               </>
             )}
           </div>
+          )}
 
           <div className="mt-5 flex justify-between border-t border-line pt-5 font-serif text-xl">
             <span>Total</span>

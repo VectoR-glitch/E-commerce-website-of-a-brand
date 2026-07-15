@@ -12,6 +12,8 @@ import {
   PENDING_SUBSCRIPTION_INTERVAL_KEY,
   SUBSCRIBE_SAVE_PERCENT,
   SUBSCRIBE_INTERVALS,
+  MAX_ORDER_PAISE,
+  MAX_COD_ORDER_PAISE,
 } from "@/lib/constants";
 import { Reveal } from "@/components/reveal";
 import { Ornament } from "@/components/ornament";
@@ -130,7 +132,7 @@ function validate(
 }
 
 export default function CheckoutPage() {
-  const { items, subtotalPaise, clear, authenticated } = useCart();
+  const { items, subtotalPaise, clear, authenticated, hydrated } = useCart();
   // Guests are prompted to log in / sign up before checking out. They can still
   // continue as a guest (dismissing the prompt) — guest checkout stays supported.
   const [guestDismissed, setGuestDismissed] = useState(false);
@@ -343,9 +345,11 @@ export default function CheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form.pincode, form.state, itemsKey]);
 
-  // If the cart subtotal changes after a coupon is applied (e.g. a percentage
-  // discount, or the subtotal drops below the minimum), silently re-validate so
-  // the displayed discount always matches what the server will charge.
+  // If the cart subtotal OR contents change after a coupon is applied (e.g. a
+  // percentage discount, the subtotal drops below the minimum, or a KIT- code's
+  // bundleGate item requirement stops being met because the cart drawer swapped
+  // an item at the same price), silently re-validate so the displayed discount
+  // always matches what the server will charge.
   useEffect(() => {
     if (!coupon) return;
     let cancelled = false;
@@ -373,7 +377,7 @@ export default function CheckoutPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [subtotalPaise]);
+  }, [subtotalPaise, itemsKey]);
 
   // Populate the "available offers" dropdown whenever the subtotal or cart
   // contents change — a coupon's eligibility depends on subtotal
@@ -413,6 +417,16 @@ export default function CheckoutPage() {
   // when there's no kit coupon to apply — visibly, via the same "applied"
   // banner with a Remove option, so a saved reward is never left unused.
   useEffect(() => {
+    // Wait for the cart to actually reflect reality before consuming the
+    // pending-coupon/subscription signal or computing which loyalty voucher
+    // qualifies against subtotalPaise — both would otherwise race a guest
+    // cart's own localStorage hydration on a fresh full-page load (see
+    // `hydrated` in cart-context.tsx), silently applying against an empty
+    // cart and never getting a retry since the sessionStorage key is
+    // one-shot. Once `hydrated` flips true (or is already true for a
+    // signed-in customer), this re-runs with the real cart.
+    if (!hydrated) return;
+
     // A "build a box" checkout from /subscribe carries no coupon at all — its
     // discount is automatic (computed below) — so skip the kit/loyalty
     // auto-apply dance entirely for this checkout.
@@ -458,7 +472,7 @@ export default function CheckoutPage() {
       })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [hydrated]);
 
   if (items.length === 0 && !placed) {
     return (
@@ -497,8 +511,18 @@ export default function CheckoutPage() {
   );
   const totalPaise =
     (shippingPaise == null ? subtotalPaise : subtotalPaise + shippingPaise) - discountPaise;
-  // Can we take payment? Need a serviceable quote with a usable charge.
-  const canPay = serviceable && shippingPaise != null;
+  // Mirrors /api/checkout's own caps exactly (COD: goods value after discount,
+  // excluding shipping since only the delivery fee is prepaid; ONLINE: the
+  // full charged total). The /cart page's "Checkout" link already warns about
+  // this, but that's not the only way to arrive here — the subscription-plan
+  // builder and "Order now" reorder buttons add straight to the cart and
+  // route here directly, skipping that gate — so it's checked again here,
+  // covering every entry path uniformly rather than patching each one.
+  const overLimit =
+    method === "COD" ? subtotalPaise - discountPaise > MAX_COD_ORDER_PAISE : totalPaise > MAX_ORDER_PAISE;
+  // Can we take payment? Need a serviceable quote with a usable charge, and
+  // the order must be within the method's value cap.
+  const canPay = serviceable && shippingPaise != null && !overLimit;
   // Guests must make a choice first — either sign in or explicitly opt to
   // continue as a guest — before the pay button unlocks.
   const accountChosen = authenticated || guestDismissed;
@@ -1208,6 +1232,13 @@ export default function CheckoutPage() {
               Couldn’t calculate delivery — check your pincode or try again.
             </p>
           )}
+          {overLimit && (
+            <p className="mt-3 text-center text-xs text-[#b3402f]">
+              {method === "COD"
+                ? `Cash on Delivery is limited to ${formatINR(MAX_COD_ORDER_PAISE)} of goods per order. Please reduce some quantities, or pay online for a larger order.`
+                : `Online payment is limited to ${formatINR(MAX_ORDER_PAISE)} per order. Please reduce some quantities, or contact us for a large order.`}
+            </p>
+          )}
           <button
             type="submit"
             disabled={submitting || !canPay || !accountChosen}
@@ -1217,11 +1248,13 @@ export default function CheckoutPage() {
               ? "Processing…"
               : !accountChosen
                 ? "Log in or continue as guest"
-                : !canPay
-                  ? "Enter a deliverable pincode"
-                  : method === "COD"
-                    ? `Pay ${formatINR(shippingPaise!)} & place order`
-                    : `Pay ${formatINR(totalPaise)}`}
+                : overLimit
+                  ? "Reduce order size to continue"
+                  : !canPay
+                    ? "Enter a deliverable pincode"
+                    : method === "COD"
+                      ? `Pay ${formatINR(shippingPaise!)} & place order`
+                      : `Pay ${formatINR(totalPaise)}`}
           </button>
           {payError && (
             <p className="mt-3 text-center text-xs text-[#b3402f]">{payError}</p>

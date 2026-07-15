@@ -264,20 +264,31 @@ export async function reverseLoyaltyForOrder(
 
   const entries = await tx.loyaltyLedger.findMany({ where: { orderId, delta: { gt: 0 } } });
   for (const entry of entries) {
-    const customer = await tx.customer.findUnique({
-      where: { id: entry.customerId },
-      select: { points: true, lifetimePoints: true },
-    });
-    if (!customer) continue;
+    // The clamp ("don't take back more than they currently hold") has to be
+    // part of the write itself, not a separate read-then-decrement — two
+    // concurrent reversals for the SAME customer (e.g. bulk-returning two
+    // orders in different admin tabs) would otherwise both clamp against the
+    // same stale balance and then both decrement, driving points negative
+    // (100 held, two reversals owing 60 and 50 each clamp to "100 is enough",
+    // decrement sequentially to -10). A CTE that reads the row and clamps the
+    // decrement in the SAME statement closes the window — Postgres's row lock
+    // on the UPDATE serializes concurrent attempts, so the second one's
+    // GREATEST(...) clamp is evaluated against the first one's already-applied
+    // result, never below zero. Prisma's query builder has no expression-based
+    // update (only a flat `decrement: n`), so this one case needs raw SQL.
+    const [row] = await tx.$queryRaw<{ pointsBack: number; lifetimeBack: number }[]>`
+      WITH old AS (SELECT points, "lifetimePoints" FROM "Customer" WHERE id = ${entry.customerId})
+      UPDATE "Customer" c
+      SET points = GREATEST(old.points - ${entry.delta}, 0),
+          "lifetimePoints" = GREATEST(old."lifetimePoints" - ${entry.delta}, 0)
+      FROM old
+      WHERE c.id = ${entry.customerId}
+      RETURNING (old.points - GREATEST(old.points - ${entry.delta}, 0)) AS "pointsBack",
+                (old."lifetimePoints" - GREATEST(old."lifetimePoints" - ${entry.delta}, 0)) AS "lifetimeBack"
+    `;
+    if (!row) continue; // customer no longer exists
 
-    const pointsBack = Math.min(entry.delta, customer.points);
-    const lifetimeBack = Math.min(entry.delta, customer.lifetimePoints);
-    if (pointsBack > 0 || lifetimeBack > 0) {
-      await tx.customer.update({
-        where: { id: entry.customerId },
-        data: { points: { decrement: pointsBack }, lifetimePoints: { decrement: lifetimeBack } },
-      });
-    }
+    const pointsBack = Number(row.pointsBack);
     if (pointsBack > 0) {
       await tx.loyaltyLedger.create({
         data: { customerId: entry.customerId, delta: -pointsBack, reason: "return", orderId },

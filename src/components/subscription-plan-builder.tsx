@@ -143,6 +143,7 @@ export function SubscriptionPlanBuilder({ products }: { products: Product[] }) {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
+                          aria-label={`Decrease quantity of ${product.name}${label ? ` ${label}` : ""}`}
                           onClick={() => setQty(v.id!, inDraft.quantity - 1)}
                           className="h-7 w-7 border border-line text-sm hover:border-forest"
                         >
@@ -151,6 +152,7 @@ export function SubscriptionPlanBuilder({ products }: { products: Product[] }) {
                         <span className="w-6 text-center text-sm">{inDraft.quantity}</span>
                         <button
                           type="button"
+                          aria-label={`Increase quantity of ${product.name}${label ? ` ${label}` : ""}`}
                           onClick={() => setQty(v.id!, inDraft.quantity + 1)}
                           className="h-7 w-7 border border-line text-sm hover:border-forest"
                         >

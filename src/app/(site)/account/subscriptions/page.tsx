@@ -25,7 +25,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Subscribe & Save" };
 
 const dateFmt = (d: Date) =>
-  d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
 export default async function SubscriptionsPage() {
   const session = await requireSession("/account/subscriptions");

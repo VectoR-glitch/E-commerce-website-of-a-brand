@@ -93,6 +93,7 @@ export function KitPicker({
             </div>
             {slot.kind === "product" && (
               <select
+                aria-label={`Choose ${slot.productName} option`}
                 value={choice[slot.id]}
                 onChange={(e) => setChoice((c) => ({ ...c, [slot.id]: e.target.value }))}
                 className="mt-1.5 w-full border border-line bg-white px-3 py-2 text-sm outline-none focus:border-forest"

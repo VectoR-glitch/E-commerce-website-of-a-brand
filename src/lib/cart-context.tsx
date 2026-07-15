@@ -103,6 +103,17 @@ type CartContextValue = {
   subtotalPaise: number;
   /** true when a customer is signed in — lets the UI prompt guests to log in */
   authenticated: boolean;
+  /**
+   * True once `items` reflects reality: immediately for signed-in customers
+   * (server-seeded synchronously), or after the guest localStorage read below
+   * has run. A fresh full-page load straight into a route that reads `items`
+   * on mount (e.g. checkout consuming a pending kit coupon) can otherwise fire
+   * before this provider's own guest-hydration effect — effects run
+   * child-before-ancestor, and this provider lives in a persistent ancestor
+   * layout — seeing a stale empty cart. Gate any such mount-time read on this
+   * flag instead of assuming effect order.
+   */
+  hydrated: boolean;
   addItem: (item: Omit<CartItem, "quantity">, quantity?: number) => void;
   setQuantity: (variantId: string, quantity: number) => void;
   removeItem: (variantId: string) => void;
@@ -129,6 +140,9 @@ export function CartProvider({
   // Gates server write-through until the initial login merge/load has completed,
   // so we never clobber the server cart with a half-initialized client state.
   const [synced, setSynced] = useState(false);
+  // Signed-in `items` is already correct at mount (server-seeded); guests need
+  // the localStorage read below to run first.
+  const [hydrated, setHydrated] = useState(authenticated);
   // True once the user actually changes the cart — so the initial server-seed /
   // login-merge doesn't trigger a redundant write-back on every page load.
   const dirty = useRef(false);
@@ -153,6 +167,8 @@ export function CartProvider({
       dispatch({ type: "HYDRATE", state: raw ? JSON.parse(raw) : { items: [] } });
     } catch {
       dispatch({ type: "HYDRATE", state: { items: [] } });
+    } finally {
+      setHydrated(true);
     }
   }, [authenticated]);
 
@@ -294,6 +310,7 @@ export function CartProvider({
       count,
       subtotalPaise,
       authenticated,
+      hydrated,
       addItem: (item, quantity) => {
         dirty.current = true;
         dispatch({ type: "ADD", item, quantity });
@@ -311,7 +328,7 @@ export function CartProvider({
         dispatch({ type: "CLEAR" });
       },
     };
-  }, [state, authenticated]);
+  }, [state, authenticated, hydrated]);
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
 }

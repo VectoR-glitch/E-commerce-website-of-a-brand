@@ -45,7 +45,14 @@ export default async function AdminCouponsPage() {
                     {c.code}
                     {managed && (
                       <span className="ml-2 smallcaps text-[10px] text-ink/45">
-                        {c.code.startsWith("KIT-") ? "· Managed by Kits" : "· Managed by Subscriptions"}
+                        ·{" "}
+                        {c.code.startsWith("KIT-")
+                          ? "Managed by Kits"
+                          : c.code.startsWith("SUBPLAN-")
+                            ? "Managed by Subscription boxes"
+                            : c.code.startsWith("LOYAL-")
+                              ? "Managed by Loyalty"
+                              : "Managed by Subscriptions"}
                       </span>
                     )}
                   </td>
@@ -77,12 +84,18 @@ export default async function AdminCouponsPage() {
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex justify-end gap-3">
-                      <form action={toggleCoupon}>
-                        <input type="hidden" name="couponId" value={c.id} />
-                        <button className="text-xs text-forest hover:underline">
-                          {c.active ? "Disable" : "Enable"}
-                        </button>
-                      </form>
+                      {managed ? (
+                        <span className="text-xs text-ink/35" title="Its active status is kept in sync automatically by the page that manages it — toggle it from there instead.">
+                          Disable
+                        </span>
+                      ) : (
+                        <form action={toggleCoupon}>
+                          <input type="hidden" name="couponId" value={c.id} />
+                          <button className="text-xs text-forest hover:underline">
+                            {c.active ? "Disable" : "Enable"}
+                          </button>
+                        </form>
+                      )}
                       {managed ? (
                         <span className="text-xs text-ink/35" title="Delete this from the Kits or Subscriptions page instead — it's kept in sync automatically.">
                           Delete

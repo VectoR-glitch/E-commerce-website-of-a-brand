@@ -75,6 +75,48 @@ async function bundleGate(code: string, cart: CartLine[]): Promise<string | null
   return null;
 }
 
+// SUB-/SUBPLAN- codes are visible to their own customer (shown on the account
+// page, passed into the reorder button) so they can be applied manually at
+// checkout — but that code is meant to discount a REORDER of the subscribed
+// item(s), not an arbitrary unrelated cart. Unlike a third party guessing the
+// code (which the unguessable id-suffix already defends against), the
+// legitimate owner can see and enter their own code against any cart, so gate
+// it the same way KIT- is: require the subscribed item(s) to actually be
+// present. The id is looked up by its coupon-code suffix since neither
+// subscriptionCouponCode nor subscriptionPlanCouponCode store the reverse
+// mapping anywhere.
+async function subscriptionGate(code: string, cart: CartLine[]): Promise<string | null> {
+  const have = new Map(cart.map((l) => [l.variantId, l.quantity]));
+
+  if (code.startsWith("SUB-")) {
+    const sub = await prisma.subscription.findFirst({
+      where: { id: { endsWith: code.slice(4).toLowerCase() } },
+      select: { variantId: true, quantity: true },
+    });
+    if (!sub) return null; // orphan code → treat as a normal coupon
+    if ((have.get(sub.variantId) ?? 0) < sub.quantity) {
+      return "This code only applies when your subscribed item is in your cart.";
+    }
+    return null;
+  }
+
+  if (code.startsWith("SUBPLAN-")) {
+    const plan = await prisma.subscriptionPlan.findFirst({
+      where: { id: { endsWith: code.slice(8).toLowerCase() } },
+      include: { items: { select: { variantId: true, quantity: true } } },
+    });
+    if (!plan) return null; // orphan code → treat as a normal coupon
+    for (const it of plan.items) {
+      if ((have.get(it.variantId) ?? 0) < it.quantity) {
+        return "This code only applies when your subscription box's items are in your cart.";
+      }
+    }
+    return null;
+  }
+
+  return null; // not a subscription coupon
+}
+
 export async function validateCoupon(
   rawCode: string,
   subtotalPaise: number,
@@ -104,7 +146,7 @@ export async function validateCoupon(
 
   // Bundle codes are gated on the cart containing the kit — so the publicly
   // visible KIT-<slug> code can't be applied to an arbitrary order.
-  const gate = await bundleGate(code, cart);
+  const gate = (await bundleGate(code, cart)) ?? (await subscriptionGate(code, cart));
   if (gate) return { ok: false, error: gate };
 
   return { ok: true, code, ...computeDiscount(c, subtotalPaise) };

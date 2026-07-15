@@ -7,7 +7,7 @@ import { runSubscriptionReminders, runSubscriptionPlanReminders } from "@/app/ad
 export const dynamic = "force-dynamic";
 
 const dateFmt = (d: Date) =>
-  d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
 export default async function AdminSubscriptions() {
   await requireAdmin();

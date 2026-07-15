@@ -35,6 +35,18 @@ export async function notifyBackInStockForVariant(variantId: string): Promise<{ 
   }`;
 
   for (const alert of pending) {
+    // Claim before sending: a guarded update that only succeeds if nobody's
+    // claimed it yet (notifiedAt still null) — so this same sweep running
+    // twice (daily cron overlapping an admin manual restock of the same
+    // variant) can't both pass the `pending` read above and both email the
+    // same waiter. Reverted to null on send failure so the daily sweep still
+    // retries it, same as before this claim was added.
+    const claimed = await prisma.backInStockAlert.updateMany({
+      where: { id: alert.id, notifiedAt: null },
+      data: { notifiedAt: new Date() },
+    });
+    if (claimed.count === 0) continue; // a concurrent run already claimed this alert
+
     try {
       await sendBackInStockEmail({
         to: alert.email,
@@ -43,11 +55,11 @@ export async function notifyBackInStockForVariant(variantId: string): Promise<{ 
         pricePaise: variant.pricePaise,
         productUrl,
       });
-      await prisma.backInStockAlert.update({ where: { id: alert.id }, data: { notifiedAt: new Date() } });
       sent++;
     } catch (err) {
       console.error(`Back-in-stock email failed for alert ${alert.id} (${alert.email}):`, err);
       failed++;
+      await prisma.backInStockAlert.update({ where: { id: alert.id }, data: { notifiedAt: null } }).catch(() => {});
     }
   }
   return { sent, failed };

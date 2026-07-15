@@ -157,7 +157,20 @@ export async function updatePaymentStatus(formData: FormData): Promise<void> {
   const paymentStatus = String(formData.get("paymentStatus") ?? "") as PaymentStatus;
   if (!id || !PAYMENT_STATUSES.includes(paymentStatus)) return;
 
-  await prisma.order.update({ where: { id }, data: { paymentStatus } });
+  // PENDING/FAILED -> PAID/PARTIALLY_PAID is the settlement transition owned by
+  // settleOrderPaid (src/lib/orders.ts), which also decrements stock, allocates
+  // the invoice number, and activates any subscription plan. Faking that flip
+  // here would leave those side effects undone forever: settleOrderPaid claims
+  // settlement via an updateMany matching paymentStatus IN (PENDING, FAILED),
+  // so once this action jumps straight to PAID, the real payment's later
+  // settlement attempt finds count === 0 and silently no-ops. Guarded out here
+  // instead — this form is only for post-settlement transitions (COD cash
+  // collected, refunds).
+  const isSettlementTransition = paymentStatus === "PAID" || paymentStatus === "PARTIALLY_PAID";
+  await prisma.order.updateMany({
+    where: isSettlementTransition ? { id, paymentStatus: { notIn: ["PENDING", "FAILED"] } } : { id },
+    data: { paymentStatus },
+  });
   revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/admin/orders");
 }
@@ -639,8 +652,15 @@ export async function toggleCoupon(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("couponId") ?? "");
   if (!id) return;
-  const c = await prisma.coupon.findUnique({ where: { id }, select: { active: true } });
-  if (!c) return;
+  const c = await prisma.coupon.findUnique({ where: { id }, select: { active: true, code: true } });
+  // System coupons (KIT-/SUB-/SUBPLAN-/LOYAL-) have their `active` flag owned
+  // and kept in sync by their owning feature (bundle/subscription/plan status,
+  // or the loyalty voucher's own lifecycle) — same reason createCoupon/
+  // deleteCoupon already refuse these prefixes. Toggling one here directly
+  // would silently desync it from that feature with no visible signal (the
+  // owning page keeps showing its own status, unaware the coupon stopped
+  // working), until the next legitimate sync event resets it.
+  if (!c || isSystemCouponCode(c.code)) return;
   await prisma.coupon.update({ where: { id }, data: { active: !c.active } });
   revalidatePath("/admin/coupons");
 }

@@ -4,7 +4,7 @@
 // boundary. A subscription mirrors a private per-subscription coupon (SUB-<id>)
 // so the discount flows through the existing checkout/settlement pipeline.
 import { revalidatePath } from "next/cache";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/session";
 import { subscriptionCouponCode } from "@/lib/subscriptions";
@@ -58,30 +58,51 @@ export async function createSubscription(input: {
   if (!variant) return { error: "This item isn't available to subscribe to." };
 
   const nextDeliveryAt = new Date(Date.now() + intervalDays * DAY_MS);
-  const existing = await prisma.subscription.findFirst({
-    where: { customerId: session.sub, variantId, status: { not: "CANCELLED" } },
-    select: { id: true },
-  });
 
-  await prisma.$transaction(async (tx) => {
-    const sub = existing
-      ? await tx.subscription.update({
-          where: { id: existing.id },
-          data: { intervalDays, quantity, discountPercent: SUBSCRIBE_SAVE_PERCENT, status: "ACTIVE", nextDeliveryAt },
-        })
-      : await tx.subscription.create({
-          data: {
-            customerId: session.sub,
-            variantId,
-            quantity,
-            intervalDays,
-            discountPercent: SUBSCRIBE_SAVE_PERCENT,
-            nextDeliveryAt,
-          },
-        });
+  // The "is there already a non-cancelled subscription for this variant" read
+  // and the create-or-update it decides between are wrapped in one
+  // SERIALIZABLE transaction — a plain read-then-write would let two
+  // concurrent subscribe calls (double-click, two tabs) both miss the read
+  // and both create a row, leaving two live subscriptions (each mailing its
+  // own reminders) for the same customer+variant with nothing in the schema
+  // preventing it. SERIALIZABLE makes Postgres abort one of the two
+  // conflicting transactions (P2034) instead; retried once, since that
+  // failure is expected/transient, not a real application error. Mirrors
+  // upsertDefaultAddress in src/lib/address.ts, the same bug class.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          const existing = await tx.subscription.findFirst({
+            where: { customerId: session.sub, variantId, status: { not: "CANCELLED" } },
+            select: { id: true },
+          });
+          const sub = existing
+            ? await tx.subscription.update({
+                where: { id: existing.id },
+                data: { intervalDays, quantity, discountPercent: SUBSCRIBE_SAVE_PERCENT, status: "ACTIVE", nextDeliveryAt },
+              })
+            : await tx.subscription.create({
+                data: {
+                  customerId: session.sub,
+                  variantId,
+                  quantity,
+                  intervalDays,
+                  discountPercent: SUBSCRIBE_SAVE_PERCENT,
+                  nextDeliveryAt,
+                },
+              });
 
-    await syncSubscriptionCoupon(tx, sub.id, SUBSCRIBE_SAVE_PERCENT, true);
-  });
+          await syncSubscriptionCoupon(tx, sub.id, SUBSCRIBE_SAVE_PERCENT, true);
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+      break;
+    } catch (err) {
+      const isConflict = err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2034";
+      if (!isConflict || attempt === 1) throw err;
+    }
+  }
   revalidatePath("/account/subscriptions");
   revalidatePath(`/product/${variant.product.slug}`);
   return { ok: true };

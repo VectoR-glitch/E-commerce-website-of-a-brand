@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { getProduct } from "@/lib/products";
+import { getProductsBySlugs } from "@/lib/products";
 import { sendSubscriptionReminder } from "@/lib/email";
 import { SUBSCRIBE_INTERVALS, SITE_URL } from "@/lib/constants";
 import type { SubscriptionStatus } from "@prisma/client";
@@ -53,7 +53,7 @@ export async function getCustomerSubscriptions(customerId: string): Promise<Subs
   if (subs.length === 0) return [];
 
   const slugs = [...new Set(subs.map((s) => s.variant.product.slug))];
-  const products = new Map(await Promise.all(slugs.map(async (s) => [s, await getProduct(s)] as const)));
+  const products = await getProductsBySlugs(slugs);
 
   return subs.map((s) => {
     const v = s.variant;

@@ -121,7 +121,19 @@ export async function pauseSubscription(formData: FormData): Promise<void> {
   const sub = await ownedSub(id, session.sub);
   if (!sub || sub.status === "CANCELLED") return;
   await prisma.$transaction(async (tx) => {
-    await tx.subscription.update({ where: { id }, data: { status: "PAUSED" } });
+    // Guarded on the FROM-status read above, via updateMany not update — two
+    // of these actions racing each other (double-click, two tabs, a pause
+    // racing a cancel) could otherwise have the loser silently overwrite
+    // what the winner just did (e.g. resurrecting a CANCELLED subscription
+    // back to PAUSED and recreating its coupon via the upsert below). A
+    // guard that finds count === 0 means someone else already changed this
+    // subscription's status — skip the coupon sync too rather than acting
+    // on a stale premise.
+    const claimed = await tx.subscription.updateMany({
+      where: { id, status: sub.status },
+      data: { status: "PAUSED" },
+    });
+    if (claimed.count === 0) return;
     // Deactivate the private coupon too — otherwise it keeps discounting any
     // order indefinitely while the account page shows "Paused."
     await syncSubscriptionCoupon(tx, id, sub.discountPercent, false);
@@ -138,7 +150,11 @@ export async function resumeSubscription(formData: FormData): Promise<void> {
   // Push the next delivery to a fresh full interval from today.
   const nextDeliveryAt = new Date(Date.now() + sub.intervalDays * DAY_MS);
   await prisma.$transaction(async (tx) => {
-    await tx.subscription.update({ where: { id }, data: { status: "ACTIVE", nextDeliveryAt } });
+    const claimed = await tx.subscription.updateMany({
+      where: { id, status: "PAUSED" },
+      data: { status: "ACTIVE", nextDeliveryAt },
+    });
+    if (claimed.count === 0) return;
     await syncSubscriptionCoupon(tx, id, sub.discountPercent, true);
   });
   revalidatePath("/account/subscriptions");
@@ -153,7 +169,7 @@ export async function skipSubscription(formData: FormData): Promise<void> {
   if (!sub || sub.status !== "ACTIVE") return;
   const base = Math.max(sub.nextDeliveryAt.getTime(), Date.now());
   const nextDeliveryAt = new Date(base + sub.intervalDays * DAY_MS);
-  await prisma.subscription.update({ where: { id }, data: { nextDeliveryAt } });
+  await prisma.subscription.updateMany({ where: { id, status: "ACTIVE" }, data: { nextDeliveryAt } });
   revalidatePath("/account/subscriptions");
 }
 
@@ -162,11 +178,15 @@ export async function cancelSubscription(formData: FormData): Promise<void> {
   if (!session) return;
   const id = String(formData.get("subscriptionId") ?? "");
   const sub = await ownedSub(id, session.sub);
-  if (!sub) return;
-  await prisma.$transaction([
-    prisma.subscription.update({ where: { id }, data: { status: "CANCELLED" } }),
+  if (!sub || sub.status === "CANCELLED") return;
+  await prisma.$transaction(async (tx) => {
+    const claimed = await tx.subscription.updateMany({
+      where: { id, status: sub.status },
+      data: { status: "CANCELLED" },
+    });
+    if (claimed.count === 0) return;
     // Retire the private coupon so it can't be reused after cancelling.
-    prisma.coupon.deleteMany({ where: { code: subscriptionCouponCode(id) } }),
-  ]);
+    await tx.coupon.deleteMany({ where: { code: subscriptionCouponCode(id) } });
+  });
   revalidatePath("/account/subscriptions");
 }

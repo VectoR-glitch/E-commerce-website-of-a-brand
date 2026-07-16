@@ -9,6 +9,12 @@
 import { deliveryFeePaise } from "@/lib/constants";
 
 const BASE = "https://apiv2.shiprocket.in/v1/external";
+// Both fetches below are in the checkout hot path (getShippingQuote is called
+// synchronously before the Razorpay order is even created) — a bare fetch()
+// has no timeout, so a SLOW (not down) Shiprocket would stall checkout
+// indefinitely instead of the ShippingUnavailableError catch further up the
+// call chain falling back to the flat-rate quote as designed.
+const FETCH_TIMEOUT_MS = 8000;
 
 const EMAIL = process.env.SHIPROCKET_EMAIL;
 const PASSWORD = process.env.SHIPROCKET_PASSWORD;
@@ -37,6 +43,7 @@ async function getToken(): Promise<string> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: EMAIL, password: PASSWORD }),
       cache: "no-store",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
   } catch (err) {
     throw new ShippingUnavailableError(`Shiprocket auth network error: ${err}`);
@@ -96,7 +103,11 @@ export async function getShippingQuote(params: {
   url.searchParams.set("declared_value", String(Math.round(params.declaredValuePaise / 100)));
 
   async function call(bearer: string) {
-    return fetch(url, { headers: { Authorization: `Bearer ${bearer}` }, cache: "no-store" });
+    return fetch(url, {
+      headers: { Authorization: `Bearer ${bearer}` },
+      cache: "no-store",
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
   }
 
   let res: Response;

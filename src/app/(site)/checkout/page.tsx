@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/catalog";
@@ -133,6 +133,14 @@ function validate(
 
 export default function CheckoutPage() {
   const { items, subtotalPaise, clear, authenticated, hydrated } = useCart();
+  // Always-current subtotal, readable from inside an async callback without
+  // closing over a stale value — the loyalty-voucher fetch below can resolve
+  // after the cart has changed, so filtering against a snapshot taken when
+  // the fetch STARTED could pick the "best" voucher against the wrong total.
+  const subtotalRef = useRef(subtotalPaise);
+  useEffect(() => {
+    subtotalRef.current = subtotalPaise;
+  }, [subtotalPaise]);
   // Guests are prompted to log in / sign up before checking out. They can still
   // continue as a guest (dismissing the prompt) — guest checkout stays supported.
   const [guestDismissed, setGuestDismissed] = useState(false);
@@ -465,7 +473,7 @@ export default function CheckoutPage() {
         setLoyaltyLoaded(true);
         if (!kitCode) {
           const best = (data.vouchers ?? [])
-            .filter((v) => v.valuePaise <= subtotalPaise)
+            .filter((v) => v.valuePaise <= subtotalRef.current)
             .sort((a, b) => b.valuePaise - a.valuePaise)[0];
           if (best) applyCoupon(best.code);
         }
@@ -473,6 +481,16 @@ export default function CheckoutPage() {
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
+
+  // Wait for the cart to actually reflect reality before deciding it's empty
+  // — a guest landing straight on /checkout (bookmark, refresh, external
+  // redirect, not a client-side nav from /cart where the cart's already
+  // hydrated) would otherwise see a one-frame "Your cart is empty" flash
+  // while localStorage hydration is still in flight. Signed-in customers hit
+  // this branch for effectively zero time (hydrated is true immediately).
+  if (!hydrated) {
+    return <section className="mx-auto max-w-3xl px-8 py-24 text-center" />;
+  }
 
   if (items.length === 0 && !placed) {
     return (
@@ -1206,7 +1224,9 @@ export default function CheckoutPage() {
                     {couponChecking ? "…" : "Apply"}
                   </button>
                 </div>
-                {couponError && <p className="mt-1 text-xs text-[#b3402f]">{couponError}</p>}
+                {couponError && (
+                  <p role="alert" className="mt-1 text-xs text-[#b3402f]">{couponError}</p>
+                )}
               </>
             )}
           </div>
@@ -1257,7 +1277,7 @@ export default function CheckoutPage() {
                       : `Pay ${formatINR(totalPaise)}`}
           </button>
           {payError && (
-            <p className="mt-3 text-center text-xs text-[#b3402f]">{payError}</p>
+            <p role="alert" className="mt-3 text-center text-xs text-[#b3402f]">{payError}</p>
           )}
           <p className="mt-3 flex items-center justify-center gap-1.5 text-center text-xs text-ink/55">
             <span aria-hidden>🔒</span>{" "}

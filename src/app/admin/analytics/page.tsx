@@ -2,10 +2,25 @@ import { PaymentStatus, OrderStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
+import { toIST } from "@/lib/gst";
 
 export const dynamic = "force-dynamic";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
+// Midnight IST for the calendar day containing `date`, as a real UTC instant
+// (safe to compare against stored UTC timestamps). Klenich operates in IST —
+// bucketing by UTC calendar day instead put an order placed 00:00–05:29 IST
+// in the previous day's bucket, up to 5.5h off from the business's own
+// "today." Mirrors toIST()'s shift-then-read-UTC-getters technique, just run
+// in reverse (IST wall-clock midnight -> real UTC instant) to get a boundary
+// usable in a Prisma `createdAt` filter.
+function istMidnight(date: Date): Date {
+  const ist = toIST(date);
+  const shiftedMidnight = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()));
+  return new Date(shiftedMidnight.getTime() - IST_OFFSET_MS);
+}
 // Orders that actually resulted in a sale — excludes abandoned checkouts
 // (PENDING), failed payments, and refunds, so revenue/AOV/retention all mean
 // "real, kept business" rather than raw order-row volume.
@@ -35,13 +50,13 @@ export default async function AdminAnalytics() {
   await requireAdmin();
 
   const now = new Date();
-  // Calendar-day aligned so the headline stats and the daily chart always
-  // agree on exactly which orders are "in the window".
-  const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const windowEnd = new Date(todayUTC.getTime() + DAY_MS); // exclusive, start of tomorrow
-  const windowStart = new Date(todayUTC.getTime() - 29 * DAY_MS); // 30 days incl. today
+  // Calendar-day aligned (IST) so the headline stats and the daily chart
+  // always agree on exactly which orders are "in the window."
+  const todayIST = istMidnight(now);
+  const windowEnd = new Date(todayIST.getTime() + DAY_MS); // exclusive, start of tomorrow
+  const windowStart = new Date(todayIST.getTime() - 29 * DAY_MS); // 30 days incl. today
   const prevWindowStart = new Date(windowStart.getTime() - 30 * DAY_MS);
-  const topProductsSince = new Date(todayUTC.getTime() - 89 * DAY_MS); // 90 days incl. today
+  const topProductsSince = new Date(todayIST.getTime() - 89 * DAY_MS); // 90 days incl. today
 
   const [
     currentOrders,
@@ -171,10 +186,13 @@ export default async function AdminAnalytics() {
   // headline stats above, so the chart total always matches the tile.
   const dayBuckets = new Map<string, number>();
   for (let i = 0; i < 30; i++) {
-    dayBuckets.set(new Date(windowStart.getTime() + i * DAY_MS).toISOString().slice(0, 10), 0);
+    // IST calendar-date key: shift then read back via toISOString (same
+    // technique as istMidnight/financialYearLabel), not the UTC date the
+    // instant itself would print as.
+    dayBuckets.set(toIST(new Date(windowStart.getTime() + i * DAY_MS)).toISOString().slice(0, 10), 0);
   }
   for (const o of currentOrders) {
-    const key = o.createdAt.toISOString().slice(0, 10);
+    const key = toIST(o.createdAt).toISOString().slice(0, 10);
     if (dayBuckets.has(key)) dayBuckets.set(key, (dayBuckets.get(key) ?? 0) + o.totalPaise);
   }
   const days = Array.from(dayBuckets.entries()).map(([date, paise]) => ({

@@ -198,6 +198,7 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
                     day: "numeric",
                     month: "short",
                     year: "numeric",
+                    timeZone: "Asia/Kolkata",
                   })}
                 </p>
               </li>

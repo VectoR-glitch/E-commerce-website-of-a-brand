@@ -455,6 +455,18 @@ model OrderItem {
   hsnCode     String  @default("34022")
   gstPercent  Int     @default(18)
 
+  // Set true by settleOrderPaid exactly when THIS line's stock decrement
+  // actually succeeded (guarded on sufficient stock at settlement time) —
+  // flipped back to false once that stock is returned (order
+  // cancelled/returned). An order can be ON_HOLD with some lines committed
+  // and others not (e.g. held only for a coupon-cap reason, where every line
+  // decremented fine, vs. held for a stock shortfall on one specific line),
+  // so this has to be tracked per-line rather than inferred from the order's
+  // status — inferring from status alone was a real bug: an ON_HOLD order's
+  // committed stock was never restocked on cancel, since ON_HOLD wasn't in
+  // the order-status allowlist that gated restocking.
+  stockCommitted Boolean @default(false)
+
   @@index([orderId])
 }
 

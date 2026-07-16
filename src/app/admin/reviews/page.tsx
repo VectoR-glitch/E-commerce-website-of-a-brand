@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { approveReview, unapproveReview, deleteReview } from "@/app/admin/actions";
@@ -6,27 +7,48 @@ import { ConfirmSubmit } from "@/components/confirm-submit";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminReviewsPage() {
+const REVIEW_SELECT = {
+  id: true,
+  rating: true,
+  title: true,
+  body: true,
+  approved: true,
+  createdAt: true,
+  product: { select: { name: true, slug: true } },
+  customer: { select: { name: true, email: true } },
+} as const;
+
+const PAGE_SIZE = 50;
+
+export default async function AdminReviewsPage(props: { searchParams: Promise<{ page?: string }> }) {
   await requireAdmin();
+  const sp = await props.searchParams;
+  const page = Math.max(1, Math.floor(Number(sp.page)) || 1);
 
-  const reviews = await prisma.review.findMany({
-    orderBy: [{ approved: "asc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      rating: true,
-      title: true,
-      body: true,
-      approved: true,
-      createdAt: true,
-      product: { select: { name: true, slug: true } },
-      customer: { select: { name: true, email: true } },
-    },
-  });
+  // Pending is queried unpaginated — it's an actively-worked moderation queue
+  // the admin needs to see in full to clear, not an ever-growing archive.
+  // Live (every approved review, ever) is the side that actually grows
+  // unbounded, so that's the one paginated, with its own COUNT for the
+  // header label.
+  const [pending, liveTotal, liveRows] = await Promise.all([
+    prisma.review.findMany({
+      where: { approved: false },
+      orderBy: { createdAt: "desc" },
+      select: REVIEW_SELECT,
+    }),
+    prisma.review.count({ where: { approved: true } }),
+    prisma.review.findMany({
+      where: { approved: true },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE + 1,
+      select: REVIEW_SELECT,
+    }),
+  ]);
+  const liveHasNext = liveRows.length > PAGE_SIZE;
+  const live = liveRows.slice(0, PAGE_SIZE);
 
-  const pending = reviews.filter((r) => !r.approved);
-  const live = reviews.filter((r) => r.approved);
-
-  const card = (r: (typeof reviews)[number]) => (
+  const card = (r: (typeof pending)[number]) => (
     <div key={r.id} className="border border-line bg-paper p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
@@ -39,7 +61,7 @@ export default async function AdminReviewsPage() {
           )}
         </div>
         <span className="text-xs text-ink/45">
-          {r.createdAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+          {r.createdAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })}
         </span>
       </div>
       {r.title && <p className="mt-2 font-serif text-lg">{r.title}</p>}
@@ -85,10 +107,26 @@ export default async function AdminReviewsPage() {
         {pending.length > 0 ? pending.map(card) : <p className="text-sm text-ink/50">Nothing waiting.</p>}
       </div>
 
-      <h2 className="mt-10 smallcaps text-brass-deep">Live {live.length > 0 && `(${live.length})`}</h2>
+      <h2 className="mt-10 smallcaps text-brass-deep">Live {liveTotal > 0 && `(${liveTotal})`}</h2>
       <div className="mt-3 space-y-3">
         {live.length > 0 ? live.map(card) : <p className="text-sm text-ink/50">No published reviews yet.</p>}
       </div>
+
+      {(page > 1 || liveHasNext) && (
+        <div className="mt-4 flex items-center justify-between">
+          {page > 1 ? (
+            <Link href={`/admin/reviews?page=${page - 1}`} className="smallcaps text-forest hover:underline">
+              ← Previous
+            </Link>
+          ) : <span />}
+          <span className="text-xs text-ink/50">Page {page}</span>
+          {liveHasNext ? (
+            <Link href={`/admin/reviews?page=${page + 1}`} className="smallcaps text-forest hover:underline">
+              Next →
+            </Link>
+          ) : <span />}
+        </div>
+      )}
     </div>
   );
 }

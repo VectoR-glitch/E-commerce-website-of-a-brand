@@ -77,7 +77,16 @@ export async function forgotPasswordAction(_prev: ForgotState, formData: FormDat
     });
     const origin = await currentOrigin();
     const link = `${origin}/reset-password?token=${token}`;
-    await sendPasswordResetEmail(email, customer.name, link);
+    // Best-effort: this function's whole design is "ALWAYS report success,
+    // never reveal whether an email is registered" — a Resend outage/hiccup
+    // must not throw past that and crash into a raw error page (which would
+    // itself leak that the email WAS registered, the exact thing this is
+    // built to avoid). The token is already saved either way.
+    try {
+      await sendPasswordResetEmail(email, customer.name, link);
+    } catch (err) {
+      console.error(`Password reset email failed for ${email}:`, err);
+    }
     // Dev convenience: no Resend key → surface the link in the server log.
     if (process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY) {
       console.log(`[dev] Password reset link for ${email}: ${link}`);

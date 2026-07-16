@@ -137,6 +137,7 @@ export default async function LoyaltyPage() {
                           day: "numeric",
                           month: "short",
                           year: "numeric",
+                          timeZone: "Asia/Kolkata",
                         })}
                       </span>
                     )}
@@ -181,6 +182,7 @@ export default async function LoyaltyPage() {
                       day: "numeric",
                       month: "short",
                       year: "numeric",
+                      timeZone: "Asia/Kolkata",
                     })}
                   </span>
                 </span>

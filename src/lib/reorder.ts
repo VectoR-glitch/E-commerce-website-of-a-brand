@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { getProduct } from "@/lib/products";
+import { getProductsBySlugs } from "@/lib/products";
 import { MAX_QTY_PER_ITEM } from "@/lib/constants";
 import type { CartItem } from "@/lib/cart-context";
 
@@ -34,9 +34,9 @@ export async function buildReorderItems(rows: OrderItemRow[]): Promise<ReorderRe
     : [];
   const byId = new Map(variants.map((v) => [v.id, v]));
 
-  // Hydrate each distinct product once (reuses image/price logic).
+  // Hydrate every distinct product in ONE query, not one lookup per slug.
   const slugs = [...new Set(variants.filter((v) => v.product.active).map((v) => v.product.slug))];
-  const products = new Map(await Promise.all(slugs.map(async (s) => [s, await getProduct(s)] as const)));
+  const products = await getProductsBySlugs(slugs);
 
   const items: CartItem[] = [];
   const unavailable: string[] = [];

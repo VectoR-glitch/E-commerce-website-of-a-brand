@@ -6,7 +6,7 @@ import { NewBlogPostForm } from "@/components/new-blog-post-form";
 export const dynamic = "force-dynamic";
 
 const dateFmt = (d: Date) =>
-  d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
 export default async function AdminBlogPage() {
   await requireAdmin();

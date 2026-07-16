@@ -10,14 +10,28 @@ import { ReorderButton } from "@/components/reorder-button";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Order History" };
 
-export default async function AccountOrdersPage() {
-  const session = await requireSession("/account/orders");
+const PAGE_SIZE = 20;
 
-  const orders = await prisma.order.findMany({
+export default async function AccountOrdersPage(props: { searchParams: Promise<{ page?: string }> }) {
+  const session = await requireSession("/account/orders");
+  const sp = await props.searchParams;
+  const page = Math.max(1, Math.floor(Number(sp.page)) || 1);
+
+  // A customer's full order history has no natural bound, and resolving each
+  // page's reorder items is real work (a variant lookup + a batched product
+  // hydration per order) — paginate like /admin/orders already does, rather
+  // than loading every historical order (and re-resolving reorder items for
+  // all of them) on every visit. Fetch one extra row to detect a next page
+  // without a separate COUNT query.
+  const rows = await prisma.order.findMany({
     where: { customerId: session.sub },
     orderBy: { createdAt: "desc" },
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE + 1,
     include: { _count: { select: { items: true } }, items: true },
   });
+  const hasNext = rows.length > PAGE_SIZE;
+  const orders = rows.slice(0, PAGE_SIZE);
   // Resolve each order's items to current buyable variants for one-tap reorder.
   const reorders = new Map(
     await Promise.all(
@@ -75,6 +89,26 @@ export default async function AccountOrdersPage() {
             );
           })}
         </ul>
+      )}
+
+      {(page > 1 || hasNext) && (
+        <div className="mt-6 flex items-center justify-between">
+          {page > 1 ? (
+            <Link href={`/account/orders?page=${page - 1}`} className="smallcaps text-forest hover:underline">
+              ← Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-xs text-ink/50">Page {page}</span>
+          {hasNext ? (
+            <Link href={`/account/orders?page=${page + 1}`} className="smallcaps text-forest hover:underline">
+              Next →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </div>
       )}
     </div>
   );

@@ -73,9 +73,17 @@ export default async function StockPage() {
                   <td className="px-3 py-2">
                     <form action={updateStock} className="flex gap-2">
                       <input type="hidden" name="variantId" value={v.id} />
+                      {/* The stock value visible when this form was rendered —
+                          updateStock only applies the edit if the DB still
+                          matches this, so a sale that lands between page load
+                          and Save can't be silently overwritten by a stale
+                          absolute count. */}
+                      <input type="hidden" name="expectedStock" value={v.stock} />
                       {/* key on the saved stock remounts the input after a save
                           so it shows the new value (React 19 resets uncontrolled
-                          fields to defaultValue after a server action). */}
+                          fields to defaultValue after a server action) — this
+                          also means a guard-blocked save visibly reverts to the
+                          real current stock instead of looking like it saved. */}
                       <input
                         key={v.stock}
                         name="stock"

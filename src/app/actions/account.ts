@@ -46,7 +46,16 @@ async function issueVerification(
   const origin = await originFromHeaders();
   const nextParam = next && next !== "/" ? `&next=${encodeURIComponent(next)}` : "";
   const link = `${origin}/verify-email?token=${token}${nextParam}`;
-  await sendVerificationEmail(email, name, link);
+  // Best-effort: the token is already saved, so a Resend outage/hiccup here
+  // must not crash registerAction/resendVerificationAction into a raw error
+  // page — the customer's account (registerAction) or the "check your inbox"
+  // response (both callers) must still go through cleanly. They can always
+  // retry via "resend verification" once the provider recovers.
+  try {
+    await sendVerificationEmail(email, name, link);
+  } catch (err) {
+    console.error(`Verification email failed for ${email}:`, err);
+  }
   // Dev convenience: with no Resend key the email can't send, so surface the
   // link in the server log to complete the flow locally.
   if (process.env.NODE_ENV !== "production" && !process.env.RESEND_API_KEY) {

@@ -29,13 +29,17 @@ export function ProfileForm({ name, phone, email }: { name: string; phone: strin
           name="phone"
           defaultValue={phone}
           inputMode="numeric"
+          maxLength={10}
           placeholder="10-digit mobile"
+          onInput={(e) => {
+            e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "").slice(0, 10);
+          }}
           className={field}
         />
       </div>
 
-      {state?.error && <p className="text-sm text-red-700">{state.error}</p>}
-      {state?.ok && <p className="text-sm text-forest">Saved.</p>}
+      {state?.error && <p role="alert" className="text-sm text-red-700">{state.error}</p>}
+      {state?.ok && <p role="status" className="text-sm text-forest">Saved.</p>}
 
       <button
         type="submit"

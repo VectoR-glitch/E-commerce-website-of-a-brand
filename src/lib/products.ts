@@ -150,3 +150,21 @@ export async function getProduct(slug: string): Promise<Product | undefined> {
   const meta = presentation.find((p) => p.slug === slug);
   return hydrate(meta, db);
 }
+
+// Batched sibling of getProduct — one query for every distinct slug instead
+// of one round trip per slug. For callers that need to hydrate several
+// products at once (a signed-in customer's cart, a reorder button, a
+// subscription's item list) and would otherwise loop getProduct() per item —
+// an N+1 that fires on every page load for anyone with items in their cart.
+// Slugs with no matching active product are simply absent from the returned
+// map, same as getProduct returning undefined for them.
+export async function getProductsBySlugs(slugs: string[]): Promise<Map<string, Product>> {
+  if (slugs.length === 0) return new Map();
+  const dbProducts = await prisma.product.findMany({
+    where: { slug: { in: slugs }, active: true },
+    select: productSelect,
+  });
+  return new Map(
+    dbProducts.map((db) => [db.slug, hydrate(presentation.find((p) => p.slug === db.slug), db)]),
+  );
+}

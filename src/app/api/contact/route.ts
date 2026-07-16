@@ -43,7 +43,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const name = body.name?.trim() ?? "";
+  // Strip CR/LF before it ever reaches an email subject line — sendContactEmail
+  // interpolates `name` into "New contact message from {name}", and a raw
+  // newline there is exactly what a header-injection attempt would need.
+  const name = (body.name?.trim() ?? "").replace(/[\r\n]/g, " ");
   const email = body.email?.trim() ?? "";
   const phone = body.phone?.trim() ?? "";
   const message = body.message?.trim() ?? "";

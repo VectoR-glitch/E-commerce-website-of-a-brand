@@ -1,5 +1,5 @@
 import "server-only";
-import type { Coupon } from "@prisma/client";
+import type { Coupon, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { formatINR } from "@/lib/catalog";
 
@@ -40,14 +40,17 @@ export function isSystemCouponCode(code: string): boolean {
 // necessarily visible on the storefront. To stop customers from lifting that
 // code and using it off-kit, a KIT- coupon only applies when the cart actually
 // contains the bundle's items. Returns an error string if the gate fails.
-async function bundleGate(code: string, cart: CartLine[]): Promise<string | null> {
-  if (!code.startsWith("KIT-")) return null; // not a bundle coupon
-  const slug = code.slice(4).toLowerCase();
-  const bundle = await prisma.bundle.findUnique({
-    where: { slug },
-    include: { items: { include: { product: { include: { variants: true } } } } },
-  });
-  if (!bundle) return null; // orphan KIT- code (no bundle) → treat as a normal coupon
+const bundleWithItems = {
+  include: { items: { include: { product: { include: { variants: true } } } } },
+} satisfies Prisma.BundleDefaultArgs;
+type BundleWithItems = Prisma.BundleGetPayload<typeof bundleWithItems>;
+
+// The actual gate logic, factored out from the fetch — so listAvailableCoupons
+// can batch-fetch every candidate KIT- code's bundle in ONE query and evaluate
+// this per-candidate in memory, instead of bundleGate's own per-code query
+// firing once per candidate (an N+1 that ran on every checkout page load/cart
+// change, one for each active kit coupon).
+function bundleGateForBundle(bundle: BundleWithItems, cart: CartLine[]): string | null {
   if (!bundle.active) return "This kit is no longer available.";
 
   const have = new Map(cart.map((l) => [l.variantId, l.quantity]));
@@ -73,6 +76,14 @@ async function bundleGate(code: string, cart: CartLine[]): Promise<string | null
     }
   }
   return null;
+}
+
+async function bundleGate(code: string, cart: CartLine[]): Promise<string | null> {
+  if (!code.startsWith("KIT-")) return null; // not a bundle coupon
+  const slug = code.slice(4).toLowerCase();
+  const bundle = await prisma.bundle.findUnique({ where: { slug }, ...bundleWithItems });
+  if (!bundle) return null; // orphan KIT- code (no bundle) → treat as a normal coupon
+  return bundleGateForBundle(bundle, cart);
 }
 
 // SUB-/SUBPLAN- codes are visible to their own customer (shown on the account
@@ -195,12 +206,31 @@ export async function listAvailableCoupons(
     },
   });
 
+  // One batched query for every candidate KIT- code's bundle, instead of
+  // bundleGate's own per-code query firing once per candidate below — this
+  // runs on every checkout page load and cart change.
+  const kitSlugs = candidates
+    .filter((c) => c.code.startsWith("KIT-"))
+    .map((c) => c.code.slice(4).toLowerCase());
+  const bundleBySlug = kitSlugs.length
+    ? new Map(
+        (await prisma.bundle.findMany({ where: { slug: { in: kitSlugs } }, ...bundleWithItems })).map(
+          (b) => [b.slug, b],
+        ),
+      )
+    : new Map<string, BundleWithItems>();
+
   const results: AvailableCoupon[] = [];
   for (const c of candidates) {
     if (c.code.startsWith("SUB-") || c.code.startsWith("LOYAL-")) continue;
     if (c.maxUses != null && c.usedCount >= c.maxUses) continue;
     if (subtotalPaise < c.minOrderPaise) continue;
-    if (c.code.startsWith("KIT-") && (await bundleGate(c.code, cart))) continue;
+    if (c.code.startsWith("KIT-")) {
+      const bundle = bundleBySlug.get(c.code.slice(4).toLowerCase());
+      // Orphan KIT- code (no matching bundle) → treat as ungated, matching
+      // bundleGate's own orphan handling.
+      if (bundle && bundleGateForBundle(bundle, cart)) continue;
+    }
     results.push({ code: c.code, ...computeDiscount(c, subtotalPaise) });
   }
   return results;

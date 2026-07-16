@@ -6,6 +6,7 @@ export function BlogCard({ post }: { post: BlogListItem }) {
     day: "numeric",
     month: "long",
     year: "numeric",
+    timeZone: "Asia/Kolkata",
   });
 
   return (

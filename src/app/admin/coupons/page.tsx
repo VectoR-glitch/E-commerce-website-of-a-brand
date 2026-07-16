@@ -68,7 +68,7 @@ export default async function AdminCouponsPage() {
                   </td>
                   <td className="px-3 py-2 text-ink/70">
                     {c.expiresAt
-                      ? c.expiresAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                      ? c.expiresAt.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })
                       : "—"}
                   </td>
                   <td className="px-3 py-2 text-center">

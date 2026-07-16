@@ -1,13 +1,13 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { getProduct } from "@/lib/products";
+import { getProductsBySlugs } from "@/lib/products";
 import { MAX_QTY_PER_ITEM } from "@/lib/constants";
 import type { CartItem } from "@/lib/cart-context";
 
 // Builds the client CartItem[] for a signed-in customer's server cart. Display
-// data (name, image, live price) is resolved through getProduct — the same
-// hydration the storefront uses — so prices are always current and an item
-// whose product/variant went inactive silently drops out of the cart.
+// data (name, image, live price) is resolved through getProductsBySlugs — the
+// same hydration the storefront uses — so prices are always current and an
+// item whose product/variant went inactive silently drops out of the cart.
 export async function loadServerCartItems(customerId: string): Promise<CartItem[]> {
   const cart = await prisma.cart.findUnique({
     where: { customerId },
@@ -15,9 +15,11 @@ export async function loadServerCartItems(customerId: string): Promise<CartItem[
   });
   if (!cart || cart.items.length === 0) return [];
 
-  // Hydrate each distinct product once (reuses image/price logic).
+  // Hydrate every distinct product in ONE query — this runs on every page
+  // load for a signed-in customer with items in cart, so a per-slug lookup
+  // here was a real, sitewide N+1.
   const slugs = [...new Set(cart.items.map((i) => i.variant.product.slug))];
-  const products = new Map(await Promise.all(slugs.map(async (s) => [s, await getProduct(s)] as const)));
+  const products = await getProductsBySlugs(slugs);
 
   const items: CartItem[] = [];
   for (const it of cart.items) {

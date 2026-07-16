@@ -9,7 +9,13 @@ import { updateOrderStatus, updatePaymentStatus } from "@/app/admin/actions";
 export const dynamic = "force-dynamic";
 
 const ORDER_STATUSES = Object.values(OrderStatus);
-const PAYMENT_STATUSES = Object.values(PaymentStatus);
+// PENDING/FAILED are owned exclusively by the real settlement flow
+// (settleOrderPaid) — updatePaymentStatus refuses both as source or
+// destination, so they're left off this dropdown entirely rather than
+// offering a choice that always silently no-ops.
+const PAYMENT_STATUSES = Object.values(PaymentStatus).filter(
+  (s) => s !== "PENDING" && s !== "FAILED",
+);
 
 // toISOString() is always UTC — Klenich operates in IST (UTC+5:30), so that
 // silently showed a time 5.5 hours behind the actual order time.
@@ -116,13 +122,21 @@ export default async function OrderDetail(props: { params: Promise<{ id: string 
           <div className="border border-line bg-paper p-5">
             <h2 className="smallcaps text-brass-deep">Payment status</h2>
             <p className="mt-1 text-xs text-ink/55">{order.paymentMethod} · e.g. mark COD goods collected as PAID, or REFUNDED.</p>
-            <form action={updatePaymentStatus} className="mt-3 flex gap-2">
-              <input type="hidden" name="orderId" value={order.id} />
-              <select key={order.paymentStatus} name="paymentStatus" defaultValue={order.paymentStatus} className={`${fieldCls} flex-1`}>
-                {PAYMENT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-              </select>
-              <button className="smallcaps bg-forest px-4 py-2 text-bone btn-fill-forest">Save</button>
-            </form>
+            {order.paymentStatus === "PENDING" || order.paymentStatus === "FAILED" ? (
+              <p className="mt-3 text-sm text-ink/70">
+                <span className="font-medium text-ink">{order.paymentStatus}</span> — waiting on the real
+                payment to settle. Not editable here; it resolves itself once Razorpay confirms (or the
+                customer retries).
+              </p>
+            ) : (
+              <form action={updatePaymentStatus} className="mt-3 flex gap-2">
+                <input type="hidden" name="orderId" value={order.id} />
+                <select key={order.paymentStatus} name="paymentStatus" defaultValue={order.paymentStatus} className={`${fieldCls} flex-1`}>
+                  {PAYMENT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <button className="smallcaps bg-forest px-4 py-2 text-bone btn-fill-forest">Save</button>
+              </form>
+            )}
           </div>
 
           <div className="border border-line bg-paper p-5 text-sm">

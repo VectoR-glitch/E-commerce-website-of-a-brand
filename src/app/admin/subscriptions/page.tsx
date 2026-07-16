@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
@@ -9,32 +10,55 @@ export const dynamic = "force-dynamic";
 const dateFmt = (d: Date) =>
   d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
-export default async function AdminSubscriptions() {
+const PAGE_SIZE = 50;
+
+type SP = { subPage?: string; planPage?: string };
+
+export default async function AdminSubscriptions(props: { searchParams: Promise<SP> }) {
   await requireAdmin();
+  const sp = await props.searchParams;
+  const subPage = Math.max(1, Math.floor(Number(sp.subPage)) || 1);
+  const planPage = Math.max(1, Math.floor(Number(sp.planPage)) || 1);
 
   const now = new Date();
-  const subs = await prisma.subscription.findMany({
+  // Stats come from cheap COUNT aggregates, not the (paginated) row fetch
+  // below — so they always reflect the WHOLE table, not just the page shown,
+  // and don't force loading every row (with its relations) just to count.
+  const [totalSubs, activeCount, dueCount] = await Promise.all([
+    prisma.subscription.count({ where: { status: { not: "CANCELLED" } } }),
+    prisma.subscription.count({ where: { status: "ACTIVE" } }),
+    prisma.subscription.count({ where: { status: "ACTIVE", nextDeliveryAt: { lte: now } } }),
+  ]);
+  const subRows = await prisma.subscription.findMany({
     where: { status: { not: "CANCELLED" } },
     orderBy: [{ status: "asc" }, { nextDeliveryAt: "asc" }],
+    skip: (subPage - 1) * PAGE_SIZE,
+    take: PAGE_SIZE + 1,
     include: {
       customer: { select: { email: true, name: true } },
       variant: { include: { product: { select: { name: true } } } },
     },
   });
+  const subHasNext = subRows.length > PAGE_SIZE;
+  const subs = subRows.slice(0, PAGE_SIZE);
 
-  const activeCount = subs.filter((s) => s.status === "ACTIVE").length;
-  const dueCount = subs.filter((s) => s.status === "ACTIVE" && s.nextDeliveryAt <= now).length;
-
-  const plans = await prisma.subscriptionPlan.findMany({
+  const [totalPlans, activePlanCount, duePlanCount] = await Promise.all([
+    prisma.subscriptionPlan.count({ where: { status: { not: "CANCELLED" } } }),
+    prisma.subscriptionPlan.count({ where: { status: "ACTIVE" } }),
+    prisma.subscriptionPlan.count({ where: { status: "ACTIVE", nextDeliveryAt: { lte: now } } }),
+  ]);
+  const planRows = await prisma.subscriptionPlan.findMany({
     where: { status: { not: "CANCELLED" } },
     orderBy: [{ status: "asc" }, { nextDeliveryAt: "asc" }],
+    skip: (planPage - 1) * PAGE_SIZE,
+    take: PAGE_SIZE + 1,
     include: {
       customer: { select: { email: true, name: true } },
       items: { include: { variant: { include: { product: { select: { name: true } } } } } },
     },
   });
-  const activePlanCount = plans.filter((p) => p.status === "ACTIVE").length;
-  const duePlanCount = plans.filter((p) => p.status === "ACTIVE" && p.nextDeliveryAt <= now).length;
+  const planHasNext = planRows.length > PAGE_SIZE;
+  const plans = planRows.slice(0, PAGE_SIZE);
 
   return (
     <div>
@@ -42,7 +66,7 @@ export default async function AdminSubscriptions() {
         <div>
           <h1 className="font-serif text-3xl">Subscriptions</h1>
           <p className="mt-1 text-sm text-ink/55">
-            {activeCount} active · {subs.length - activeCount} paused ·{" "}
+            {activeCount} active · {totalSubs - activeCount} paused ·{" "}
             <span className={dueCount > 0 ? "text-brass-deep" : ""}>{dueCount} due now</span>
           </p>
         </div>
@@ -63,7 +87,7 @@ export default async function AdminSubscriptions() {
         this button is the manual trigger for sending due reminders on demand.
       </p>
 
-      {subs.length === 0 ? (
+      {totalSubs === 0 ? (
         <p className="mt-10 text-sm text-ink/50">No subscriptions yet.</p>
       ) : (
         <div className="mt-6 overflow-x-auto border border-line">
@@ -122,11 +146,27 @@ export default async function AdminSubscriptions() {
         </div>
       )}
 
+      {(subPage > 1 || subHasNext) && (
+        <div className="mt-3 flex items-center justify-between">
+          {subPage > 1 ? (
+            <Link href={`/admin/subscriptions?subPage=${subPage - 1}${planPage > 1 ? `&planPage=${planPage}` : ""}`} className="smallcaps text-forest hover:underline">
+              ← Previous
+            </Link>
+          ) : <span />}
+          <span className="text-xs text-ink/50">Page {subPage}</span>
+          {subHasNext ? (
+            <Link href={`/admin/subscriptions?subPage=${subPage + 1}${planPage > 1 ? `&planPage=${planPage}` : ""}`} className="smallcaps text-forest hover:underline">
+              Next →
+            </Link>
+          ) : <span />}
+        </div>
+      )}
+
       <div className="mt-14 flex flex-wrap items-end justify-between gap-4 border-t border-line pt-8">
         <div>
           <h2 className="font-serif text-2xl">Subscription boxes</h2>
           <p className="mt-1 text-sm text-ink/55">
-            {activePlanCount} active · {plans.length - activePlanCount} paused ·{" "}
+            {activePlanCount} active · {totalPlans - activePlanCount} paused ·{" "}
             <span className={duePlanCount > 0 ? "text-brass-deep" : ""}>{duePlanCount} due now</span>
           </p>
         </div>
@@ -140,7 +180,7 @@ export default async function AdminSubscriptions() {
         </form>
       </div>
 
-      {plans.length === 0 ? (
+      {totalPlans === 0 ? (
         <p className="mt-6 text-sm text-ink/50">No subscription boxes yet.</p>
       ) : (
         <div className="mt-6 overflow-x-auto border border-line">
@@ -197,6 +237,22 @@ export default async function AdminSubscriptions() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {(planPage > 1 || planHasNext) && (
+        <div className="mt-3 flex items-center justify-between">
+          {planPage > 1 ? (
+            <Link href={`/admin/subscriptions?planPage=${planPage - 1}${subPage > 1 ? `&subPage=${subPage}` : ""}`} className="smallcaps text-forest hover:underline">
+              ← Previous
+            </Link>
+          ) : <span />}
+          <span className="text-xs text-ink/50">Page {planPage}</span>
+          {planHasNext ? (
+            <Link href={`/admin/subscriptions?planPage=${planPage + 1}${subPage > 1 ? `&subPage=${subPage}` : ""}`} className="smallcaps text-forest hover:underline">
+              Next →
+            </Link>
+          ) : <span />}
         </div>
       )}
     </div>

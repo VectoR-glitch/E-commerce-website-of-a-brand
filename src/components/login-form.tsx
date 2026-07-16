@@ -70,7 +70,7 @@ export function LoginForm({ next }: { next: string }) {
         </div>
 
         {state?.error && (
-          <p className="border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+          <p role="alert" className="border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
             {state.error}
           </p>
         )}

@@ -265,36 +265,70 @@ export async function reverseLoyaltyForOrder(
   const entries = await tx.loyaltyLedger.findMany({ where: { orderId, delta: { gt: 0 } } });
   for (const entry of entries) {
     // The clamp ("don't take back more than they currently hold") has to be
-    // part of the write itself, not a separate read-then-decrement — two
+    // computed from a value that's protected from concurrent modification for
+    // the rest of this transaction — a plain read-then-decrement would let two
     // concurrent reversals for the SAME customer (e.g. bulk-returning two
-    // orders in different admin tabs) would otherwise both clamp against the
-    // same stale balance and then both decrement, driving points negative
-    // (100 held, two reversals owing 60 and 50 each clamp to "100 is enough",
-    // decrement sequentially to -10). A CTE that reads the row and clamps the
-    // decrement in the SAME statement closes the window — Postgres's row lock
-    // on the UPDATE serializes concurrent attempts, so the second one's
-    // GREATEST(...) clamp is evaluated against the first one's already-applied
-    // result, never below zero. Prisma's query builder has no expression-based
-    // update (only a flat `decrement: n`), so this one case needs raw SQL.
-    const [row] = await tx.$queryRaw<{ pointsBack: number; lifetimeBack: number }[]>`
-      WITH old AS (SELECT points, "lifetimePoints" FROM "Customer" WHERE id = ${entry.customerId})
-      UPDATE "Customer" c
-      SET points = GREATEST(old.points - ${entry.delta}, 0),
-          "lifetimePoints" = GREATEST(old."lifetimePoints" - ${entry.delta}, 0)
-      FROM old
-      WHERE c.id = ${entry.customerId}
-      RETURNING (old.points - GREATEST(old.points - ${entry.delta}, 0)) AS "pointsBack",
-                (old."lifetimePoints" - GREATEST(old."lifetimePoints" - ${entry.delta}, 0)) AS "lifetimeBack"
+    // orders in different admin tabs) both clamp against the same stale
+    // balance and then both decrement, driving points negative (100 held,
+    // two reversals owing 60 and 50 each clamp to "100 is enough", decrement
+    // sequentially to -10). `SELECT ... FOR UPDATE` takes an explicit row
+    // lock as part of a single, ordinary SELECT — no CTE/materialization
+    // ambiguity to reason about — so a concurrent transaction blocks until
+    // this one commits, and by the time it acquires the lock it reads
+    // whatever this transaction actually left behind. The subsequent
+    // `decrement` is then safe: nothing else can touch this row until we're
+    // done.
+    const [locked] = await tx.$queryRaw<{ points: number; lifetimePoints: number }[]>`
+      SELECT points, "lifetimePoints" FROM "Customer" WHERE id = ${entry.customerId} FOR UPDATE
     `;
-    if (!row) continue; // customer no longer exists
+    if (!locked) continue; // customer no longer exists
 
-    const pointsBack = Number(row.pointsBack);
+    const pointsBack = Math.min(entry.delta, locked.points);
+    const lifetimeBack = Math.min(entry.delta, locked.lifetimePoints);
+    if (pointsBack > 0 || lifetimeBack > 0) {
+      await tx.customer.update({
+        where: { id: entry.customerId },
+        data: { points: { decrement: pointsBack }, lifetimePoints: { decrement: lifetimeBack } },
+      });
+    }
     if (pointsBack > 0) {
       await tx.loyaltyLedger.create({
         data: { customerId: entry.customerId, delta: -pointsBack, reason: "return", orderId },
       });
     }
   }
+}
+
+// Un-consumes a redeemed loyalty voucher (LOYAL-<suffix>) if the order it was
+// applied to never actually got fulfilled. redeemPoints debits points and
+// mints the voucher up front, independent of any order; settleOrderPaid then
+// marks it used (usedCount 0 -> 1) at settlement REGARDLESS of whether the
+// order confirms cleanly or lands ON_HOLD for an unrelated reason (a stock
+// shortfall on a different line, or a coupon-cap edge case) — so a customer
+// whose order never leaves ON_HOLD before being cancelled would otherwise
+// permanently lose the points they spent for zero goods and zero refund.
+//
+// Deliberately narrow: only reverses a voucher on an order that was ON_HOLD
+// right up to the cancel/return (i.e. never reached a real confirmed/
+// fulfilled state at any point) — NOT on an order that genuinely confirmed
+// and shipped and is only later returned, where the coupon having been spent
+// is the same as for any other discount type and isn't unwound.
+//
+// Claims via the coupon's own usedCount, the same field settleOrderPaid used
+// to consume it: a guarded updateMany matching usedCount === 1 (the only
+// value a single-use LOYAL- coupon can be at) resetting it to 0. This is
+// naturally idempotent — a second call for the same order finds usedCount is
+// no longer 1 and no-ops — without needing a separate "already reversed"
+// field.
+export async function reverseVoucherRedemptionForOrder(
+  tx: Prisma.TransactionClient,
+  order: { couponCode: string | null },
+): Promise<void> {
+  if (!order.couponCode?.startsWith("LOYAL-")) return;
+  await tx.coupon.updateMany({
+    where: { code: order.couponCode, usedCount: 1 },
+    data: { usedCount: 0 },
+  });
 }
 
 // ── Account-page read model ──────────────────────────────────────────────────

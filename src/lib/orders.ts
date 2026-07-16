@@ -105,7 +105,16 @@ export async function settleOrderPaid(params: {
         where: { id: item.variantId, stock: { gte: item.quantity } },
         data: { stock: { decrement: item.quantity } },
       });
-      if (dec.count === 0) holdReasons.push(`Insufficient stock for ${item.sku} (need ${item.quantity})`);
+      if (dec.count === 0) {
+        holdReasons.push(`Insufficient stock for ${item.sku} (need ${item.quantity})`);
+      } else {
+        // Recorded per-line (not inferred from the order's eventual status)
+        // so a later cancel/return restocks exactly what was actually taken —
+        // an order held for a coupon-cap reason alone still has every line's
+        // stock genuinely committed, while one held for a stock shortfall on
+        // a SPECIFIC line does not, for that line only.
+        await tx.orderItem.update({ where: { id: item.id }, data: { stockCommitted: true } });
+      }
     }
 
     // Count the coupon redemption exactly once, here in the winning claim, so a
@@ -146,7 +155,13 @@ export async function settleOrderPaid(params: {
     // state to clean up either way: nothing is written here at all unless
     // this exact condition is met, so an abandoned/failed checkout leaves no
     // subscription-plan residue, same as any other abandoned order today.
-    if (existing.subscriptionIntervalDays != null && holdReasons.length === 0) {
+    // `subscriptionPlanId == null` is defense in depth: the settlement claim
+    // above already guarantees this block runs at most once per order under
+    // normal operation, but this guard means even a re-settlement that
+    // somehow got past that claim (e.g. an order manually reset off PENDING/
+    // FAILED and re-settled) can't silently orphan the original plan by
+    // creating and linking a second one.
+    if (existing.subscriptionIntervalDays != null && existing.subscriptionPlanId == null && holdReasons.length === 0) {
       const plan = await tx.subscriptionPlan.create({
         data: {
           customerId: existing.customerId!, // guaranteed by /api/checkout's session check

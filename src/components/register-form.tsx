@@ -33,6 +33,9 @@ export function RegisterForm({ referral, next }: { referral?: string; next?: str
           autoComplete="tel-national"
           placeholder="10-digit mobile"
           required
+          onInput={(e) => {
+            e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "").slice(0, 10);
+          }}
           className={field}
         />
       </div>
@@ -102,7 +105,7 @@ export function RegisterForm({ referral, next }: { referral?: string; next?: str
       </div>
 
       {state?.error && (
-        <p className="border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
+        <p role="alert" className="border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">
           {state.error}
         </p>
       )}

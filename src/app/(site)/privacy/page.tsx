@@ -56,8 +56,9 @@ export default function PrivacyPage() {
         </Section>
         <Section title="4. Sharing">
           We share data with service providers strictly to run the store:
-          payment gateway (Razorpay), shipping partners, and email provider. We
-          do not sell your personal data.
+          payment gateway (Razorpay), shipping partners, email provider, and
+          — if you provide a phone number — WhatsApp (Meta Platforms) to send
+          order-status updates. We do not sell your personal data.
         </Section>
         <Section title="5. Cookies & browser storage">
           Signed-out visitors have their cart, wishlist, and recently-viewed

@@ -3,12 +3,13 @@
 // re-checks requireAdmin() — the UI gate alone is not a security boundary.
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { OrderStatus, PaymentStatus, DiscountType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
 import { sendOrderStatusWhatsApp } from "@/lib/whatsapp";
-import { awardLoyaltyForDeliveredOrder, reverseLoyaltyForOrder } from "@/lib/loyalty";
+import { awardLoyaltyForDeliveredOrder, reverseLoyaltyForOrder, reverseVoucherRedemptionForOrder } from "@/lib/loyalty";
 import { bundleCouponCode } from "@/lib/bundles";
 import { sendDueSubscriptionReminders, subscriptionCouponCode } from "@/lib/subscriptions";
 import { sendDuePlanReminders } from "@/lib/subscription-plans";
@@ -43,11 +44,18 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
   let won = false;
 
   if (changed) {
-    // Restock when leaving a stock-committed status for CANCELLED/RETURNED, so
-    // inventory reflects the freed units. (Re-confirming a cancelled order does
-    // NOT auto-decrement again — the admin should verify stock in that case.)
+    // Restocking is driven by each line's own `stockCommitted` flag (set by
+    // settleOrderPaid, see its comment), NOT inferred from the order's
+    // current status — an ON_HOLD order can have some lines committed and
+    // others not (e.g. held only for a coupon-cap reason, where every line's
+    // stock genuinely was taken), so a status-based allowlist can't express
+    // this correctly. `wasCommitted`/STOCK_COMMITTED is still used below,
+    // but only for the separate loyalty-reversal decision, where it remains
+    // correct (loyalty is only ever awarded on a DELIVERED transition, which
+    // IS in that list).
     const wasCommitted = STOCK_COMMITTED.includes(changed.status);
     const nowFreed = status === "CANCELLED" || status === "RETURNED";
+    const toRestock = changed.items.filter((it) => it.variantId && it.stockCommitted);
 
     // One short-lived interactive transaction: the guarded status write, then
     // — only once that write actually wins — restock (if any) and, only on a
@@ -68,13 +76,20 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
       });
       if (claimed.count === 0) return false;
 
-      if (wasCommitted && nowFreed) {
-        for (const it of changed.items.filter((it) => it.variantId)) {
+      if (nowFreed && toRestock.length > 0) {
+        for (const it of toRestock) {
           await tx.variant.update({
             where: { id: it.variantId! },
             data: { stock: { increment: it.quantity } },
           });
         }
+        // Flip the flag off so a later transition (e.g. RETURNED after an
+        // already-restocked CANCELLED, or any other back-and-forth) can never
+        // restock the same line twice.
+        await tx.orderItem.updateMany({
+          where: { id: { in: toRestock.map((it) => it.id) } },
+          data: { stockCommitted: false },
+        });
       }
 
       // Loyalty points are granted only once an order is actually DELIVERED —
@@ -96,6 +111,16 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
       if (wasCommitted && nowFreed) {
         await reverseLoyaltyForOrder(tx, changed.id);
       }
+
+      // An order that was ON_HOLD right up to being cancelled/returned never
+      // reached a real confirmed/fulfilled state — if it redeemed a loyalty
+      // voucher, give it back rather than let the customer lose those points
+      // for goods they never received. See reverseVoucherRedemptionForOrder's
+      // comment for why this is narrower than the restock/loyalty-earn
+      // reversal above (doesn't apply to a normal return after fulfillment).
+      if (changed.status === "ON_HOLD" && nowFreed) {
+        await reverseVoucherRedemptionForOrder(tx, { couponCode: changed.couponCode });
+      }
       return true;
     });
   }
@@ -106,19 +131,24 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
 
   // Notify the customer of the new status — but only if our write actually
   // won the race; a losing request must not tell the customer their order
-  // moved to a status the database never actually recorded. Best-effort:
-  // never let a notification failure surface as a failed status update.
+  // moved to a status the database never actually recorded. Deferred via
+  // after() so the admin's page navigation doesn't wait on two email/WhatsApp
+  // round trips — matches the pattern already used in the payment verify/
+  // webhook routes. Best-effort: never let a notification failure surface as
+  // a failed status update.
   if (changed && won) {
-    try {
-      await sendOrderStatusEmail(toOrderForEmail(changed), status);
-    } catch (err) {
-      console.error(`status email failed for order ${id}:`, err);
-    }
-    try {
-      await sendOrderStatusWhatsApp(changed.phone, changed.orderNumber, status);
-    } catch (err) {
-      console.error(`status WhatsApp failed for order ${id}:`, err);
-    }
+    after(async () => {
+      try {
+        await sendOrderStatusEmail(toOrderForEmail(changed), status);
+      } catch (err) {
+        console.error(`status email failed for order ${id}:`, err);
+      }
+      try {
+        await sendOrderStatusWhatsApp(changed.phone, changed.orderNumber, status);
+      } catch (err) {
+        console.error(`status WhatsApp failed for order ${id}:`, err);
+      }
+    });
   }
 }
 
@@ -151,24 +181,34 @@ function toOrderForEmail(order: OrderWithItems): OrderForEmail {
   };
 }
 
+// PENDING and FAILED are exclusively owned by settleOrderPaid's one-time
+// settlement claim (src/lib/orders.ts, `updateMany` matching paymentStatus IN
+// (PENDING, FAILED)) — this admin form must never set either of them, nor
+// move an order AWAY from either into a settled state, in EITHER direction:
+//   - PENDING/FAILED -> PAID/PARTIALLY_PAID here would fake a settlement
+//     without its side effects (stock decrement, invoice number,
+//     subscription-plan activation) ever actually running.
+//   - A SETTLED order moved BACK into PENDING/FAILED reopens
+//     settleOrderPaid's claim condition, so a redelivered/retried Razorpay
+//     webhook can re-settle it a SECOND time: a second stock decrement, a
+//     second coupon redemption, an orphaned duplicate invoice number, and
+//     (for a "build a box" order) a second SubscriptionPlan that silently
+//     replaces the reference to the first.
+// So this form only ever moves between the states it actually owns — PAID,
+// PARTIALLY_PAID, REFUNDED — for things like "mark COD goods collected as
+// PAID" or issuing a refund. It never touches PENDING/FAILED as source or
+// destination.
+const SETTLEMENT_OWNED_STATUSES: PaymentStatus[] = ["PENDING", "FAILED"];
+
 export async function updatePaymentStatus(formData: FormData): Promise<void> {
   await requireAdmin();
   const id = String(formData.get("orderId") ?? "");
   const paymentStatus = String(formData.get("paymentStatus") ?? "") as PaymentStatus;
   if (!id || !PAYMENT_STATUSES.includes(paymentStatus)) return;
+  if (SETTLEMENT_OWNED_STATUSES.includes(paymentStatus)) return;
 
-  // PENDING/FAILED -> PAID/PARTIALLY_PAID is the settlement transition owned by
-  // settleOrderPaid (src/lib/orders.ts), which also decrements stock, allocates
-  // the invoice number, and activates any subscription plan. Faking that flip
-  // here would leave those side effects undone forever: settleOrderPaid claims
-  // settlement via an updateMany matching paymentStatus IN (PENDING, FAILED),
-  // so once this action jumps straight to PAID, the real payment's later
-  // settlement attempt finds count === 0 and silently no-ops. Guarded out here
-  // instead — this form is only for post-settlement transitions (COD cash
-  // collected, refunds).
-  const isSettlementTransition = paymentStatus === "PAID" || paymentStatus === "PARTIALLY_PAID";
   await prisma.order.updateMany({
-    where: isSettlementTransition ? { id, paymentStatus: { notIn: ["PENDING", "FAILED"] } } : { id },
+    where: { id, paymentStatus: { notIn: SETTLEMENT_OWNED_STATUSES } },
     data: { paymentStatus },
   });
   revalidatePath(`/admin/orders/${id}`);
@@ -179,15 +219,28 @@ export async function updateStock(formData: FormData): Promise<void> {
   await requireAdmin();
   const variantId = String(formData.get("variantId") ?? "");
   const raw = Number(formData.get("stock"));
-  if (!variantId || !Number.isFinite(raw) || raw < 0) return;
+  const expectedRaw = Number(formData.get("expectedStock"));
+  if (!variantId || !Number.isFinite(raw) || raw < 0 || !Number.isFinite(expectedRaw) || expectedRaw < 0) return;
   const stock = Math.floor(raw);
+  const expectedStock = Math.floor(expectedRaw);
 
-  await prisma.variant.update({ where: { id: variantId }, data: { stock } });
+  // Guarded on the stock value visible when the form was rendered — a plain
+  // absolute-value write here could silently erase a concurrent sale's
+  // decrement (settleOrderPaid) or an order cancellation's restock that
+  // landed between page load and Save. If the DB has already moved on, this
+  // is a no-op rather than clobbering it; the admin sees their edit didn't
+  // stick (the input reverts to the real current value) and can re-check
+  // before retrying.
+  const updated = await prisma.variant.updateMany({
+    where: { id: variantId, stock: expectedStock },
+    data: { stock },
+  });
 
   // Restocked → notify anyone waiting on this variant. Best-effort: a failure
   // here must never break the stock update, and the daily sweep retries any
-  // that don't send. No-op when stock is still 0 or nobody's waiting.
-  if (stock > 0) {
+  // that don't send. No-op when the write didn't apply, stock is still 0, or
+  // nobody's waiting.
+  if (updated.count > 0 && stock > 0) {
     try {
       await notifyBackInStockForVariant(variantId);
     } catch {
@@ -453,18 +506,74 @@ export async function createVariant(formData: FormData): Promise<void> {
 // Takes the same `tx` as the delete that calls it, so the cleanup and the
 // delete commit or roll back together — a failed delete after this runs can
 // never leave the coupon gone while the variant/subscription still exist.
-async function cancelSubscriptionCouponsForVariants(
+// Cleans up every discount mechanism that could otherwise be left dangling by
+// deleting a variant (or, via `productId`, a whole product): single-item
+// Subscriptions, Bundles (kits), and multi-item SubscriptionPlans.
+//
+// The Bundle/SubscriptionPlan cases are the more important ones: their coupon
+// is gated on the customer's cart containing every one of the feature's
+// items (bundleGate / subscriptionGate in lib/coupons.ts, both a `for` loop
+// over the item list). If a variant/product being deleted was that item list's
+// ONLY entry, the cascade delete (BundleItem/SubscriptionPlanItem both
+// `onDelete: Cascade`) leaves the gate's loop with nothing to check — it
+// vacuously passes for ANY cart, turning a gated discount into an
+// unconditional one. For a Bundle this is especially bad since its KIT-<slug>
+// coupon is also surfaced in the public checkout "available offers" dropdown
+// (listAvailableCoupons), so it'd be actively advertised, not just dormant.
+// A bundle/plan left with OTHER, unaffected items is merely partially
+// unbuyable (that item's slot can never be filled again) — self-defusing,
+// not exploitable — so only ones left with ZERO items are acted on here.
+async function cancelDependentCouponsForVariants(
   tx: Prisma.TransactionClient,
   variantIds: string[],
+  productId?: string,
 ): Promise<void> {
   const subs = await tx.subscription.findMany({
     where: { variantId: { in: variantIds }, status: { not: "CANCELLED" } },
     select: { id: true },
   });
-  if (subs.length === 0) return;
-  await tx.coupon.deleteMany({
-    where: { code: { in: subs.map((s) => subscriptionCouponCode(s.id)) } },
+  if (subs.length > 0) {
+    await tx.coupon.deleteMany({
+      where: { code: { in: subs.map((s) => subscriptionCouponCode(s.id)) } },
+    });
+  }
+
+  const variantSet = new Set(variantIds);
+
+  const affectedBundles = await tx.bundle.findMany({
+    where: {
+      items: {
+        some: productId
+          ? { OR: [{ variantId: { in: variantIds } }, { productId }] }
+          : { variantId: { in: variantIds } },
+      },
+    },
+    select: { slug: true, items: { select: { variantId: true, productId: true } } },
   });
+  const emptiedBundleSlugs = affectedBundles
+    .filter((b) =>
+      b.items.every((it) =>
+        it.variantId ? variantSet.has(it.variantId) : it.productId === productId,
+      ),
+    )
+    .map((b) => b.slug);
+  if (emptiedBundleSlugs.length > 0) {
+    await tx.bundle.updateMany({ where: { slug: { in: emptiedBundleSlugs } }, data: { active: false } });
+    await tx.coupon.deleteMany({ where: { code: { in: emptiedBundleSlugs.map(bundleCouponCode) } } });
+  }
+
+  const affectedPlans = await tx.subscriptionPlan.findMany({
+    where: { status: { not: "CANCELLED" }, items: { some: { variantId: { in: variantIds } } } },
+    select: { id: true, couponCode: true, items: { select: { variantId: true } } },
+  });
+  const emptiedPlans = affectedPlans.filter((p) => p.items.every((it) => variantSet.has(it.variantId)));
+  if (emptiedPlans.length > 0) {
+    await tx.subscriptionPlan.updateMany({
+      where: { id: { in: emptiedPlans.map((p) => p.id) } },
+      data: { status: "CANCELLED" },
+    });
+    await tx.coupon.deleteMany({ where: { code: { in: emptiedPlans.map((p) => p.couponCode) } } });
+  }
 }
 
 // Permanently remove a variant. Safe for order history: OrderItem.variantId is
@@ -481,13 +590,15 @@ export async function deleteVariant(formData: FormData): Promise<void> {
   });
   if (!variant) return;
 
-  // Deleting the variant cascades away any Subscription row for it (required
-  // FK), but NOT that subscription's private SUB-<id> coupon — Coupon has no
-  // FK relation, so without this it would stay active forever with no
-  // subscription left to cancel it from. Same transaction as the delete so
-  // the two can never partially apply.
+  // Deleting the variant cascades away any Subscription/BundleItem/
+  // SubscriptionPlanItem row referencing it (all required FKs), but NOT the
+  // Coupon rows those features own — Coupon has no FK relation to any of
+  // them, so without this cleanup a dependent coupon could stay active
+  // forever, or (Bundle/SubscriptionPlan case) turn into an unconditional
+  // discount. Same transaction as the delete so the two can never partially
+  // apply.
   await prisma.$transaction(async (tx) => {
-    await cancelSubscriptionCouponsForVariants(tx, [id]);
+    await cancelDependentCouponsForVariants(tx, [id]);
     await tx.variant.delete({ where: { id } });
   });
   revalidatePath(`/admin/products/${variant.productId}`);
@@ -509,7 +620,7 @@ export async function deleteProduct(formData: FormData): Promise<void> {
   if (!product) return;
 
   await prisma.$transaction(async (tx) => {
-    await cancelSubscriptionCouponsForVariants(tx, product.variants.map((v) => v.id));
+    await cancelDependentCouponsForVariants(tx, product.variants.map((v) => v.id), id);
     await tx.variant.deleteMany({ where: { productId: id } });
     await tx.product.delete({ where: { id } });
   });

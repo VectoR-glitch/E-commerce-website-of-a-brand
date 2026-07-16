@@ -6,7 +6,7 @@ import { ConfirmSubmit } from "@/components/confirm-submit";
 export const dynamic = "force-dynamic";
 
 const dateFmt = (d: Date) =>
-  d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+  d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "Asia/Kolkata" });
 
 const answerField =
   "mt-2 w-full border border-line bg-white px-3 py-2 text-sm outline-none focus:border-forest";

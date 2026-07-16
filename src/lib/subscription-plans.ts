@@ -1,6 +1,6 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
-import { getProduct } from "@/lib/products";
+import { getProductsBySlugs } from "@/lib/products";
 import { sendSubscriptionPlanReminder } from "@/lib/email";
 import { SITE_URL } from "@/lib/constants";
 import { intervalLabel } from "@/lib/subscriptions";
@@ -60,7 +60,7 @@ export async function getCustomerSubscriptionPlans(customerId: string): Promise<
   if (plans.length === 0) return [];
 
   const slugs = [...new Set(plans.flatMap((p) => p.items.map((it) => it.variant.product.slug)))];
-  const products = new Map(await Promise.all(slugs.map(async (s) => [s, await getProduct(s)] as const)));
+  const products = await getProductsBySlugs(slugs);
 
   return plans.map((p) => {
     const items: SubscriptionPlanItemView[] = p.items.map((it) => {

@@ -82,6 +82,7 @@ export default async function BlogPostPage(props: PageProps<"/blog/[slug]">) {
     day: "numeric",
     month: "long",
     year: "numeric",
+    timeZone: "Asia/Kolkata",
   });
   const morePosts = await getPublishedPosts({ take: 2, excludeSlug: post.slug });
   const paragraphs = bodyParagraphs(post.body);

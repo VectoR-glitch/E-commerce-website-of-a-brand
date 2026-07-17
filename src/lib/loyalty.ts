@@ -199,6 +199,16 @@ export async function awardLoyaltyForDeliveredOrder(
   // already claimed above, so we count OTHER delivered (loyalty-awarded)
   // orders; 0 → this is their first → credit both sides once.
   if (buyer?.referredById) {
+    // Lock the buyer's own row before counting prior deliveries — two of
+    // their orders marked DELIVERED within the same short window (e.g. two
+    // admins, or one admin with two tabs) would otherwise each read "0
+    // prior delivered orders" from their own pre-commit READ COMMITTED
+    // snapshot and BOTH credit the first-order referral bonus. Same
+    // SELECT ... FOR UPDATE pattern as reverseLoyaltyForOrder's clamp:
+    // whichever transaction gets here first blocks the other until it
+    // commits, so the second one's count correctly sees the first order's
+    // now-committed loyaltyAwardedAt.
+    await tx.$queryRaw`SELECT id FROM "Customer" WHERE id = ${order.customerId} FOR UPDATE`;
     const priorDelivered = await tx.order.count({
       where: {
         customerId: order.customerId,

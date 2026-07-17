@@ -806,18 +806,37 @@ export async function deleteCoupon(formData: FormData): Promise<void> {
 // ── Bundles (curated kits) ──────────────────────────────────────────────────
 // A bundle's discount is realised through a mirrored coupon (code KIT-<slug>),
 // so every bundle write keeps that coupon in sync.
+//
+// `wantActive` is the admin's own intent (their "Active" checkbox / the
+// bundle's own `active` field) but is always clamped by the bundle's ACTUAL
+// item count here — a bundle with zero items must never have a live coupon,
+// regardless of what the checkbox says, or bundleGateForBundle's loop over
+// zero items vacuously passes for ANY cart, surfaced right in the checkout
+// offers dropdown. Locks the bundle row first (re-acquiring within the same
+// transaction is a harmless no-op) so two overlapping calls for the SAME
+// bundle serialize instead of both computing the item count from a stale
+// pre-commit snapshot under Postgres's default READ COMMITTED isolation.
 async function syncBundleCoupon(
-  slug: string,
-  type: DiscountType,
-  value: number,
-  active: boolean,
+  tx: Prisma.TransactionClient,
+  bundleId: string,
+  wantActive: boolean,
 ): Promise<void> {
-  const code = bundleCouponCode(slug);
-  await prisma.coupon.upsert({
-    where: { code },
-    create: { code, type, value, minOrderPaise: 0, active },
-    update: { type, value, active },
+  await tx.$queryRaw`SELECT id FROM "Bundle" WHERE id = ${bundleId} FOR UPDATE`;
+  const bundle = await tx.bundle.findUniqueOrThrow({
+    where: { id: bundleId },
+    select: { slug: true, discountType: true, discountValue: true },
   });
+  const itemCount = await tx.bundleItem.count({ where: { bundleId } });
+  const code = bundleCouponCode(bundle.slug);
+  if (wantActive && itemCount > 0) {
+    await tx.coupon.upsert({
+      where: { code },
+      create: { code, type: bundle.discountType, value: bundle.discountValue, minOrderPaise: 0, active: true },
+      update: { type: bundle.discountType, value: bundle.discountValue, active: true },
+    });
+  } else {
+    await tx.coupon.deleteMany({ where: { code } });
+  }
 }
 
 export async function createBundle(formData: FormData): Promise<void> {
@@ -835,8 +854,14 @@ export async function createBundle(formData: FormData): Promise<void> {
   const clash = await prisma.bundle.findUnique({ where: { slug } });
   if (clash) return;
 
-  await prisma.bundle.create({ data: { name, slug, discountType: type, discountValue } });
-  await syncBundleCoupon(slug, type, discountValue, true);
+  // A brand-new bundle always has zero items, so syncBundleCoupon leaves it
+  // couponless regardless of the `active:true` default on the Bundle row
+  // itself — no window where an empty kit's coupon is live between creation
+  // and the admin adding its first item.
+  await prisma.$transaction(async (tx) => {
+    const created = await tx.bundle.create({ data: { name, slug, discountType: type, discountValue } });
+    await syncBundleCoupon(tx, created.id, true);
+  });
   revalidatePath("/admin/bundles");
   revalidatePath("/shop");
 }
@@ -855,12 +880,14 @@ export async function updateBundle(formData: FormData): Promise<void> {
   if (type === "PERCENT" && valueRaw > 100) return;
   const discountValue = type === "PERCENT" ? Math.round(valueRaw) : Math.round(valueRaw * 100);
 
-  const bundle = await prisma.bundle.update({
-    where: { id },
-    data: { name, description, discountType: type, discountValue, active },
-    select: { slug: true },
+  await prisma.$transaction(async (tx) => {
+    const bundle = await tx.bundle.update({
+      where: { id },
+      data: { name, description, discountType: type, discountValue, active },
+      select: { id: true },
+    });
+    await syncBundleCoupon(tx, bundle.id, active);
   });
-  await syncBundleCoupon(bundle.slug, type, discountValue, active);
   revalidatePath("/admin/bundles");
   revalidatePath(`/admin/bundles/${id}`);
   revalidatePath("/shop");
@@ -938,25 +965,27 @@ export async function removeBundleItem(formData: FormData): Promise<void> {
   const bundleId = String(formData.get("bundleId") ?? "");
   if (!id || !bundleId) return;
   await prisma.$transaction(async (tx) => {
+    // Lock the bundle row BEFORE the delete — two concurrent removals
+    // targeting different items of the SAME bundle must serialize here.
+    // Without this, each transaction's item-count read is a plain MVCC
+    // snapshot under READ COMMITTED that doesn't wait on the other's
+    // still-uncommitted delete, so both can see "1 item left" (the OTHER
+    // one, not yet committed-deleted) and neither ever detects the bundle
+    // actually ending up empty — the exact vacuous-coupon exposure this
+    // whole function exists to prevent, just reachable via two overlapping
+    // removals instead of one.
+    await tx.$queryRaw`SELECT id FROM "Bundle" WHERE id = ${bundleId} FOR UPDATE`;
     // Scope the delete to the posted bundle too — a stale/copy-pasted form
     // shouldn't be able to delete an item from a different kit.
     const { count } = await tx.bundleItem.deleteMany({ where: { id, bundleId } });
     if (count === 0) return;
 
-    // An emptied bundle's KIT-<slug> coupon would otherwise become an
-    // unconditional, storewide discount — bundleGateForBundle's loop over
-    // zero items vacuously passes for any cart, and it's actively surfaced
-    // in the checkout "available offers" dropdown. Same treatment as
-    // cancelDependentCouponsForVariants' emptied-bundle branch.
     const remaining = await tx.bundleItem.count({ where: { bundleId } });
-    if (remaining === 0) {
-      const bundle = await tx.bundle.update({
-        where: { id: bundleId },
-        data: { active: false },
-        select: { slug: true },
-      });
-      await tx.coupon.deleteMany({ where: { code: bundleCouponCode(bundle.slug) } });
-    }
+    const bundle =
+      remaining === 0
+        ? await tx.bundle.update({ where: { id: bundleId }, data: { active: false }, select: { active: true } })
+        : await tx.bundle.findUniqueOrThrow({ where: { id: bundleId }, select: { active: true } });
+    await syncBundleCoupon(tx, bundleId, bundle.active);
   });
   revalidatePath(`/admin/bundles/${bundleId}`);
   revalidatePath("/shop");

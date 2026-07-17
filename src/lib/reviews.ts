@@ -13,32 +13,49 @@ export type PublicReview = {
 };
 export type ReviewSummary = { count: number; average: number };
 
-export async function getProductReviews(slug: string): Promise<{
+const REVIEWS_PAGE_SIZE = 20;
+
+// One review per delivered order, so this grows with order volume, not
+// catalog size — a popular product's public page must not fetch every
+// approved review's full text on every visit. The summary (count + average
+// star rating) is computed via aggregate over ALL approved reviews so it
+// stays accurate regardless of which page is displayed; only the rendered
+// LIST is paginated.
+export async function getProductReviews(
+  slug: string,
+  page = 1,
+): Promise<{
   productId: string | null;
   reviews: PublicReview[];
   summary: ReviewSummary;
+  hasNext: boolean;
 }> {
   const product = await prisma.product.findUnique({ where: { slug }, select: { id: true } });
-  if (!product) return { productId: null, reviews: [], summary: { count: 0, average: 0 } };
+  if (!product) return { productId: null, reviews: [], summary: { count: 0, average: 0 }, hasNext: false };
 
-  const rows = await prisma.review.findMany({
-    where: { productId: product.id, approved: true },
-    orderBy: { createdAt: "desc" },
-    select: {
-      id: true,
-      rating: true,
-      title: true,
-      body: true,
-      createdAt: true,
-      customer: { select: { name: true } },
-    },
-  });
+  const where = { productId: product.id, approved: true };
+  const [agg, rows] = await Promise.all([
+    prisma.review.aggregate({ where, _count: true, _avg: { rating: true } }),
+    prisma.review.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * REVIEWS_PAGE_SIZE,
+      take: REVIEWS_PAGE_SIZE + 1,
+      select: {
+        id: true,
+        rating: true,
+        title: true,
+        body: true,
+        createdAt: true,
+        customer: { select: { name: true } },
+      },
+    }),
+  ]);
 
-  const count = rows.length;
-  const average = count ? rows.reduce((s, r) => s + r.rating, 0) / count : 0;
+  const hasNext = rows.length > REVIEWS_PAGE_SIZE;
   return {
     productId: product.id,
-    reviews: rows.map((r) => ({
+    reviews: rows.slice(0, REVIEWS_PAGE_SIZE).map((r) => ({
       id: r.id,
       rating: r.rating,
       title: r.title,
@@ -47,7 +64,8 @@ export async function getProductReviews(slug: string): Promise<{
       author: r.customer.name?.trim().split(/\s+/)[0] || "Verified buyer",
       createdAt: r.createdAt,
     })),
-    summary: { count, average },
+    summary: { count: agg._count, average: agg._avg.rating ?? 0 },
+    hasNext,
   };
 }
 

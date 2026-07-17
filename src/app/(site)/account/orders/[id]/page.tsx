@@ -40,7 +40,7 @@ export default async function AccountOrderDetail(props: { params: Promise<{ id: 
       </div>
       <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-ink/55">
-          Placed {order.createdAt.toISOString().slice(0, 10)} · {paymentMethodLabel(order.paymentMethod)}
+          Placed {order.createdAt.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })} · {paymentMethodLabel(order.paymentMethod)}
         </p>
         <div className="flex items-center gap-3">
           {order.invoiceNumber && (

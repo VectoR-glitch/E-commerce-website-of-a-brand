@@ -169,7 +169,15 @@ export async function skipSubscription(formData: FormData): Promise<void> {
   if (!sub || sub.status !== "ACTIVE") return;
   const base = Math.max(sub.nextDeliveryAt.getTime(), Date.now());
   const nextDeliveryAt = new Date(base + sub.intervalDays * DAY_MS);
-  await prisma.subscription.updateMany({ where: { id, status: "ACTIVE" }, data: { nextDeliveryAt } });
+  // Guard on the nextDeliveryAt just read, not just status=ACTIVE — status
+  // never changes on a skip, so a status-only guard always matches. Without
+  // this, two "Skip this cycle" clicks fired close together (double-click,
+  // two tabs) both read the same stale value, both compute the same result,
+  // and the second skip is silently absorbed instead of advancing further.
+  await prisma.subscription.updateMany({
+    where: { id, status: "ACTIVE", nextDeliveryAt: sub.nextDeliveryAt },
+    data: { nextDeliveryAt },
+  });
   revalidatePath("/account/subscriptions");
 }
 

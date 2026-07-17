@@ -66,7 +66,7 @@ export default async function AccountOrdersPage(props: { searchParams: Promise<{
                 <Link href={`/account/orders/${o.id}`} className="min-w-0">
                   <p className="font-mono text-sm text-ink">{o.orderNumber}</p>
                   <p className="mt-1 text-xs text-ink/55">
-                    {o.createdAt.toISOString().slice(0, 10)} · {o._count.items} item
+                    {o.createdAt.toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" })} · {o._count.items} item
                     {o._count.items === 1 ? "" : "s"}
                   </p>
                 </Link>

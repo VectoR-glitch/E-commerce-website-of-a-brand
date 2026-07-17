@@ -2,6 +2,11 @@ import Link from "next/link";
 import Image from "next/image";
 import { Ornament } from "@/components/ornament";
 
+// This component is also used from error.tsx (a Client Component boundary),
+// so it can't import gst.ts's toIST (marked "server-only") — same fixed IST
+// shift + UTC-getter technique, inlined instead.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
 export type FooterShopLink = { href: string; label: string };
 
 // Static fallback — used when no live shopLinks prop is passed (the root
@@ -76,7 +81,7 @@ export function SiteFooter({ shopLinks = FALLBACK_SHOP_LINKS }: { shopLinks?: Fo
       <div className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-8 py-6 sm:flex-row sm:justify-between">
           <p className="smallcaps text-ink/70">
-            Bliss in Every Drop · Bharat Bliss Pvt Ltd · © {new Date().getFullYear()} 🍁
+            Bliss in Every Drop · Bharat Bliss Pvt Ltd · © {new Date(Date.now() + IST_OFFSET_MS).getUTCFullYear()} 🍁
           </p>
           <div className="flex gap-5">
             <Link href="/privacy" className="smallcaps link-underline text-ink/70 hover:text-forest">

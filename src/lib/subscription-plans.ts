@@ -170,8 +170,11 @@ export async function sendDuePlanReminders(): Promise<{ sent: number; failed: nu
       let next = p.nextDeliveryAt.getTime() + p.intervalDays * DAY_MS;
       const now = Date.now();
       while (next <= now) next += p.intervalDays * DAY_MS;
-      await prisma.subscriptionPlan.update({
-        where: { id: p.id },
+      // Guarded on the nextDeliveryAt read at the top of this loop — see
+      // sendDueSubscriptionReminders' comment in subscriptions.ts for why a
+      // blind update here could clobber a concurrent customer "Skip".
+      await prisma.subscriptionPlan.updateMany({
+        where: { id: p.id, nextDeliveryAt: p.nextDeliveryAt },
         data: { lastReminderAt: new Date(), nextDeliveryAt: new Date(next) },
       });
     } catch (err) {

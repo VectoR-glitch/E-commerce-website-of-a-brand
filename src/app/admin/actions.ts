@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
 import { sendOrderStatusWhatsApp } from "@/lib/whatsapp";
+import { createSubscriptionPlanFromOrder } from "@/lib/orders";
 import { awardLoyaltyForDeliveredOrder, reverseLoyaltyForOrder, reverseVoucherRedemptionForOrder } from "@/lib/loyalty";
 import { bundleCouponCode } from "@/lib/bundles";
 import { sendDueSubscriptionReminders, subscriptionCouponCode } from "@/lib/subscriptions";
@@ -119,7 +120,20 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
       // comment for why this is narrower than the restock/loyalty-earn
       // reversal above (doesn't apply to a normal return after fulfillment).
       if (changed.status === "ON_HOLD" && nowFreed) {
-        await reverseVoucherRedemptionForOrder(tx, { couponCode: changed.couponCode });
+        await reverseVoucherRedemptionForOrder(tx, {
+          couponCode: changed.couponCode,
+          couponRedeemed: changed.couponRedeemed,
+        });
+      }
+
+      // A "build a box" order that landed ON_HOLD at settlement (e.g. a stock
+      // shortfall race) never got its SubscriptionPlan created — settleOrderPaid
+      // only does that when holdReasons is empty. Staff resolving the hold by
+      // moving it to CONFIRMED is the natural place to retry that creation, so
+      // the customer who already paid the discounted subscribe-and-save price
+      // still gets enrolled instead of silently never hearing from it again.
+      if (changed.status === "ON_HOLD" && status === "CONFIRMED") {
+        await createSubscriptionPlanFromOrder(tx, changed);
       }
       return true;
     });
@@ -772,7 +786,10 @@ export async function toggleCoupon(formData: FormData): Promise<void> {
   // owning page keeps showing its own status, unaware the coupon stopped
   // working), until the next legitimate sync event resets it.
   if (!c || isSystemCouponCode(c.code)) return;
-  await prisma.coupon.update({ where: { id }, data: { active: !c.active } });
+  // Guarded on the active value just read — a rapid double-click (two
+  // requests both reading active:true) would otherwise both flip to false,
+  // then true, landing back on the pre-toggle state instead of erroring.
+  await prisma.coupon.updateMany({ where: { id, active: c.active }, data: { active: !c.active } });
   revalidatePath("/admin/coupons");
 }
 
@@ -883,9 +900,12 @@ export async function addBundleItem(formData: FormData): Promise<void> {
     // a second line item for the same variant.
     const existing = await prisma.bundleItem.findFirst({ where: { bundleId, variantId } });
     if (existing) {
+      // Atomic increment, not existing.quantity + quantity — two concurrent
+      // "add to kit" submissions for the same slot would otherwise both read
+      // the same value and lose one increment.
       await prisma.bundleItem.update({
         where: { id: existing.id },
-        data: { quantity: existing.quantity + quantity },
+        data: { quantity: { increment: quantity } },
       });
     } else {
       await prisma.bundleItem.create({ data: { bundleId, variantId, quantity } });
@@ -895,9 +915,12 @@ export async function addBundleItem(formData: FormData): Promise<void> {
     // — same merge, keyed on product + size lock.
     const existing = await prisma.bundleItem.findFirst({ where: { bundleId, productId, size } });
     if (existing) {
+      // Atomic increment, not existing.quantity + quantity — two concurrent
+      // "add to kit" submissions for the same slot would otherwise both read
+      // the same value and lose one increment.
       await prisma.bundleItem.update({
         where: { id: existing.id },
-        data: { quantity: existing.quantity + quantity },
+        data: { quantity: { increment: quantity } },
       });
     } else {
       await prisma.bundleItem.create({ data: { bundleId, productId, size, quantity } });
@@ -914,10 +937,27 @@ export async function removeBundleItem(formData: FormData): Promise<void> {
   const id = String(formData.get("bundleItemId") ?? "");
   const bundleId = String(formData.get("bundleId") ?? "");
   if (!id || !bundleId) return;
-  // Scope the delete to the posted bundle too — a stale/copy-pasted form
-  // shouldn't be able to delete an item from a different kit.
-  const { count } = await prisma.bundleItem.deleteMany({ where: { id, bundleId } });
-  if (count === 0) return;
+  await prisma.$transaction(async (tx) => {
+    // Scope the delete to the posted bundle too — a stale/copy-pasted form
+    // shouldn't be able to delete an item from a different kit.
+    const { count } = await tx.bundleItem.deleteMany({ where: { id, bundleId } });
+    if (count === 0) return;
+
+    // An emptied bundle's KIT-<slug> coupon would otherwise become an
+    // unconditional, storewide discount — bundleGateForBundle's loop over
+    // zero items vacuously passes for any cart, and it's actively surfaced
+    // in the checkout "available offers" dropdown. Same treatment as
+    // cancelDependentCouponsForVariants' emptied-bundle branch.
+    const remaining = await tx.bundleItem.count({ where: { bundleId } });
+    if (remaining === 0) {
+      const bundle = await tx.bundle.update({
+        where: { id: bundleId },
+        data: { active: false },
+        select: { slug: true },
+      });
+      await tx.coupon.deleteMany({ where: { code: bundleCouponCode(bundle.slug) } });
+    }
+  });
   revalidatePath(`/admin/bundles/${bundleId}`);
   revalidatePath("/shop");
 }

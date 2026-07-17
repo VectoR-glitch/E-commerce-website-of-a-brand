@@ -52,8 +52,8 @@ export function ChangePasswordForm() {
         />
       </div>
 
-      {state?.error && <p className="text-sm text-red-700">{state.error}</p>}
-      {state?.ok && <p className="text-sm text-forest">Password updated.</p>}
+      {state?.error && <p role="alert" className="text-sm text-red-700">{state.error}</p>}
+      {state?.ok && <p role="status" className="text-sm text-forest">Password updated.</p>}
 
       <button
         type="submit"

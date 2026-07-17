@@ -197,7 +197,7 @@ export default async function AdminAnalytics() {
   }
   const days = Array.from(dayBuckets.entries()).map(([date, paise]) => ({
     date,
-    label: new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+    label: new Date(date).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" }),
     paise,
   }));
   const maxDayPaise = Math.max(1, ...days.map((d) => d.paise));

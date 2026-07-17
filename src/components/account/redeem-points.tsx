@@ -78,9 +78,9 @@ export function RedeemPoints({
         is single-use and applies at checkout.
       </p>
 
-      {state?.error && <p className="mt-3 text-sm text-[#b3402f]">{state.error}</p>}
+      {state?.error && <p role="alert" className="mt-3 text-sm text-[#b3402f]">{state.error}</p>}
       {state?.ok && state.code && (
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-forest/30 bg-forest/5 px-4 py-3">
+        <div role="status" className="mt-4 flex flex-wrap items-center justify-between gap-3 border border-forest/30 bg-forest/5 px-4 py-3">
           <span className="text-sm text-forest">
             Voucher ready — apply <strong className="font-mono">{state.code}</strong> at checkout.
           </span>

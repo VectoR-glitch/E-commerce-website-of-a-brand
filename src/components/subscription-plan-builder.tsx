@@ -40,7 +40,7 @@ function resolveImage(product: Product, variant: Variant): string | undefined {
 // kit-picker.tsx's cart-building mechanics, generalized to a customer-chosen
 // combination instead of an admin-curated bundle.
 export function SubscriptionPlanBuilder({ products }: { products: Product[] }) {
-  const { addItem, authenticated } = useCart();
+  const { addItem, clear, authenticated } = useCart();
   const router = useRouter();
   const [draft, setDraft] = useState<DraftItem[]>([]);
   const [intervalDays, setIntervalDays] = useState(SUBSCRIBE_INTERVALS[0].days);
@@ -94,6 +94,12 @@ export function SubscriptionPlanBuilder({ products }: { products: Product[] }) {
   function startSubscription() {
     if (draft.length === 0 || starting) return;
     setStarting(true);
+    // Checkout treats the WHOLE cart as this subscription's contents (the
+    // discount and the SubscriptionPlan it creates on settlement both derive
+    // from Order.items, unfiltered) — any item already sitting in the cart
+    // from an earlier, unrelated visit would otherwise get silently swept
+    // into the new permanent recurring plan. Start from an empty cart.
+    clear();
     for (const it of draft) {
       addItem(
         {

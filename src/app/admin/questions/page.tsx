@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { answerQuestion, unpublishQuestion, deleteQuestion } from "@/app/admin/actions";
@@ -11,36 +12,56 @@ const dateFmt = (d: Date) =>
 const answerField =
   "mt-2 w-full border border-line bg-white px-3 py-2 text-sm outline-none focus:border-forest";
 
-export default async function AdminQuestionsPage() {
+const QUESTION_SELECT = {
+  id: true,
+  question: true,
+  answer: true,
+  published: true,
+  isFaq: true,
+  askedName: true,
+  createdAt: true,
+  answeredAt: true,
+  product: { select: { name: true } },
+  customer: { select: { email: true } },
+} as const;
+
+const PAGE_SIZE = 50;
+
+export default async function AdminQuestionsPage(props: { searchParams: Promise<{ page?: string }> }) {
   await requireAdmin();
+  const sp = await props.searchParams;
+  const page = Math.max(1, Math.floor(Number(sp.page)) || 1);
 
-  const questions = await prisma.productQuestion.findMany({
-    orderBy: [{ published: "asc" }, { createdAt: "desc" }],
-    select: {
-      id: true,
-      question: true,
-      answer: true,
-      published: true,
-      isFaq: true,
-      askedName: true,
-      createdAt: true,
-      answeredAt: true,
-      product: { select: { name: true } },
-      customer: { select: { email: true } },
-    },
-  });
+  // Pending is queried unpaginated — it's an actively-worked moderation queue
+  // the admin needs to see in full to clear, not an ever-growing archive.
+  // Answered (every answered question, ever) is the side that actually grows
+  // unbounded with customer/product traffic, so that's the one paginated —
+  // same asymmetric split as admin/reviews.
+  const [pending, liveRows] = await Promise.all([
+    prisma.productQuestion.findMany({
+      where: { answer: null },
+      orderBy: { createdAt: "desc" },
+      select: QUESTION_SELECT,
+    }),
+    prisma.productQuestion.findMany({
+      where: { answer: { not: null } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE + 1,
+      select: QUESTION_SELECT,
+    }),
+  ]);
+  const hasNext = liveRows.length > PAGE_SIZE;
+  const live = liveRows.slice(0, PAGE_SIZE);
 
-  const pending = questions.filter((q) => !q.answer);
-  const live = questions.filter((q) => q.answer);
-
-  const asker = (q: (typeof questions)[number]) => (
+  const asker = (q: (typeof pending)[number]) => (
     <p className="mt-1 text-xs text-ink/50">
       Asked by {q.askedName || "—"}
       {q.customer?.email ? ` · ${q.customer.email}` : ""}
     </p>
   );
 
-  const deleteForm = (q: (typeof questions)[number]) => (
+  const deleteForm = (q: (typeof pending)[number]) => (
     <form action={deleteQuestion}>
       <input type="hidden" name="questionId" value={q.id} />
       <ConfirmSubmit
@@ -52,7 +73,7 @@ export default async function AdminQuestionsPage() {
     </form>
   );
 
-  const pendingCard = (q: (typeof questions)[number]) => (
+  const pendingCard = (q: (typeof pending)[number]) => (
     <div key={q.id} className="border border-line bg-paper p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="text-sm font-medium text-ink">{q.product.name}</span>
@@ -79,7 +100,7 @@ export default async function AdminQuestionsPage() {
     </div>
   );
 
-  const liveCard = (q: (typeof questions)[number]) => (
+  const liveCard = (q: (typeof pending)[number]) => (
     <div key={q.id} className="border border-line bg-paper p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-3">
@@ -146,9 +167,7 @@ export default async function AdminQuestionsPage() {
         )}
       </div>
 
-      <h2 className="mt-10 smallcaps text-brass-deep">
-        Published {live.length > 0 && `(${live.length})`}
-      </h2>
+      <h2 className="mt-10 smallcaps text-brass-deep">Published</h2>
       <div className="mt-3 space-y-3">
         {live.length > 0 ? (
           live.map(liveCard)
@@ -156,6 +175,26 @@ export default async function AdminQuestionsPage() {
           <p className="text-sm text-ink/50">No published Q&amp;A yet.</p>
         )}
       </div>
+
+      {(page > 1 || hasNext) && (
+        <div className="mt-4 flex items-center justify-between">
+          {page > 1 ? (
+            <Link href={`/admin/questions?page=${page - 1}`} className="smallcaps text-forest hover:underline">
+              ← Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-xs text-ink/50">Page {page}</span>
+          {hasNext ? (
+            <Link href={`/admin/questions?page=${page + 1}`} className="smallcaps text-forest hover:underline">
+              Next →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </div>
+      )}
     </div>
   );
 }

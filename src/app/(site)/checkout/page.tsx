@@ -1315,7 +1315,7 @@ function Field({
     <label className="block">
       <span className="smallcaps mb-2 block text-ink/70">{label}</span>
       {children}
-      {error && <span className="mt-1 block text-xs text-[#b3402f]">{error}</span>}
+      {error && <span role="alert" className="mt-1 block text-xs text-[#b3402f]">{error}</span>}
     </label>
   );
 }

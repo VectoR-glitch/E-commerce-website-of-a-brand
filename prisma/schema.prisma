@@ -388,6 +388,13 @@ model Order {
   shippingPaise   Int     @default(0)
   discountPaise   Int     @default(0)
   couponCode      String? // the coupon applied to this order, if any (uppercase)
+  // True only when THIS order's settlement is what incremented the coupon's
+  // usedCount (i.e. it won the redemption-slot CAS in settleOrderPaid). A
+  // sibling order that raced for the same single-use coupon and lost is left
+  // false — reverseVoucherRedemptionForOrder must check this, not just
+  // "usedCount happens to be 1 right now", or cancelling the loser can
+  // un-consume the WINNER's legitimate redemption (a real double-spend).
+  couponRedeemed  Boolean @default(false)
   totalPaise      Int
   // Loyalty points awarded once this order is DELIVERED (0 for guest orders /
   // before delivery).

@@ -50,7 +50,15 @@ async function getToken(): Promise<string> {
   }
   if (!res.ok) throw new ShippingUnavailableError(`Shiprocket auth failed: ${res.status}`);
 
-  const data = (await res.json()) as { token?: string };
+  let data: { token?: string };
+  try {
+    data = (await res.json()) as { token?: string };
+  } catch (err) {
+    // A 2xx status doesn't guarantee a parseable body (e.g. a maintenance
+    // page served behind the CDN with a 200) — treat that as unavailable
+    // rather than letting a raw SyntaxError escape as an unhandled 500.
+    throw new ShippingUnavailableError(`Shiprocket auth returned a non-JSON body: ${err}`);
+  }
   if (!data.token) throw new ShippingUnavailableError("Shiprocket auth returned no token");
 
   cachedToken = { token: data.token, expiresAt: Date.now() + 9 * 24 * 60 * 60 * 1000 };
@@ -125,9 +133,14 @@ export async function getShippingQuote(params: {
   if (res.status === 404 || res.status === 422) return { serviceable: false };
   if (!res.ok) throw new ShippingUnavailableError(`Shiprocket serviceability ${res.status}`);
 
-  const body = (await res.json()) as {
-    data?: { available_courier_companies?: Courier[] };
-  };
+  let body: { data?: { available_courier_companies?: Courier[] } };
+  try {
+    body = (await res.json()) as { data?: { available_courier_companies?: Courier[] } };
+  } catch (err) {
+    // Same reasoning as getToken's parse guard — don't let a malformed 2xx
+    // body escape as an unhandled exception instead of the flat-rate fallback.
+    throw new ShippingUnavailableError(`Shiprocket serviceability returned a non-JSON body: ${err}`);
+  }
   const couriers = body.data?.available_courier_companies ?? [];
   if (couriers.length === 0) return { serviceable: false };
 

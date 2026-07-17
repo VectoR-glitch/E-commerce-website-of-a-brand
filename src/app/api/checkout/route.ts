@@ -14,6 +14,7 @@ import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
 import { resolveShipping } from "@/lib/shiprocket";
 import { getSession } from "@/lib/session";
 import { validateCoupon } from "@/lib/coupons";
+import { toIST } from "@/lib/gst";
 
 type IncomingItem = { variantId: string; quantity: number };
 type IncomingShipping = {
@@ -33,7 +34,7 @@ function badRequest(message: string) {
 
 function generateOrderNumber() {
   // Human-friendly + collision-resistant: KLN-2026-XXXXXX (base36, uppercase).
-  const year = new Date().getFullYear();
+  const year = toIST(new Date()).getUTCFullYear();
   const suffix = randomBytes(4).toString("hex").slice(0, 6).toUpperCase();
   return `KLN-${year}-${suffix}`;
 }

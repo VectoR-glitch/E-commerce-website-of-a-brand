@@ -70,7 +70,13 @@ export async function skipSubscriptionPlan(formData: FormData): Promise<void> {
   if (!plan || plan.status !== "ACTIVE") return;
   const base = Math.max(plan.nextDeliveryAt.getTime(), Date.now());
   const nextDeliveryAt = new Date(base + plan.intervalDays * DAY_MS);
-  await prisma.subscriptionPlan.updateMany({ where: { id, status: "ACTIVE" }, data: { nextDeliveryAt } });
+  // Guard on the nextDeliveryAt just read, not just status=ACTIVE — see
+  // skipSubscription's comment in subscriptions.ts for why a status-only
+  // guard doesn't protect against a double-click losing one skip.
+  await prisma.subscriptionPlan.updateMany({
+    where: { id, status: "ACTIVE", nextDeliveryAt: plan.nextDeliveryAt },
+    data: { nextDeliveryAt },
+  });
   revalidatePath("/account/subscriptions");
 }
 

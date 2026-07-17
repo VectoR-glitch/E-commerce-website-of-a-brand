@@ -153,8 +153,15 @@ export async function sendDueSubscriptionReminders(): Promise<{ sent: number; fa
       let next = s.nextDeliveryAt.getTime() + s.intervalDays * DAY_MS;
       const now = Date.now();
       while (next <= now) next += s.intervalDays * DAY_MS;
-      await prisma.subscription.update({
-        where: { id: s.id },
+      // Guarded on the nextDeliveryAt read at the top of this loop, not a
+      // blind update — the reminder claim above only serializes against
+      // OTHER reminder sends, not against the customer themselves. If they
+      // open their account page and hit "Skip" while this send is in
+      // flight, a blind update here would silently overwrite their skip
+      // with this stale cycle's rollover instead of leaving their newer
+      // choice in place.
+      await prisma.subscription.updateMany({
+        where: { id: s.id, nextDeliveryAt: s.nextDeliveryAt },
         data: { lastReminderAt: new Date(), nextDeliveryAt: new Date(next) },
       });
     } catch (err) {

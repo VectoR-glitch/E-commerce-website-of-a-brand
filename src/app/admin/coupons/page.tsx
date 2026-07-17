@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
@@ -8,11 +9,25 @@ import { ConfirmSubmit } from "@/components/confirm-submit";
 export const dynamic = "force-dynamic";
 
 const fieldCls = "border border-line bg-white px-3 py-2 text-sm outline-none focus:border-forest";
+// Unlike Product/Bundle, Coupon isn't naturally small: every Subscription,
+// SubscriptionPlan, and redeemed loyalty voucher mints its own private
+// coupon row, so this grows in lockstep with order/subscription volume —
+// same growth class as Order, paginated the same way (skip/take PAGE_SIZE+1
+// to detect a next page without a separate COUNT query).
+const PAGE_SIZE = 50;
 
-export default async function AdminCouponsPage() {
+export default async function AdminCouponsPage(props: { searchParams: Promise<{ page?: string }> }) {
   await requireAdmin();
+  const sp = await props.searchParams;
+  const page = Math.max(1, Math.floor(Number(sp.page)) || 1);
 
-  const coupons = await prisma.coupon.findMany({ orderBy: { createdAt: "desc" } });
+  const rows = await prisma.coupon.findMany({
+    orderBy: { createdAt: "desc" },
+    skip: (page - 1) * PAGE_SIZE,
+    take: PAGE_SIZE + 1,
+  });
+  const hasNext = rows.length > PAGE_SIZE;
+  const coupons = rows.slice(0, PAGE_SIZE);
   // Computed once per request (this is a dynamic RSC, rendered server-side).
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
@@ -126,6 +141,26 @@ export default async function AdminCouponsPage() {
           </tbody>
         </table>
       </div>
+
+      {(page > 1 || hasNext) && (
+        <div className="mt-4 flex items-center justify-between">
+          {page > 1 ? (
+            <Link href={`/admin/coupons?page=${page - 1}`} className="smallcaps text-forest hover:underline">
+              ← Previous
+            </Link>
+          ) : (
+            <span />
+          )}
+          <span className="text-xs text-ink/50">Page {page}</span>
+          {hasNext ? (
+            <Link href={`/admin/coupons?page=${page + 1}`} className="smallcaps text-forest hover:underline">
+              Next →
+            </Link>
+          ) : (
+            <span />
+          )}
+        </div>
+      )}
 
       {/* New coupon */}
       <div className="mt-8 max-w-3xl border border-line bg-paper p-5">

@@ -23,6 +23,12 @@ const MAX_KEYS = 10_000;
 
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL;
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+// This limiter guards the checkout hot path — a bare fetch() has no timeout,
+// so a SLOW (not down) Upstash would hang every gated route (checkout
+// included) until the platform's own function timeout, instead of the
+// try/catch below failing over to the in-memory limiter as designed. Short,
+// since this is rate-limiting, not payment — better to fail over fast.
+const FETCH_TIMEOUT_MS = 1500;
 
 export type RateLimitResult = {
   ok: boolean;
@@ -82,6 +88,7 @@ async function redisLimit(
       ["PTTL", id],
     ]),
     cache: "no-store",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
 
   if (!res.ok) throw new Error(`Upstash ${res.status}`);

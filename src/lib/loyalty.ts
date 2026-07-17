@@ -302,11 +302,11 @@ export async function reverseLoyaltyForOrder(
 // Un-consumes a redeemed loyalty voucher (LOYAL-<suffix>) if the order it was
 // applied to never actually got fulfilled. redeemPoints debits points and
 // mints the voucher up front, independent of any order; settleOrderPaid then
-// marks it used (usedCount 0 -> 1) at settlement REGARDLESS of whether the
-// order confirms cleanly or lands ON_HOLD for an unrelated reason (a stock
-// shortfall on a different line, or a coupon-cap edge case) — so a customer
-// whose order never leaves ON_HOLD before being cancelled would otherwise
-// permanently lose the points they spent for zero goods and zero refund.
+// marks it used (usedCount 0 -> 1) ONLY on the order that actually won the
+// redemption-slot CAS (recorded on that order's own couponRedeemed flag) —
+// so a customer whose order never leaves ON_HOLD before being cancelled
+// would otherwise permanently lose the points they spent for zero goods and
+// zero refund.
 //
 // Deliberately narrow: only reverses a voucher on an order that was ON_HOLD
 // right up to the cancel/return (i.e. never reached a real confirmed/
@@ -314,17 +314,19 @@ export async function reverseLoyaltyForOrder(
 // and shipped and is only later returned, where the coupon having been spent
 // is the same as for any other discount type and isn't unwound.
 //
-// Claims via the coupon's own usedCount, the same field settleOrderPaid used
-// to consume it: a guarded updateMany matching usedCount === 1 (the only
-// value a single-use LOYAL- coupon can be at) resetting it to 0. This is
-// naturally idempotent — a second call for the same order finds usedCount is
-// no longer 1 and no-ops — without needing a separate "already reversed"
-// field.
+// Gated on THIS order's own couponRedeemed flag, not just "usedCount happens
+// to be 1 right now" — a single-use LOYAL- coupon can be raced by two orders
+// (two tabs/devices), where the loser is parked ON_HOLD with usedCount left
+// untouched. Matching on usedCount alone would let cancelling the LOSER
+// un-consume the WINNER's legitimate, still-fulfilled redemption — a real
+// double-spend. The updateMany's `usedCount: 1` guard still matters too: it's
+// what makes a repeat call for the same order safely idempotent once the
+// first reversal has already reset it to 0.
 export async function reverseVoucherRedemptionForOrder(
   tx: Prisma.TransactionClient,
-  order: { couponCode: string | null },
+  order: { couponCode: string | null; couponRedeemed: boolean },
 ): Promise<void> {
-  if (!order.couponCode?.startsWith("LOYAL-")) return;
+  if (!order.couponCode?.startsWith("LOYAL-") || !order.couponRedeemed) return;
   await tx.coupon.updateMany({
     where: { code: order.couponCode, usedCount: 1 },
     data: { usedCount: 0 },

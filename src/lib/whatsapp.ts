@@ -2,6 +2,11 @@ import "server-only";
 import type { OrderStatus } from "@prisma/client";
 
 const WHATSAPP_API_VERSION = "v21.0";
+// This send runs inside after(), so a hang never blocks the admin's response
+// — but it would still hold the serverless invocation open (burning its
+// maxDuration) until the platform kills it, same reasoning as the timeout
+// added to shiprocket.ts's fetch calls.
+const FETCH_TIMEOUT_MS = 8000;
 
 // Mirrors STATUS_EMAILS in email.ts — one approved Meta template per status
 // that has customer-facing copy. Statuses not listed here send no WhatsApp
@@ -49,6 +54,7 @@ export async function sendOrderStatusWhatsApp(
     {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       body: JSON.stringify({
         messaging_product: "whatsapp",
         to,

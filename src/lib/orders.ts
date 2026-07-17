@@ -11,6 +11,57 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 
+/**
+ * "Build a box" checkout: create the recurring SubscriptionPlan once its
+ * founding order has genuinely settled CONFIRMED with no holdReasons — an
+ * order that's ON_HOLD (e.g. a stock shortfall) must not spawn a plan
+ * promising deliveries it just failed to fulfill. Called both from the
+ * winning settlement claim below AND from updateOrderStatus's ON_HOLD →
+ * CONFIRMED transition (admin/actions.ts) — a subscription checkout that
+ * lands ON_HOLD at settlement (e.g. a stock race) must still get its plan
+ * once staff resolve the hold, not silently never enroll the customer who
+ * already paid the discounted subscribe-and-save price.
+ *
+ * `subscriptionPlanId == null` is defense in depth: each caller's own claim
+ * already guarantees this runs at most once per order under normal
+ * operation, but this guard means even a re-entry that somehow got past that
+ * claim can't silently orphan the original plan by creating and linking a
+ * second one.
+ */
+export async function createSubscriptionPlanFromOrder(
+  tx: Prisma.TransactionClient,
+  order: OrderWithItems,
+): Promise<void> {
+  if (order.subscriptionIntervalDays == null || order.subscriptionPlanId != null) return;
+  const plan = await tx.subscriptionPlan.create({
+    data: {
+      customerId: order.customerId!, // guaranteed by /api/checkout's session check
+      intervalDays: order.subscriptionIntervalDays,
+      discountPercent: SUBSCRIBE_SAVE_PERCENT,
+      nextDeliveryAt: new Date(Date.now() + order.subscriptionIntervalDays * DAY_MS),
+      couponCode: `PENDING-${order.id}`, // placeholder, overwritten immediately below
+      items: {
+        create: order.items
+          .filter((it) => it.variantId)
+          .map((it) => ({ variantId: it.variantId!, quantity: it.quantity })),
+      },
+    },
+  });
+  const couponCode = subscriptionPlanCouponCode(plan.id);
+  await tx.subscriptionPlan.update({ where: { id: plan.id }, data: { couponCode } });
+  await tx.coupon.create({
+    data: {
+      code: couponCode,
+      type: "PERCENT",
+      value: SUBSCRIBE_SAVE_PERCENT,
+      minOrderPaise: 0,
+      active: true,
+      customerId: order.customerId,
+    },
+  });
+  await tx.order.update({ where: { id: order.id }, data: { subscriptionPlanId: plan.id } });
+}
+
 type SettleResult =
   | {
       ok: true;
@@ -124,6 +175,7 @@ export async function settleOrderPaid(params: {
     // settlements racing the same single-use code can't both commit. The
     // payment is already captured, so a lost race doesn't block the order,
     // just flags it (like a stock shortfall) for staff to review.
+    let couponRedeemed = false;
     if (existing.couponCode) {
       const coupon = await tx.coupon.findUnique({ where: { code: existing.couponCode } });
       if (coupon) {
@@ -136,6 +188,8 @@ export async function settleOrderPaid(params: {
           : { count: 0 };
         if (claimedRedemption.count === 0) {
           holdReasons.push(`Coupon ${existing.couponCode} redemption cap reached`);
+        } else {
+          couponRedeemed = true;
         }
       }
     }
@@ -145,50 +199,18 @@ export async function settleOrderPaid(params: {
       data: {
         status: holdReasons.length ? "ON_HOLD" : "CONFIRMED",
         holdReason: holdReasons.length ? holdReasons.join("; ") : null,
+        couponRedeemed,
       },
     });
 
-    // "Build a box" checkout: create the recurring SubscriptionPlan only now
-    // that the founding order genuinely settled CONFIRMED (no holdReasons) —
-    // an order that goes ON_HOLD for a stock shortfall must not spawn a plan
-    // promising deliveries it just failed to fulfill. There's no "pending"
-    // state to clean up either way: nothing is written here at all unless
-    // this exact condition is met, so an abandoned/failed checkout leaves no
-    // subscription-plan residue, same as any other abandoned order today.
-    // `subscriptionPlanId == null` is defense in depth: the settlement claim
-    // above already guarantees this block runs at most once per order under
-    // normal operation, but this guard means even a re-settlement that
-    // somehow got past that claim (e.g. an order manually reset off PENDING/
-    // FAILED and re-settled) can't silently orphan the original plan by
-    // creating and linking a second one.
-    if (existing.subscriptionIntervalDays != null && existing.subscriptionPlanId == null && holdReasons.length === 0) {
-      const plan = await tx.subscriptionPlan.create({
-        data: {
-          customerId: existing.customerId!, // guaranteed by /api/checkout's session check
-          intervalDays: existing.subscriptionIntervalDays,
-          discountPercent: SUBSCRIBE_SAVE_PERCENT,
-          nextDeliveryAt: new Date(Date.now() + existing.subscriptionIntervalDays * DAY_MS),
-          couponCode: `PENDING-${existing.id}`, // placeholder, overwritten immediately below
-          items: {
-            create: existing.items
-              .filter((it) => it.variantId)
-              .map((it) => ({ variantId: it.variantId!, quantity: it.quantity })),
-          },
-        },
-      });
-      const couponCode = subscriptionPlanCouponCode(plan.id);
-      await tx.subscriptionPlan.update({ where: { id: plan.id }, data: { couponCode } });
-      await tx.coupon.create({
-        data: {
-          code: couponCode,
-          type: "PERCENT",
-          value: SUBSCRIBE_SAVE_PERCENT,
-          minOrderPaise: 0,
-          active: true,
-          customerId: existing.customerId,
-        },
-      });
-      await tx.order.update({ where: { id: existing.id }, data: { subscriptionPlanId: plan.id } });
+    // There's no "pending" state to clean up if this order never settles
+    // cleanly: nothing subscription-plan-related is written here unless
+    // holdReasons is empty, so an abandoned/failed checkout leaves no
+    // residue, same as any other abandoned order today. If it DOES land
+    // ON_HOLD, updateOrderStatus's ON_HOLD → CONFIRMED transition calls this
+    // same function again once staff resolve the hold (see its own comment).
+    if (holdReasons.length === 0) {
+      await createSubscriptionPlanFromOrder(tx, existing);
     }
 
     // Loyalty is NOT credited here — it's awarded only once the order is later

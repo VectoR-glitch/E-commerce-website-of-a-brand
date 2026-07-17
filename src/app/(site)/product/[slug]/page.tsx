@@ -104,12 +104,13 @@ export async function generateMetadata(
 
 export default async function ProductPage(props: PageProps<"/product/[slug]">) {
   const { slug } = await props.params;
-  const { fragrance } = await props.searchParams;
+  const { fragrance, reviewsPage } = await props.searchParams;
   const product = await getProduct(slug);
   if (!product) notFound();
 
-  const [{ productId, reviews, summary }, { questions }] = await Promise.all([
-    getProductReviews(slug),
+  const page = Math.max(1, Math.floor(Number(reviewsPage)) || 1);
+  const [{ productId, reviews, summary, hasNext }, { questions }] = await Promise.all([
+    getProductReviews(slug, page),
     getProductQuestions(slug),
   ]);
   const [{ canReview, existing }, { canAsk }, session] = await Promise.all([
@@ -204,6 +205,32 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
               </li>
             ))}
           </ul>
+        )}
+
+        {(page > 1 || hasNext) && (
+          <div className="mt-6 flex items-center justify-between">
+            {page > 1 ? (
+              <Link
+                href={`/product/${slug}?reviewsPage=${page - 1}`}
+                className="smallcaps text-forest hover:underline"
+              >
+                ← Previous
+              </Link>
+            ) : (
+              <span />
+            )}
+            <span className="text-xs text-ink/50">Page {page}</span>
+            {hasNext ? (
+              <Link
+                href={`/product/${slug}?reviewsPage=${page + 1}`}
+                className="smallcaps text-forest hover:underline"
+              >
+                Next →
+              </Link>
+            ) : (
+              <span />
+            )}
+          </div>
         )}
       </div>
 

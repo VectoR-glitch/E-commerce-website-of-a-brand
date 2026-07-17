@@ -43,6 +43,10 @@ const otherColumns = [
 
 export function SiteFooter({ shopLinks = FALLBACK_SHOP_LINKS }: { shopLinks?: FooterShopLink[] }) {
   const columns = [{ title: "Shop", links: shopLinks }, ...otherColumns];
+  // Computed once per render, not memoized — this component isn't
+  // re-rendered on a timer, so a stale year until next render is fine.
+  // eslint-disable-next-line react-hooks/purity
+  const copyrightYear = new Date(Date.now() + IST_OFFSET_MS).getUTCFullYear();
 
   return (
     <footer className="border-t border-line bg-bone">
@@ -81,7 +85,7 @@ export function SiteFooter({ shopLinks = FALLBACK_SHOP_LINKS }: { shopLinks?: Fo
       <div className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-8 py-6 sm:flex-row sm:justify-between">
           <p className="smallcaps text-ink/70">
-            Bliss in Every Drop · Bharat Bliss Pvt Ltd · © {new Date(Date.now() + IST_OFFSET_MS).getUTCFullYear()} 🍁
+            Bliss in Every Drop · Bharat Bliss Pvt Ltd · © {copyrightYear} 🍁
           </p>
           <div className="flex gap-5">
             <Link href="/privacy" className="smallcaps link-underline text-ink/70 hover:text-forest">

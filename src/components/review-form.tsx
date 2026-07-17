@@ -92,9 +92,9 @@ export function ReviewForm({
         className={field}
       />
 
-      {state?.error && <p className="mt-2 text-sm text-red-700">{state.error}</p>}
+      {state?.error && <p role="alert" className="mt-2 text-sm text-red-700">{state.error}</p>}
       {done && (
-        <p className="mt-2 text-sm text-forest">
+        <p role="status" className="mt-2 text-sm text-forest">
           Thanks! Your review will appear once we&rsquo;ve approved it.
         </p>
       )}

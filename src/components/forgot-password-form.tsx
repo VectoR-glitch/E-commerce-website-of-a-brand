@@ -15,7 +15,7 @@ export function ForgotPasswordForm() {
   // Neutral confirmation — never reveals whether the email is registered.
   if (state?.ok) {
     return (
-      <div className="mt-10 border border-forest/30 bg-forest/5 px-4 py-5 text-sm text-forest">
+      <div role="status" className="mt-10 border border-forest/30 bg-forest/5 px-4 py-5 text-sm text-forest">
         If an account exists for that email, a password-reset link is on its way. It expires in 1 hour.
       </div>
     );
@@ -29,7 +29,7 @@ export function ForgotPasswordForm() {
       </div>
 
       {state?.error && (
-        <p className="border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{state.error}</p>
+        <p role="alert" className="border border-red-200 bg-red-50 px-3.5 py-2.5 text-sm text-red-700">{state.error}</p>
       )}
 
       <button

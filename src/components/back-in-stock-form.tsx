@@ -45,7 +45,7 @@ export function BackInStockForm({
         Sold out{variantLabel ? ` · ${variantLabel}` : ""}
       </p>
       {done ? (
-        <p className="mt-2 text-sm text-forest">✓ {message}</p>
+        <p role="status" className="mt-2 text-sm text-forest">✓ {message}</p>
       ) : (
         <>
           <p className="mt-1.5 text-sm leading-relaxed text-ink/65">
@@ -71,7 +71,7 @@ export function BackInStockForm({
               {pending ? "…" : "Notify me"}
             </button>
           </form>
-          {error && <p className="mt-2 text-sm text-[#b3402f]">{error}</p>}
+          {error && <p role="alert" className="mt-2 text-sm text-[#b3402f]">{error}</p>}
         </>
       )}
     </div>

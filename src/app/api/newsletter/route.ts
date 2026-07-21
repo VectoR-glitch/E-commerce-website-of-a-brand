@@ -61,7 +61,18 @@ export async function POST(request: Request) {
     syncNewsletterContact(email),
     createWelcomeCoupon(),
   ]);
-  await prisma.newsletterSubscriber.create({ data: { email, resendId, couponCode } });
+  try {
+    await prisma.newsletterSubscriber.create({ data: { email, resendId, couponCode } });
+  } catch (err) {
+    // Unique constraint on `email` — a concurrent request for the same address
+    // won the race. Re-surface whatever coupon that request minted rather than
+    // erroring; the coupon we just minted here (if any) is simply unused.
+    const isUniqueClash =
+      typeof err === "object" && err !== null && "code" in err && err.code === "P2002";
+    if (!isUniqueClash) throw err;
+    const winner = await prisma.newsletterSubscriber.findUnique({ where: { email } });
+    return NextResponse.json({ ok: true, couponCode: winner?.couponCode ?? null });
+  }
   if (couponCode) {
     // Best-effort — the coupon is already minted and the code is returned in
     // this response either way, so a flaky send here doesn't lose the reward.

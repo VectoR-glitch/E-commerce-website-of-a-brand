@@ -49,7 +49,7 @@ export function NewsletterForm({
       </p>
     ) : (
       <p className="text-sm text-ink/70">
-        Thanks for subscribing ✓ Check your inbox for your code.
+        Thanks for subscribing ✓ We’ll be in touch.
       </p>
     );
   }

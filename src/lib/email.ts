@@ -766,3 +766,55 @@ export async function sendWelcomeDiscountEmail(to: string, code: string): Promis
   });
   return true;
 }
+
+// ── Review request ───────────────────────────────────────────────────────────
+/** Sent a few days after delivery, nudging the customer to review what they bought. */
+export async function sendReviewRequestEmail(input: {
+  to: string;
+  name: string | null;
+  orderNumber: string;
+  products: { name: string; slug: string }[];
+}): Promise<boolean> {
+  if (!resend) return false;
+  const hi = input.name ? `Hi ${escapeHtml(input.name)},` : "Hi,";
+  const isPlural = input.products.length > 1;
+
+  const htmlLinks = input.products
+    .map(
+      (p) =>
+        `<li style="margin-bottom:6px;"><a href="${SITE_URL}/product/${p.slug}#reviews" style="color:${C.forest};">${escapeHtml(p.name)}</a></li>`,
+    )
+    .join("");
+  const textLines = input.products.map((p) => `${p.name}: ${SITE_URL}/product/${p.slug}#reviews`);
+
+  await resend.emails.send({
+    from: FROM,
+    to: input.to,
+    subject: isPlural ? "How are you liking your Klenich order?" : `How's your ${input.products[0]?.name}?`,
+    text: [
+      input.name ? `Hi ${input.name},` : "Hi,",
+      "",
+      `Your order ${input.orderNumber} should have settled in by now — we'd love to hear what you think.`,
+      "",
+      "Leave a review:",
+      ...textLines,
+      "",
+      "Takes less than a minute, and it genuinely helps other shoppers decide.",
+      "",
+      "Klenich · Plant-powered home care, made in India",
+      SITE_URL,
+    ].join("\n"),
+    html: shell(
+      "Your feedback",
+      "How’s it working out?",
+      `<p style="color:${C.ink};font-size:15px;margin:0 0 14px;">${hi}</p>
+       <p style="color:${C.muted};font-size:14px;line-height:1.6;margin:0 0 18px;">
+         Your order <strong style="color:${C.ink};">${escapeHtml(input.orderNumber)}</strong> should
+         have settled in by now — we'd love to hear what you think. Takes less than a minute, and it
+         genuinely helps other shoppers decide.
+       </p>
+       <ul style="margin:0 0 20px;padding-left:18px;color:${C.ink};font-size:14px;">${htmlLinks}</ul>`,
+    ),
+  });
+  return true;
+}

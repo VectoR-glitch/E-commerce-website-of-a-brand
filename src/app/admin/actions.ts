@@ -70,10 +70,17 @@ export async function updateOrderStatus(formData: FormData): Promise<void> {
     won = await prisma.$transaction(async (tx) => {
       const claimed = await tx.order.updateMany({
         where: { id, status: changed.status },
-        // Clear any stale holdReason from settlement once an admin manually
-        // moves the order to a new status — it only describes why the order
-        // landed ON_HOLD in the first place, not the status being set now.
-        data: { status, holdReason: null },
+        data: {
+          status,
+          // Clear any stale holdReason from settlement once an admin manually
+          // moves the order to a new status — it only describes why the order
+          // landed ON_HOLD in the first place, not the status being set now.
+          holdReason: null,
+          // Timestamp the review-request sweep waits on — set on every real
+          // transition into DELIVERED (harmless to overwrite on a rare
+          // re-delivery; there's no meaningful "first" delivery to preserve).
+          ...(status === "DELIVERED" ? { deliveredAt: new Date() } : {}),
+        },
       });
       if (claimed.count === 0) return false;
 

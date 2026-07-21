@@ -16,6 +16,7 @@ import { createSubscription } from "@/app/actions/subscriptions";
 import { Ornament } from "@/components/ornament";
 import { WishlistButton } from "@/components/wishlist-button";
 import { BackInStockForm } from "@/components/back-in-stock-form";
+import { DeliveryCheck } from "@/components/delivery-check";
 
 export function ProductDetail({
   product,
@@ -348,6 +349,9 @@ export function ProductDetail({
             </div>
           </div>
         </div>
+
+        {/* Delivery estimate — check serviceability + fee before adding to cart */}
+        {selected?.id && <DeliveryCheck key={selected.id} variantId={selected.id} />}
 
         {/* Back-in-stock alert — only when the chosen variant is sold out */}
         {outOfStock && selected?.id && (

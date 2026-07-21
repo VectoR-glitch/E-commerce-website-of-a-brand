@@ -609,6 +609,16 @@ model BlogPost {
   @@index([previousSlugs(ops: ArrayOps)], type: Gin)
 }
 
+model NewsletterSubscriber {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  // Resend Audience contact id, once synced — lets us later remove/update the
+  // contact in Resend without a second lookup. Null if the Resend sync failed
+  // (we still keep the DB row so the signup itself isn't lost).
+  resendId    String?
+  createdAt   DateTime @default(now())
+}
+
 enum SubscriptionStatus {
   ACTIVE
   PAUSED

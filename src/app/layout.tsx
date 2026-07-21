@@ -3,6 +3,7 @@ import { Fraunces, Inter } from "next/font/google";
 import { SITE_URL } from "@/lib/constants";
 import { jsonLdHtml } from "@/lib/json-ld";
 import { TabLoadingIndicator } from "@/components/tab-loading-indicator";
+import { Analytics } from "@/components/analytics";
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -71,6 +72,7 @@ export default function RootLayout({
           dangerouslySetInnerHTML={{ __html: jsonLdHtml(orgJsonLd) }}
         />
         <TabLoadingIndicator />
+        <Analytics />
         {children}
       </body>
     </html>

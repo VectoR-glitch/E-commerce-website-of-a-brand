@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
-export function NewsletterForm() {
+export function NewsletterForm({ onSuccess }: { onSuccess?: () => void }) {
+  const emailId = useId(); // unique per instance — this form renders more than once on a page (footer + popup)
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState(""); // honeypot
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
@@ -27,6 +28,7 @@ export function NewsletterForm() {
       }
       setCouponCode(data.couponCode ?? null);
       setState("sent");
+      onSuccess?.();
     } catch {
       setError("Couldn’t reach the server. Please try again.");
       setState("error");
@@ -59,11 +61,11 @@ export function NewsletterForm() {
         className="absolute -left-[9999px] h-0 w-0 opacity-0"
       />
       <div className="flex gap-2">
-        <label className="sr-only" htmlFor="newsletter-email">
+        <label className="sr-only" htmlFor={emailId}>
           Email address
         </label>
         <input
-          id="newsletter-email"
+          id={emailId}
           required
           type="email"
           placeholder="you@example.com"

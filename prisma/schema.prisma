@@ -616,6 +616,10 @@ model NewsletterSubscriber {
   // contact in Resend without a second lookup. Null if the Resend sync failed
   // (we still keep the DB row so the signup itself isn't lost).
   resendId    String?
+  // The single-use 10%-off welcome code minted for this signup (see
+  // createWelcomeCoupon in lib/newsletter.ts). Null if coupon creation failed
+  // — the subscription itself still succeeds either way.
+  couponCode  String?
   createdAt   DateTime @default(now())
 }
 

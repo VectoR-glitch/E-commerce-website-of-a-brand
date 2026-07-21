@@ -7,6 +7,7 @@ export function NewsletterForm() {
   const [company, setCompany] = useState(""); // honeypot
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState<string | null>(null);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -24,6 +25,7 @@ export function NewsletterForm() {
         setState("error");
         return;
       }
+      setCouponCode(data.couponCode ?? null);
       setState("sent");
     } catch {
       setError("Couldn’t reach the server. Please try again.");
@@ -32,7 +34,16 @@ export function NewsletterForm() {
   }
 
   if (state === "sent") {
-    return <p className="text-sm text-ink/70">Thanks for subscribing ✓</p>;
+    return couponCode ? (
+      <p className="text-sm text-ink/70">
+        Thanks for subscribing ✓ Here’s your code:{" "}
+        <span className="font-serif text-forest">{couponCode}</span> — also on its way to your inbox.
+      </p>
+    ) : (
+      <p className="text-sm text-ink/70">
+        Thanks for subscribing ✓ Check your inbox for your code.
+      </p>
+    );
   }
 
   return (

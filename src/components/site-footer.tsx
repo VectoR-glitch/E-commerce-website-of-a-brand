@@ -27,6 +27,7 @@ const otherColumns = [
     title: "Company",
     links: [
       { href: "/why-klenich", label: "Why Klenich" },
+      { href: "/rewards", label: "Rewards" },
       { href: "/our-story", label: "Our Story" },
       { href: "/blog", label: "Journal" },
     ],

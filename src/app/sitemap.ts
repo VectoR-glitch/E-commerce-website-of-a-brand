@@ -10,6 +10,7 @@ const staticRoutes: { path: string; priority: number; freq: MetadataRoute.Sitema
   { path: "/", priority: 1, freq: "weekly" },
   { path: "/shop", priority: 0.9, freq: "weekly" },
   { path: "/why-klenich", priority: 0.6, freq: "monthly" },
+  { path: "/rewards", priority: 0.6, freq: "monthly" },
   { path: "/our-story", priority: 0.6, freq: "monthly" },
   { path: "/blog", priority: 0.6, freq: "weekly" },
   { path: "/help", priority: 0.4, freq: "monthly" },

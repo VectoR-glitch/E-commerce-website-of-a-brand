@@ -6,6 +6,7 @@ import { useCart } from "@/lib/cart-context";
 import { formatINR } from "@/lib/catalog";
 import {
   INDIAN_STATES,
+  normState,
   LOYALTY_MIN_REDEEM_POINTS,
   POINT_VALUE_PAISE,
   PENDING_COUPON_KEY,
@@ -96,12 +97,6 @@ const EMPTY: FormState = {
   fullName: "", email: "", phone: "", line1: "", line2: "",
   city: "", state: "", pincode: "",
 };
-
-// Normalise a state/UT name for comparison so India Post spellings
-// ("Jammu & Kashmir", "NCT of Delhi", etc.) line up with our dropdown values.
-function normState(s: string): string {
-  return s.toLowerCase().replace(/&/g, "and").replace(/[^a-z]/g, "");
-}
 
 // Resolved India Post lookup for the entered pincode. `state` is the dropdown
 // value it maps to (null if unmappable); `district` autofills a blank city.

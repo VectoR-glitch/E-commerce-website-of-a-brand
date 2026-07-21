@@ -47,6 +47,13 @@ export function deliveryFeePaise(state: string): number {
     : DELIVERY_FEE_NATIONAL_PAISE;
 }
 
+// Normalise a state/UT name for comparison so India Post's API spellings
+// ("Jammu & Kashmir", "NCT of Delhi", etc.) line up with INDIAN_STATES.
+// Shared by checkout (full address form) and the PDP pincode-delivery-check.
+export function normState(s: string): string {
+  return s.toLowerCase().replace(/&/g, "and").replace(/[^a-z]/g, "");
+}
+
 // "Subscribe & save" — the standing-order discount (percent off the subscribed
 // item) and the cadences a customer can pick, in days. Snapshotted onto each
 // Subscription at subscribe time, so changing this only affects new subscriptions.

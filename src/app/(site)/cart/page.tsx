@@ -110,8 +110,7 @@ export default function CartPage() {
             <span>{formatINR(subtotalPaise)}</span>
           </div>
           <p className="mt-3 text-xs text-ink/55">
-            Delivery calculated at checkout — ₹64 within West Bengal, ₹160 across
-            the rest of India.
+            Delivery calculated live at checkout, based on your exact pincode.
           </p>
           {overLimit && (
             <p className="mt-5 border border-brass/40 bg-brass/10 px-4 py-3 text-xs text-ink/70">

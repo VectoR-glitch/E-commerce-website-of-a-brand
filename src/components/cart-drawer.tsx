@@ -190,8 +190,7 @@ export function CartDrawer() {
                 <span>{formatINR(subtotalPaise)}</span>
               </div>
               <p className="mt-1 text-xs text-ink/45">
-                Delivery (₹64 in West Bengal · ₹160 across India) calculated at
-                checkout.
+                Delivery calculated live at checkout, based on your pincode.
               </p>
               <Link
                 href="/checkout"

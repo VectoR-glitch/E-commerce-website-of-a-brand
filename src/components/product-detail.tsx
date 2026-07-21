@@ -423,7 +423,7 @@ export function ProductDetail({
 
         <div className="mt-8 space-y-2 border-t border-line pt-7 text-sm text-ink/70">
           <p>🌱 Plant-powered formula, made in India</p>
-          <p>🚚 Dispatched within 1 working day · delivery ₹64 (WB) / ₹160 (India)</p>
+          <p>🚚 Dispatched within 1 working day · delivery rates calculated live for your pincode</p>
           <p>↩️ Returns on damaged or wrong items</p>
         </div>
       </div>

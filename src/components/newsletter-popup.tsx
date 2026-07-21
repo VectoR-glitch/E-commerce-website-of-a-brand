@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { NewsletterForm } from "@/components/newsletter-form";
+import { Kicker } from "@/components/kicker";
+import { Ornament } from "@/components/ornament";
 
 // Shown once per browser (localStorage-gated) to a new visitor, a few seconds
 // after their first page load. Skipped on routes where an interruption would
@@ -86,7 +88,7 @@ export function NewsletterPopup() {
     <div className="fixed inset-0 z-50">
       <div
         onClick={dismiss}
-        className="absolute inset-0 bg-ink/40"
+        className="fade-in absolute inset-0 bg-ink/50"
         aria-hidden="true"
       />
       <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -95,26 +97,45 @@ export function NewsletterPopup() {
           role="dialog"
           aria-modal="true"
           aria-labelledby="newsletter-popup-heading"
-          className="relative w-full max-w-sm border border-line bg-paper p-8 shadow-xl"
+          className="popup-in relative w-full max-w-lg border border-line bg-paper p-10 shadow-2xl sm:p-12"
         >
           <button
             ref={closeRef}
             type="button"
             onClick={dismiss}
             aria-label="Close"
-            className="absolute right-3 top-3 text-ink/50 hover:text-ink"
+            className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center text-ink/70 transition-colors hover:text-forest"
           >
-            ✕
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+              <path
+                d="M4 4l10 10M14 4L4 14"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+              />
+            </svg>
           </button>
-          <p className="smallcaps text-brass-deep">Welcome</p>
-          <h2 id="newsletter-popup-heading" className="mt-2 font-serif text-2xl leading-snug">
-            Get 10% off your first order
-          </h2>
-          <p className="mt-2 text-sm text-ink/70">
-            Sign up for The Journal — a one-time code, sent straight to your inbox.
-          </p>
-          <div className="mt-5">
-            <NewsletterForm onSuccess={() => localStorage.setItem(STORAGE_KEY, "1")} />
+
+          <div className="text-center">
+            <Kicker>Welcome</Kicker>
+            <h2
+              id="newsletter-popup-heading"
+              className="mt-3 font-serif text-3xl leading-tight sm:text-4xl"
+            >
+              Get 10% off your first order
+            </h2>
+            <Ornament className="mt-5" />
+            <p className="mx-auto mt-5 max-w-sm text-ink/70">
+              Sign up for The Journal — plant-powered cleaning notes, and a one-time
+              code sent straight to your inbox.
+            </p>
+          </div>
+
+          <div className="mx-auto mt-8 max-w-sm">
+            <NewsletterForm
+              className="w-full"
+              onSuccess={() => localStorage.setItem(STORAGE_KEY, "1")}
+            />
           </div>
         </div>
       </div>

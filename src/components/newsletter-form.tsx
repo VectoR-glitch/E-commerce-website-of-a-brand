@@ -2,7 +2,13 @@
 
 import { useId, useState } from "react";
 
-export function NewsletterForm({ onSuccess }: { onSuccess?: () => void }) {
+export function NewsletterForm({
+  onSuccess,
+  className = "max-w-xs",
+}: {
+  onSuccess?: () => void;
+  className?: string;
+}) {
   const emailId = useId(); // unique per instance — this form renders more than once on a page (footer + popup)
   const [email, setEmail] = useState("");
   const [company, setCompany] = useState(""); // honeypot
@@ -49,7 +55,7 @@ export function NewsletterForm({ onSuccess }: { onSuccess?: () => void }) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="max-w-xs">
+    <form onSubmit={onSubmit} className={className}>
       <input
         type="text"
         name="company"

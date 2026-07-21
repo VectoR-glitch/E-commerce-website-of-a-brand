@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { Ornament } from "@/components/ornament";
+import { NewsletterForm } from "@/components/newsletter-form";
 
 // This component is also used from error.tsx (a Client Component boundary),
 // so it can't import gst.ts's toIST (marked "server-only") — same fixed IST
@@ -63,6 +64,10 @@ export function SiteFooter({ shopLinks = FALLBACK_SHOP_LINKS }: { shopLinks?: Fo
           <p className="mt-3 max-w-xs text-sm text-ink/70">
             Gentle where it touches you, powerful where it needs to be.
           </p>
+          <p className="smallcaps mt-6 text-brass-deep">The Journal, in your inbox</p>
+          <div className="mt-3">
+            <NewsletterForm />
+          </div>
         </div>
         {columns.map((col) => (
           <div key={col.title}>

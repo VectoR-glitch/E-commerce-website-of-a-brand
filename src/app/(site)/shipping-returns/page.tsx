@@ -36,9 +36,9 @@ export default function ShippingReturnsPage() {
               courier partner.
             </li>
             <li>
-              <strong>Flat-rate delivery</strong>: ₹64 within West Bengal and
-              ₹160 to the rest of India, added at checkout based on your
-              delivery address.
+              <strong>Delivery fee</strong>: calculated live for your exact
+              pincode at checkout — you can also check it upfront on any
+              product page.
             </li>
           </ul>
         </section>

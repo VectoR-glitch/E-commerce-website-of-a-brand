@@ -27,7 +27,7 @@ const promises = [
 ];
 
 const banners = [
-  "Flat delivery — ₹64 in West Bengal, ₹160 across India",
+  "Live delivery rates, calculated for your exact pincode",
   "Plant-powered home care — proudly made in India",
   "Gentle on hands · Tough on grime",
 ];

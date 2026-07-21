@@ -4,6 +4,7 @@ import { sendDueSubscriptionReminders } from "@/lib/subscriptions";
 import { sendDuePlanReminders } from "@/lib/subscription-plans";
 import { runBackInStockSweep } from "@/lib/back-in-stock";
 import { runAbandonedCartSweep } from "@/lib/abandoned-cart";
+import { runReviewRequestSweep } from "@/lib/review-requests";
 
 // One daily scheduled entrypoint for all background maintenance, so the whole
 // app needs a single Vercel Cron (well within the Hobby 2-cron limit) and one
@@ -52,11 +53,25 @@ export async function GET(request: Request): Promise<Response> {
   const subscriptionPlans = await runTask("subscription-plan-reminders", sendDuePlanReminders);
   const backInStock = await runTask("back-in-stock", runBackInStockSweep);
   const abandonedCart = await runTask("abandoned-cart", runAbandonedCartSweep);
+  const reviewRequests = await runTask("review-requests", runReviewRequestSweep);
 
   // Individual send failures are logged where they happen; this summary line
   // makes a systemic outage (e.g. sent:0 across the board) scannable in the
   // server logs even though nothing currently reads the JSON response below.
-  console.log("Daily cron summary:", { subscriptions, subscriptionPlans, backInStock, abandonedCart });
+  console.log("Daily cron summary:", {
+    subscriptions,
+    subscriptionPlans,
+    backInStock,
+    abandonedCart,
+    reviewRequests,
+  });
 
-  return NextResponse.json({ ok: true, subscriptions, subscriptionPlans, backInStock, abandonedCart });
+  return NextResponse.json({
+    ok: true,
+    subscriptions,
+    subscriptionPlans,
+    backInStock,
+    abandonedCart,
+    reviewRequests,
+  });
 }

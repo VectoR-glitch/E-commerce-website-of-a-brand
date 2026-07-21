@@ -149,7 +149,7 @@ export default async function ProductPage(props: PageProps<"/product/[slug]">) {
       />
 
       {/* Reviews */}
-      <div className="mt-20 border-t border-line pt-12">
+      <div id="reviews" className="mt-20 scroll-mt-24 border-t border-line pt-12">
         <Kicker>Reviews</Kicker>
         {summary.count > 0 ? (
           <div className="mt-2 flex flex-wrap items-center gap-3">

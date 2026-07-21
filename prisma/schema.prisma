@@ -399,6 +399,14 @@ model Order {
   // Loyalty points awarded once this order is DELIVERED (0 for guest orders /
   // before delivery).
   pointsEarned    Int     @default(0)
+  // Set once, on the transition INTO DELIVERED (admin/actions.ts) — the
+  // review-request sweep (lib/review-requests.ts) waits a few days from this
+  // timestamp before nudging, rather than from createdAt/updatedAt.
+  deliveredAt        DateTime?
+  // Set once the review-request email has actually gone out (or been
+  // deliberately skipped because the customer already reviewed) — the sweep's
+  // idempotency guard, same pattern as Cart.reminderSentAt.
+  reviewRequestSentAt DateTime?
   // When loyalty (buyer's points + any first-order referral bonus) was
   // credited for this order — null until then. This, not pointsEarned, is the
   // idempotency guard (an order can legitimately earn 0 points), claimed

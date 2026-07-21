@@ -9,6 +9,7 @@ import { getPublishedPosts } from "@/lib/blog";
 const staticRoutes: { path: string; priority: number; freq: MetadataRoute.Sitemap[number]["changeFrequency"] }[] = [
   { path: "/", priority: 1, freq: "weekly" },
   { path: "/shop", priority: 0.9, freq: "weekly" },
+  { path: "/subscribe", priority: 0.7, freq: "monthly" },
   { path: "/why-klenich", priority: 0.6, freq: "monthly" },
   { path: "/rewards", priority: 0.6, freq: "monthly" },
   { path: "/our-story", priority: 0.6, freq: "monthly" },

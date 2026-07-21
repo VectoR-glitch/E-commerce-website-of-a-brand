@@ -730,3 +730,39 @@ export async function sendSubscriptionPlanReminder(input: {
     ),
   });
 }
+
+// ── Newsletter welcome ───────────────────────────────────────────────────────
+/** Sends the single-use 10%-off code minted for a new newsletter signup. */
+export async function sendWelcomeDiscountEmail(to: string, code: string): Promise<boolean> {
+  if (!resend) return false;
+  const escapedCode = escapeHtml(code);
+
+  await resend.emails.send({
+    from: FROM,
+    to,
+    subject: "Here's your 10% off — welcome to Klenich",
+    text: [
+      "Welcome to the Klenich journal.",
+      "",
+      `Here's 10% off your first order: ${code}`,
+      "Enter it at checkout — good for one order, on us.",
+      "",
+      `Shop now: ${SITE_URL}/shop`,
+      "",
+      "Klenich · Plant-powered home care, made in India",
+      SITE_URL,
+    ].join("\n"),
+    html: shell(
+      "Welcome",
+      "Here's 10% off your first order",
+      `<p style="color:${C.ink};font-size:15px;margin:0 0 18px;line-height:1.6;">
+         Thanks for joining the Klenich journal. Use this code at checkout for 10% off — good for one order, on us.
+       </p>
+       <div style="margin:0 0 22px;padding:16px;background:${C.bone};border:1px dashed ${C.brass};text-align:center;">
+         <span style="font-family:Georgia,serif;font-size:20px;letter-spacing:0.08em;color:${C.forest};font-weight:600;">${escapedCode}</span>
+       </div>
+       ${ctaButton(`${SITE_URL}/shop`, "Shop now")}`,
+    ),
+  });
+  return true;
+}

@@ -64,7 +64,8 @@ export function SiteFooter({ shopLinks = FALLBACK_SHOP_LINKS }: { shopLinks?: Fo
           <p className="mt-3 max-w-xs text-sm text-ink/70">
             Gentle where it touches you, powerful where it needs to be.
           </p>
-          <p className="smallcaps mt-6 text-brass-deep">The Journal, in your inbox</p>
+          <p className="smallcaps mt-6 text-brass-deep">Get 10% off your first order</p>
+          <p className="mt-1 text-sm text-ink/70">Sign up for The Journal — one-time code, sent to your inbox.</p>
           <div className="mt-3">
             <NewsletterForm />
           </div>

@@ -7,6 +7,7 @@ import { MobileNav } from "@/components/mobile-nav";
 const navLinks = [
   { href: "/shop", label: "Shop" },
   { href: "/subscribe", label: "Subscribe & Save" },
+  { href: "/rewards", label: "Rewards" },
   { href: "/why-klenich", label: "Why Klenich" },
   { href: "/our-story", label: "Our Story" },
   { href: "/blog", label: "Journal" },

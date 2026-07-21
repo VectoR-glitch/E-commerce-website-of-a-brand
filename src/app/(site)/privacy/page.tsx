@@ -21,7 +21,7 @@ export default function PrivacyPage() {
       <h1 className="mt-3 font-serif text-4xl text-ink">Privacy Policy</h1>
       <Ornament align="left" className="mt-4" />
       <p className="mt-2 text-sm text-ink/70">
-        Last updated: 4 July 2026 · Operated by Bharat Bliss Pvt Ltd
+        Last updated: 21 July 2026 · Operated by Bharat Bliss Pvt Ltd
       </p>
       </Reveal>
 
@@ -58,14 +58,19 @@ export default function PrivacyPage() {
           We share data with service providers strictly to run the store:
           payment gateway (Razorpay), shipping partners, email provider, and
           — if you provide a phone number — WhatsApp (Meta Platforms) to send
-          order-status updates. We do not sell your personal data.
+          order-status updates. We also use Google Analytics and the Meta
+          Pixel to understand site usage and measure ad performance; these
+          send browsing data (such as pages viewed and purchase events) to
+          Google and Meta, who may use it under their own privacy policies.
+          We do not sell your personal data.
         </Section>
         <Section title="5. Cookies & browser storage">
           Signed-out visitors have their cart, wishlist, and recently-viewed
           products stored locally in their own browser (not on our servers) so
-          the site remembers them between visits. This is functional storage
-          needed for the site to work, not third-party ad tracking. Signing in
-          moves this into your account.
+          the site remembers them between visits — functional storage needed
+          for the site to work. Signing in moves this into your account.
+          Separately, Google Analytics and the Meta Pixel (see Section 4) set
+          their own cookies to measure usage and ad performance.
         </Section>
         <Section title="6. Data retention & your rights">
           We keep order records as required by law. You may request access to,

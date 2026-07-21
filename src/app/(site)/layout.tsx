@@ -6,6 +6,7 @@ import { ScrollProgress } from "@/components/scroll-progress";
 import { BackToTop } from "@/components/back-to-top";
 import { CartDrawer } from "@/components/cart-drawer";
 import { MapleEasterEgg } from "@/components/maple-easter-egg";
+import { NewsletterPopup } from "@/components/newsletter-popup";
 import { CartProvider } from "@/lib/cart-context";
 import { WishlistProvider } from "@/lib/wishlist-context";
 import { RecentlyViewedProvider } from "@/lib/recently-viewed";
@@ -49,6 +50,7 @@ export default async function SiteLayout({
       <BackToTop />
       <CartDrawer />
       <MapleEasterEgg />
+      <NewsletterPopup />
       </RecentlyViewedProvider>
       </WishlistProvider>
     </CartProvider>

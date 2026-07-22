@@ -37,7 +37,7 @@ export function SiteHeader({ accountSlot }: { accountSlot?: React.ReactNode }) {
             priority
           />
         </Link>
-        <nav className="hidden gap-10 md:flex">
+        <nav className="hidden flex-1 items-center justify-between px-10 md:flex">
           {navLinks.map((link) => (
             <Link
               key={link.href}

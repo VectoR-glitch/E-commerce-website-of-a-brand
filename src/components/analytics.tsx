@@ -1,7 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import Script from "next/script";
+
+declare global {
+  interface Window {
+    fbq?: (...args: unknown[]) => void;
+  }
+}
 
 // Marketing analytics — both are no-ops until their env vars are set, so this
 // is safe to ship before either account exists (same pattern as WhatsApp).
@@ -51,8 +58,31 @@ function useDeferredLoad() {
   return ready;
 }
 
+// Unlike GA4 (which auto-tracks client-side route changes via Enhanced
+// Measurement's history listener, on by default), the Meta Pixel has no
+// built-in SPA support — without this, only the very first page of a visit
+// ever gets a PageView, silently undercounting every route change after,
+// which breaks ad attribution and retargeting-audience accuracy.
+function useMetaPixelPageviews(enabled: boolean) {
+  const pathname = usePathname();
+  // The init script's own fbq('track', 'PageView') already covers whichever
+  // page is current the moment the pixel finishes loading — skip firing again
+  // for that same page once `enabled` flips true.
+  const skipNext = useRef(true);
+
+  useEffect(() => {
+    if (!enabled) return;
+    if (skipNext.current) {
+      skipNext.current = false;
+      return;
+    }
+    window.fbq?.("track", "PageView");
+  }, [enabled, pathname]);
+}
+
 export function Analytics() {
   const ready = useDeferredLoad();
+  useMetaPixelPageviews(ready && Boolean(META_PIXEL_ID));
   if (!ready) return null;
 
   return (

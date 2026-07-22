@@ -44,6 +44,13 @@ export type Product = {
   fragranceImages?: Record<string, string>;
   /** per-variant images keyed by `${fragrance}|${size}` for the size-aware PDP */
   variantImages?: Record<string, string>;
+  /**
+   * ALL images per key (same keying as variantImages, plus a fragrance-only
+   * key, plus "" for product-wide) — the singular fields above only ever
+   * surface one image per key; this is what lets the PDP show a full gallery
+   * when more than one was uploaded for the same fragrance/size.
+   */
+  imageGallery?: Record<string, string[]>;
   /** emoji fallback if an image is missing */
   placeholder: string;
   /** editorial PDP copy (optional) */

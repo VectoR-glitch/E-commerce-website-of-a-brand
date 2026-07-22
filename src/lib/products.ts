@@ -69,9 +69,16 @@ function hydrate(meta: Product | undefined, db: DbProduct): Product {
   const primary = db.images.find((i) => i.isPrimary) ?? db.images[0];
   const fragranceImages: Record<string, string> = {};
   const variantImages: Record<string, string> = {};
+  // Same keys as the singular maps above, but every image per key (not just
+  // the first) — db.images is already ordered [isPrimary desc, sortOrder asc],
+  // so each array's order is preserved. Anything with no fragrance (size-only
+  // or neither) falls into "", same pool the singular `primary` fallback uses.
+  const imageGallery: Record<string, string[]> = {};
   for (const im of db.images) {
     if (im.fragrance && im.size) variantImages[`${im.fragrance}|${im.size}`] = imageUrl(im.id);
     else if (im.fragrance) fragranceImages[im.fragrance] = imageUrl(im.id);
+    const key = im.fragrance && im.size ? `${im.fragrance}|${im.size}` : (im.fragrance ?? "");
+    (imageGallery[key] ??= []).push(imageUrl(im.id));
   }
 
   return {
@@ -91,6 +98,7 @@ function hydrate(meta: Product | undefined, db: DbProduct): Product {
     image: primary ? imageUrl(primary.id) : (meta?.image ?? ""),
     fragranceImages: Object.keys(fragranceImages).length ? fragranceImages : meta?.fragranceImages,
     variantImages: Object.keys(variantImages).length ? variantImages : meta?.variantImages,
+    imageGallery: Object.keys(imageGallery).length ? imageGallery : undefined,
     fragrances,
     sizes,
     variants,

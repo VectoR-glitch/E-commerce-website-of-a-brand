@@ -42,6 +42,9 @@ export function ProductDetail({
   // the pointer is away; otherwise the cursor position as 0–100% of the frame,
   // used as the transform-origin so the area under the cursor scales up.
   const [hoverZoom, setHoverZoom] = useState<{ x: number; y: number } | null>(null);
+  // Which image in the current gallery is shown — reset to 0 whenever the
+  // fragrance/size selection changes the gallery's contents.
+  const [activeIndex, setActiveIndex] = useState(0);
   const [fragrance, setFragrance] = useState<string | undefined>(
     hasFragrance
       ? initialFragrance && product.fragrances.includes(initialFragrance)
@@ -73,13 +76,29 @@ export function ProductDetail({
     selected.stock <= LOW_STOCK_THRESHOLD;
 
   // Show the photo matching the selected fragrance AND size, with fallbacks.
+  // Used for cart/wishlist thumbnails, which want one representative image
+  // regardless of which gallery photo is currently being looked at.
   const image =
     product.variantImages?.[`${fragrance ?? ""}|${size}`] ||
     (fragrance ? product.fragranceImages?.[fragrance] : undefined) ||
     product.image;
+  // Every photo uploaded for the selected fragrance/size (falls back the same
+  // way `image` does, so a product with only one photo per key still works).
+  const galleryImages = useMemo(() => {
+    const arr =
+      product.imageGallery?.[`${fragrance ?? ""}|${size}`] ||
+      (fragrance ? product.imageGallery?.[fragrance] : undefined) ||
+      product.imageGallery?.[""];
+    return arr && arr.length ? arr : image ? [image] : [];
+  }, [product.imageGallery, fragrance, size, image]);
+  const activeImage = galleryImages[activeIndex] ?? galleryImages[0] ?? image;
   // A newly-added product may have no image yet — fall back to the emoji
   // placeholder rather than rendering <Image src="">.
-  const hasImage = Boolean(image);
+  const hasImage = Boolean(activeImage);
+
+  function showImage(i: number) {
+    setActiveIndex(((i % galleryImages.length) + galleryImages.length) % galleryImages.length);
+  }
 
   // Reveal the mobile sticky bar once the main add-to-cart row scrolls off-screen.
   useEffect(() => {
@@ -109,7 +128,8 @@ export function ProductDetail({
       else if (e.key === "Tab") {
         e.preventDefault();
         lightboxCloseRef.current?.focus();
-      }
+      } else if (e.key === "ArrowRight") showImage(activeIndex + 1);
+      else if (e.key === "ArrowLeft") showImage(activeIndex - 1);
     };
     window.addEventListener("keydown", onKey);
     return () => {
@@ -117,7 +137,8 @@ export function ProductDetail({
       window.removeEventListener("keydown", onKey);
       trigger?.focus();
     };
-  }, [zoomed]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-binding on every activeIndex change would thrash focus/scroll-lock; showImage/galleryImages.length are derived from it anyway
+  }, [zoomed, activeIndex]);
 
   function addToCart(source: HTMLElement | null) {
     if (!selected || outOfStock || !selected.id) return;
@@ -165,6 +186,7 @@ export function ProductDetail({
     if (availableSizes.length > 0 && !availableSizes.includes(size)) {
       setSize(availableSizes[0]);
     }
+    setActiveIndex(0);
     setSubOk(false);
     setSubError(null);
   }
@@ -179,6 +201,7 @@ export function ProductDetail({
         setFragrance(availableFragrances[0]);
       }
     }
+    setActiveIndex(0);
     setSubOk(false);
     setSubError(null);
   }
@@ -187,6 +210,7 @@ export function ProductDetail({
     <>
     <div className="mt-10 grid gap-16 md:grid-cols-2">
       {/* Visual — fragrance-aware */}
+      <div>
       <div
         ref={imageRef}
         onMouseMove={
@@ -206,9 +230,9 @@ export function ProductDetail({
         {hasImage ? (
           <>
             <Image
-              key={image}
-              src={image}
-              alt={`${product.name}${fragrance ? ` — ${fragrance}` : ""}`}
+              key={activeImage}
+              src={activeImage}
+              alt={`${product.name}${fragrance ? ` — ${fragrance}` : ""}${galleryImages.length > 1 ? ` — photo ${activeIndex + 1} of ${galleryImages.length}` : ""}`}
               fill
               sizes="(max-width: 768px) 100vw, 600px"
               style={
@@ -238,12 +262,60 @@ export function ProductDetail({
                 Zoom
               </span>
             </button>
+            {/* Prev/next — only when there's more than one photo to cycle through */}
+            {galleryImages.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => showImage(activeIndex - 1)}
+                  aria-label="Previous photo"
+                  className="absolute left-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center bg-bone/85 text-ink/70 backdrop-blur transition-colors hover:text-forest"
+                >
+                  <svg width="9" height="14" viewBox="0 0 9 14" fill="none" aria-hidden="true">
+                    <path d="M8 1L2 7l6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => showImage(activeIndex + 1)}
+                  aria-label="Next photo"
+                  className="absolute right-3 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center bg-bone/85 text-ink/70 backdrop-blur transition-colors hover:text-forest"
+                >
+                  <svg width="9" height="14" viewBox="0 0 9 14" fill="none" aria-hidden="true">
+                    <path d="M1 1l6 6-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </button>
+                <span className="smallcaps absolute bottom-3 left-3 bg-bone/85 px-2 py-1 text-ink/70 backdrop-blur">
+                  {activeIndex + 1} / {galleryImages.length}
+                </span>
+              </>
+            )}
           </>
         ) : (
           <div className="flex h-full items-center justify-center text-8xl">
             <span aria-hidden>{product.placeholder}</span>
           </div>
         )}
+      </div>
+      {/* Thumbnails — clickable, only shown when there's a gallery to browse */}
+      {galleryImages.length > 1 && (
+        <div className="mt-3 flex gap-2 overflow-x-auto">
+          {galleryImages.map((src, i) => (
+            <button
+              key={src}
+              type="button"
+              onClick={() => showImage(i)}
+              aria-label={`Show photo ${i + 1} of ${galleryImages.length}`}
+              aria-current={i === activeIndex}
+              className={`relative h-16 w-16 shrink-0 overflow-hidden border bg-paper transition-colors ${
+                i === activeIndex ? "border-forest" : "border-line hover:border-ink/40"
+              }`}
+            >
+              <Image src={src} alt="" fill sizes="64px" className="object-contain" />
+            </button>
+          ))}
+        </div>
+      )}
       </div>
 
       {/* Details */}
@@ -571,14 +643,45 @@ export function ProductDetail({
             <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
           </svg>
         </button>
-        <div className="relative h-full max-h-[85vh] w-full max-w-3xl">
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="relative h-full max-h-[85vh] w-full max-w-3xl"
+        >
           <Image
-            src={image}
-            alt={`${product.name}${fragrance ? ` — ${fragrance}` : ""}`}
+            key={activeImage}
+            src={activeImage}
+            alt={`${product.name}${fragrance ? ` — ${fragrance}` : ""}${galleryImages.length > 1 ? ` — photo ${activeIndex + 1} of ${galleryImages.length}` : ""}`}
             fill
             sizes="(max-width: 768px) 100vw, 768px"
             className="object-contain"
           />
+          {galleryImages.length > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={() => showImage(activeIndex - 1)}
+                aria-label="Previous photo"
+                className="absolute left-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-bone/80 transition-colors hover:text-bone"
+              >
+                <svg width="11" height="18" viewBox="0 0 9 14" fill="none" aria-hidden="true">
+                  <path d="M8 1L2 7l6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={() => showImage(activeIndex + 1)}
+                aria-label="Next photo"
+                className="absolute right-2 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center text-bone/80 transition-colors hover:text-bone"
+              >
+                <svg width="11" height="18" viewBox="0 0 9 14" fill="none" aria-hidden="true">
+                  <path d="M1 1l6 6-6 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </button>
+              <span className="smallcaps absolute bottom-2 left-1/2 -translate-x-1/2 text-bone/80">
+                {activeIndex + 1} / {galleryImages.length}
+              </span>
+            </>
+          )}
         </div>
       </div>
     )}

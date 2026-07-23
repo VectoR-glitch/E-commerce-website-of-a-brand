@@ -11,7 +11,7 @@
 //   EKART_PICKUP_PINCODE  — origin pincode (a registered pickup address)
 //   EKART_PAUSED          — kill-switch; "true" skips live calls, same as
 //                           SHIPROCKET_PAUSED
-import { SUPPLIER } from "@/lib/gst";
+import { SUPPLIER, computeInvoiceBreakdown } from "@/lib/gst";
 import { deliveryFeePaise } from "@/lib/constants";
 import type { Order, OrderItem, Variant } from "@prisma/client";
 
@@ -380,6 +380,19 @@ export async function createShipment({ order, items }: CreateShipmentInput): Pro
   const isCod = order.paymentMethod === "COD";
   const codDuePaise = order.totalPaise - order.amountPaidPaise;
   const rupees = (paise: number) => paise / 100;
+  // consignee_gst_amount is required by the schema (missed from the original
+  // doc summary) — the actual GST charged on this order, reusing the same
+  // authoritative breakdown the invoice PDF is built from rather than
+  // recomputing it here.
+  const gst = computeInvoiceBreakdown({
+    subtotalPaise: order.subtotalPaise,
+    discountPaise: order.discountPaise,
+    shippingPaise: order.shippingPaise,
+    totalPaise: order.totalPaise,
+    shipState: order.shipState,
+    items,
+  });
+  const gstAmountPaise = gst.totals.cgstPaise + gst.totals.sgstPaise + gst.totals.igstPaise;
   // Ekart's schema isn't uniform across money fields — confirmed via two real
   // 400s (ERR11004 VALIDATOR_SCHEMA): commodity_value wants a decimal STRING
   // (matches the string-formatted amounts pricing/estimate's own response
@@ -410,6 +423,7 @@ export async function createShipment({ order, items }: CreateShipmentInput): Pro
     products_desc: items.map((it) => it.productName).join(", ").slice(0, 500),
     payment_mode: isCod ? "COD" : "Prepaid",
     category_of_goods: CATEGORY_OF_GOODS,
+    consignee_gst_amount: rupees(gstAmountPaise),
     total_amount: rupees(order.totalPaise),
     tax_value: rupees(0),
     taxable_amount: rupees(order.subtotalPaise),

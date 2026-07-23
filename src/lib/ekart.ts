@@ -379,11 +379,16 @@ export async function createShipment({ order, items }: CreateShipmentInput): Pro
 
   const isCod = order.paymentMethod === "COD";
   const codDuePaise = order.totalPaise - order.amountPaidPaise;
-  // Ekart's schema wants monetary amounts as decimal STRINGS, not numbers —
-  // confirmed via a real 400 (ERR11004 VALIDATOR_SCHEMA) on commodity_value;
-  // matches the string-formatted amounts pricing/estimate itself returns
-  // (e.g. "90.00"), so applied to all the sibling money fields too.
-  const rupeeStr = (paise: number) => (paise / 100).toFixed(2);
+  const rupees = (paise: number) => paise / 100;
+  // Ekart's schema isn't uniform across money fields — confirmed via two real
+  // 400s (ERR11004 VALIDATOR_SCHEMA): commodity_value wants a decimal STRING
+  // (matches the string-formatted amounts pricing/estimate's own response
+  // returns, e.g. "90.00"), but total_amount wants a plain NUMBER — an
+  // all-strings pass regressed that field. Only commodity_value is a string;
+  // tax_value/taxable_amount/cod_amount are assumed numbers too (untested
+  // individually — the validator only reports the first violation) until a
+  // real booking proves otherwise.
+  const rupeeStr = (paise: number) => rupees(paise).toFixed(2);
 
   // SUPPLIER.addressLines (gst.ts) has no distinct city field — "Kolkata" is
   // the conventional postal city for pincode 700135 (New Town/Rajarhat), not
@@ -401,11 +406,11 @@ export async function createShipment({ order, items }: CreateShipmentInput): Pro
     products_desc: items.map((it) => it.productName).join(", ").slice(0, 500),
     payment_mode: isCod ? "COD" : "Prepaid",
     category_of_goods: CATEGORY_OF_GOODS,
-    total_amount: rupeeStr(order.totalPaise),
-    tax_value: rupeeStr(0),
-    taxable_amount: rupeeStr(order.subtotalPaise),
+    total_amount: rupees(order.totalPaise),
+    tax_value: rupees(0),
+    taxable_amount: rupees(order.subtotalPaise),
     commodity_value: rupeeStr(order.subtotalPaise),
-    cod_amount: rupeeStr(isCod ? Math.max(0, codDuePaise) : 0),
+    cod_amount: rupees(isCod ? Math.max(0, codDuePaise) : 0),
     quantity: items.reduce((n, it) => n + it.quantity, 0),
     weight: weightGrams,
     length: dims.length,

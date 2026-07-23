@@ -195,6 +195,18 @@ export default async function ProductEdit(props: { params: Promise<{ id: string 
                 <input name="weightGrams" type="number" min={0} defaultValue={v.weightGrams ?? ""} placeholder="—" className={`${fieldCls} w-20`} />
               </div>
               <div>
+                <label className="smallcaps mb-1 block text-brass-deep">Length cm</label>
+                <input name="lengthCm" type="number" min={0} defaultValue={v.lengthCm ?? ""} placeholder="—" className={`${fieldCls} w-20`} />
+              </div>
+              <div>
+                <label className="smallcaps mb-1 block text-brass-deep">Width cm</label>
+                <input name="widthCm" type="number" min={0} defaultValue={v.widthCm ?? ""} placeholder="—" className={`${fieldCls} w-20`} />
+              </div>
+              <div>
+                <label className="smallcaps mb-1 block text-brass-deep">Height cm</label>
+                <input name="heightCm" type="number" min={0} defaultValue={v.heightCm ?? ""} placeholder="—" className={`${fieldCls} w-20`} />
+              </div>
+              <div>
                 <label className="smallcaps mb-1 block text-brass-deep">Barcode</label>
                 <input
                   name="barcode"

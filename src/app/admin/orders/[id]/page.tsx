@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { formatINR } from "@/lib/catalog";
 import { updateOrderStatus, updatePaymentStatus } from "@/app/admin/actions";
+import { EkartShipmentPanel } from "@/components/ekart-shipment-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -118,6 +119,14 @@ export default async function OrderDetail(props: { params: Promise<{ id: string 
               <button className="smallcaps bg-forest px-4 py-2 text-bone btn-fill-forest">Save</button>
             </form>
           </div>
+
+          <EkartShipmentPanel
+            orderId={order.id}
+            trackingId={order.ekartTrackingId}
+            wbn={order.ekartWbn}
+            status={order.ekartStatus}
+            lastTrackedAt={order.ekartLastTrackedAt}
+          />
 
           <div className="border border-line bg-paper p-5">
             <h2 className="smallcaps text-brass-deep">Payment status</h2>

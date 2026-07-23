@@ -127,6 +127,12 @@ model Variant {
   // means "not yet measured": courier rate calc must treat null as a hard block,
   // never as 0g. Set per-SKU once each bottle is weighed.
   weightGrams       Int?
+  // Packed outer-box dimensions of one unit, in cm. Same null-means-unmeasured
+  // contract as weightGrams — the Ekart rate quote/shipment booking treats a
+  // missing dimension as a hard block, never a guessed default.
+  lengthCm          Int?
+  widthCm           Int?
+  heightCm          Int?
   active            Boolean            @default(true) // inactive variants never show on the site
   orderItems        OrderItem[]
   cartItems         CartItem[]
@@ -429,6 +435,14 @@ model Order {
   razorpayOrderId   String? @unique
   razorpayPaymentId String?
   razorpaySignature String?
+
+  // Ekart Logistics shipment — set once the admin books the shipment (see
+  // src/lib/ekart.ts's createShipment). Null until booked.
+  ekartTrackingId        String?   @unique
+  ekartWbn               String? // vendor waybill number, from barcodes.wbn
+  ekartStatus            String? // last known status/description from a track call
+  ekartShipmentCreatedAt DateTime?
+  ekartLastTrackedAt     DateTime?
 
   // Set at checkout time when this order is meant to START a multi-item
   // subscription plan (the customer's chosen cadence) — the discount for

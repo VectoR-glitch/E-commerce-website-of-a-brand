@@ -9,6 +9,7 @@ import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/session";
 import { sendOrderStatusEmail, type OrderForEmail } from "@/lib/email";
 import { sendOrderStatusWhatsApp } from "@/lib/whatsapp";
+import { createShipment, trackShipment, cancelShipment } from "@/lib/ekart";
 import { createSubscriptionPlanFromOrder } from "@/lib/orders";
 import { awardLoyaltyForDeliveredOrder, reverseLoyaltyForOrder, reverseVoucherRedemptionForOrder } from "@/lib/loyalty";
 import { bundleCouponCode } from "@/lib/bundles";
@@ -236,6 +237,140 @@ export async function updatePaymentStatus(formData: FormData): Promise<void> {
   revalidatePath("/admin/orders");
 }
 
+// ── Ekart shipment (admin-triggered booking/tracking/cancel) ────────────────
+// Unlike updateOrderStatus's silent-void pattern, these can fail on a real
+// external API call and the admin needs to see why — same {error?, ok?} +
+// useActionState shape as updateVariantSku/uploadProductImage.
+export type EkartActionState = { error?: string; ok?: boolean };
+
+const SHIPPED_OR_LATER: OrderStatus[] = ["SHIPPED", "DELIVERED", "CANCELLED", "RETURNED"];
+
+export async function createEkartShipment(
+  _prev: EkartActionState | undefined,
+  formData: FormData,
+): Promise<EkartActionState> {
+  await requireAdmin();
+  const id = String(formData.get("orderId") ?? "");
+  if (!id) return { error: "Missing order." };
+
+  // Claim the booking slot atomically (ekartTrackingId is unique, and
+  // `PENDING-${id}` is unique per order) before calling Ekart, so a
+  // double-click — or two admins — can never book two real shipments for the
+  // same order.
+  const claim = await prisma.order.updateMany({
+    where: { id, ekartTrackingId: null },
+    data: { ekartTrackingId: `PENDING-${id}` },
+  });
+  if (claim.count === 0) {
+    return { error: "This order already has an Ekart shipment booked (or a booking is in progress)." };
+  }
+
+  const order = await prisma.order.findUnique({
+    where: { id },
+    include: { items: { include: { variant: true } } },
+  });
+  if (!order) {
+    await prisma.order.update({ where: { id }, data: { ekartTrackingId: null } });
+    return { error: "Order not found." };
+  }
+
+  let created;
+  try {
+    created = await createShipment({ order, items: order.items });
+  } catch (err) {
+    await prisma.order.update({ where: { id }, data: { ekartTrackingId: null } }); // release the claim
+    return { error: err instanceof Error ? err.message : "Ekart booking failed." };
+  }
+
+  const alreadyShipped = SHIPPED_OR_LATER.includes(order.status);
+  let won = false;
+  await prisma.$transaction(async (tx) => {
+    await tx.order.update({
+      where: { id },
+      data: {
+        ekartTrackingId: created.trackingId,
+        ekartWbn: created.wbn,
+        ekartShipmentCreatedAt: new Date(),
+      },
+    });
+    if (!alreadyShipped) {
+      const claimed = await tx.order.updateMany({ where: { id, status: order.status }, data: { status: "SHIPPED" } });
+      won = claimed.count > 0;
+    }
+  });
+
+  revalidatePath(`/admin/orders/${id}`);
+  revalidatePath("/admin/orders");
+  revalidatePath("/admin");
+
+  // Same best-effort, deferred notification pattern as updateOrderStatus —
+  // only fires on a real transition INTO SHIPPED.
+  if (won) {
+    after(async () => {
+      try {
+        await sendOrderStatusEmail(toOrderForEmail(order), "SHIPPED");
+      } catch (err) {
+        console.error(`status email failed for order ${id}:`, err);
+      }
+      try {
+        await sendOrderStatusWhatsApp(order.phone, order.orderNumber, "SHIPPED");
+      } catch (err) {
+        console.error(`status WhatsApp failed for order ${id}:`, err);
+      }
+    });
+  }
+
+  return { ok: true };
+}
+
+export async function trackEkartShipment(
+  _prev: EkartActionState | undefined,
+  formData: FormData,
+): Promise<EkartActionState> {
+  await requireAdmin();
+  const id = String(formData.get("orderId") ?? "");
+  if (!id) return { error: "Missing order." };
+
+  const order = await prisma.order.findUnique({ where: { id }, select: { ekartTrackingId: true } });
+  if (!order?.ekartTrackingId) return { error: "No Ekart shipment booked for this order." };
+
+  let tracked;
+  try {
+    tracked = await trackShipment(order.ekartTrackingId);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ekart tracking lookup failed." };
+  }
+
+  await prisma.order.update({
+    where: { id },
+    data: { ekartStatus: tracked.status, ekartLastTrackedAt: new Date() },
+  });
+  revalidatePath(`/admin/orders/${id}`);
+  return { ok: true };
+}
+
+export async function cancelEkartShipment(
+  _prev: EkartActionState | undefined,
+  formData: FormData,
+): Promise<EkartActionState> {
+  await requireAdmin();
+  const id = String(formData.get("orderId") ?? "");
+  if (!id) return { error: "Missing order." };
+
+  const order = await prisma.order.findUnique({ where: { id }, select: { ekartTrackingId: true } });
+  if (!order?.ekartTrackingId) return { error: "No Ekart shipment booked for this order." };
+
+  try {
+    await cancelShipment(order.ekartTrackingId);
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Ekart cancellation failed." };
+  }
+
+  await prisma.order.update({ where: { id }, data: { ekartStatus: "Cancelled" } });
+  revalidatePath(`/admin/orders/${id}`);
+  return { ok: true };
+}
+
 export async function updateStock(formData: FormData): Promise<void> {
   await requireAdmin();
   const variantId = String(formData.get("variantId") ?? "");
@@ -337,10 +472,20 @@ export async function updateVariant(formData: FormData): Promise<void> {
     weightRaw === null || String(weightRaw).trim() === ""
       ? null
       : Math.floor(Number(weightRaw));
+  const parseDim = (name: string) => {
+    const raw = formData.get(name);
+    return raw === null || String(raw).trim() === "" ? null : Math.floor(Number(raw));
+  };
+  const lengthCm = parseDim("lengthCm");
+  const widthCm = parseDim("widthCm");
+  const heightCm = parseDim("heightCm");
   const active = formData.get("active") === "on";
   const barcode = String(formData.get("barcode") ?? "").trim() || null;
   if (!id || !size || !Number.isFinite(pricePaise) || pricePaise < 0) return;
   if (weightGrams !== null && (!Number.isFinite(weightGrams) || weightGrams < 0)) return;
+  for (const dim of [lengthCm, widthCm, heightCm]) {
+    if (dim !== null && (!Number.isFinite(dim) || dim < 0)) return;
+  }
   if (barcode !== null && !BARCODE_RE.test(barcode)) return;
 
   // Unique constraint guard — bail quietly rather than throwing, same as SKU.
@@ -351,7 +496,7 @@ export async function updateVariant(formData: FormData): Promise<void> {
 
   await prisma.variant.update({
     where: { id },
-    data: { fragrance, size, pricePaise, weightGrams, active, barcode },
+    data: { fragrance, size, pricePaise, weightGrams, lengthCm, widthCm, heightCm, active, barcode },
   });
   revalidatePath("/admin/products");
   revalidatePath("/admin/stock");

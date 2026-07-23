@@ -11,7 +11,7 @@ import {
   SUBSCRIBE_INTERVALS,
 } from "@/lib/constants";
 import { getClientIp, rateLimit, tooManyRequests } from "@/lib/rate-limit";
-import { resolveShipping } from "@/lib/shiprocket";
+import { resolveShipping, type ShippingItem } from "@/lib/ekart";
 import { getSession } from "@/lib/session";
 import { validateCoupon } from "@/lib/coupons";
 import { toIST } from "@/lib/gst";
@@ -102,9 +102,9 @@ export async function POST(request: Request) {
 
   const orderItems = [];
   let subtotalPaise = 0;
-  // Summed packed weight for the courier quote; null if any item lacks a weight,
-  // which makes resolveShipping fall back to flat rather than quote on bad data.
-  let weightGrams: number | null = 0;
+  // Per-line weight+dimensions for the courier quote; resolveShipping falls
+  // back to the flat rate if any line is missing either.
+  const parcelItems: ShippingItem[] = [];
 
   for (const line of items) {
     const qty = Math.floor(Number(line.quantity));
@@ -130,11 +130,13 @@ export async function POST(request: Request) {
 
     const linePaise = variant.pricePaise * qty;
     subtotalPaise += linePaise;
-    if (weightGrams !== null && variant.weightGrams != null) {
-      weightGrams += variant.weightGrams * qty;
-    } else {
-      weightGrams = null;
-    }
+    parcelItems.push({
+      weightGrams: variant.weightGrams,
+      lengthCm: variant.lengthCm,
+      widthCm: variant.widthCm,
+      heightCm: variant.heightCm,
+      quantity: qty,
+    });
     orderItems.push({
       variantId: variant.id,
       sku: variant.sku,
@@ -151,14 +153,14 @@ export async function POST(request: Request) {
     });
   }
 
-  // Authoritative delivery charge from Shiprocket (cheapest serviceable courier),
-  // falling back to the flat state rate if Shiprocket is unreachable. COD prepays
-  // only this charge; the goods are cash on delivery.
+  // Authoritative delivery charge from Ekart, falling back to the flat state
+  // rate if Ekart is unreachable. COD prepays only this charge; the goods are
+  // cash on delivery.
   const isCod = body.paymentMethod === "COD";
   const shipping = await resolveShipping({
     deliveryPincode: ship.pincode,
     state: ship.state,
-    weightGrams,
+    items: parcelItems,
     declaredValuePaise: subtotalPaise,
   });
   if (!shipping.serviceable) {

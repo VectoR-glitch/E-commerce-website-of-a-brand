@@ -419,7 +419,12 @@ export async function createShipment({ order, items }: CreateShipmentInput): Pro
     invoice_number: order.invoiceNumber ?? order.orderNumber,
     invoice_date: (order.invoiceGeneratedAt ?? order.createdAt).toISOString().slice(0, 10),
     consignee_name: order.shipName,
-    consignee_alternate_phone: order.phone ?? "",
+    // Ekart requires this to differ from drop_location.phone ("Phone and
+    // Alternate Phone cannot be same", confirmed via a real 400) — Klenich's
+    // checkout only ever collects one phone number per order, so there's no
+    // real second contact to send. Using the business support line as a
+    // functioning fallback number rather than a dummy value.
+    consignee_alternate_phone: SUPPLIER.mobile,
     products_desc: items.map((it) => it.productName).join(", ").slice(0, 500),
     payment_mode: isCod ? "COD" : "Prepaid",
     category_of_goods: CATEGORY_OF_GOODS,

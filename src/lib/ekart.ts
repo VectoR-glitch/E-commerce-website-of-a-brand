@@ -37,6 +37,38 @@ const LOCATION_TYPE = "Home";
  * back to flat shipping so an Ekart outage never takes checkout down. */
 export class EkartUnavailableError extends Error {}
 
+// Known Ekart error `description`s rephrased for the admin panel — plain
+// English an admin (not a developer) can act on without reading raw JSON.
+// Falls through to Ekart's own description (already reasonably readable
+// prose in practice) for anything not explicitly mapped here.
+const FRIENDLY_ERROR_PATTERNS: [RegExp, string][] = [
+  [/enough balance in your wallet/i, "Your Ekart wallet doesn't have enough balance to book this shipment. Recharge your wallet on the Ekart Elite dashboard, then try again."],
+  [/status which does not allow cancelling.*Cancelled/i, "This shipment has already been cancelled — there's nothing left to cancel."],
+  [/Phone and Alternate Phone cannot be same/i, "This customer's phone number happens to match Klenich's own support number, which Ekart won't allow as both the primary and alternate contact. This is a rare coincidence, not expected to recur."],
+];
+
+/**
+ * Turns a raw Ekart error response into a plain-English message for the admin
+ * panel. Ekart's actual error body is `{statusCode, code, message,
+ * description, severity}` — `description` is consistently the human-readable
+ * part; the rest (error codes, "SWIFT_VALIDATION_EXCEPTION"-style `message`)
+ * is developer noise an admin shouldn't have to parse.
+ */
+function friendlyEkartError(status: number, rawText: string): string {
+  let description: string | null = null;
+  try {
+    const parsed = JSON.parse(rawText) as { description?: string; message?: string };
+    description = parsed.description ?? parsed.message ?? null;
+  } catch {
+    // not JSON — fall through to the raw text below
+  }
+  const text = description ?? rawText.slice(0, 300) ?? `HTTP ${status}`;
+  for (const [pattern, friendly] of FRIENDLY_ERROR_PATTERNS) {
+    if (pattern.test(text)) return friendly;
+  }
+  return text;
+}
+
 // Ekart tokens last ~24h (server-stated, via expires_in); cache in-module and
 // refresh 5 minutes early rather than trusting a hardcoded 24h assumption.
 let cachedToken: { token: string; expiresAt: number } | null = null;
@@ -484,7 +516,7 @@ export async function createShipment({ order, items }: CreateShipmentInput): Pro
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new EkartUnavailableError(`Ekart create-shipment ${res.status}: ${text.slice(0, 300)}`);
+    throw new EkartUnavailableError(friendlyEkartError(res.status, text));
   }
 
   let body: { tracking_id?: string; barcodes?: { wbn?: string } };
@@ -533,6 +565,6 @@ export async function cancelShipment(trackingId: string): Promise<void> {
   }
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new EkartUnavailableError(`Ekart cancel ${res.status}: ${text.slice(0, 300)}`);
+    throw new EkartUnavailableError(friendlyEkartError(res.status, text));
   }
 }

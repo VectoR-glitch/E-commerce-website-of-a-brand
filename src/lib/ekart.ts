@@ -389,6 +389,10 @@ export async function createShipment({ order, items }: CreateShipmentInput): Pro
   // individually — the validator only reports the first violation) until a
   // real booking proves otherwise.
   const rupeeStr = (paise: number) => rupees(paise).toFixed(2);
+  // location.phone confirmed via a real 400 to want an integer, not a string
+  // — location.pin is the same category of numeric-looking field within the
+  // same object shape, so applied here too, though unconfirmed individually.
+  const asInt = (s: string) => Number(s.replace(/\D/g, ""));
 
   // SUPPLIER.addressLines (gst.ts) has no distinct city field — "Kolkata" is
   // the conventional postal city for pincode 700135 (New Town/Rajarhat), not
@@ -423,8 +427,8 @@ export async function createShipment({ order, items }: CreateShipmentInput): Pro
       state: order.shipState,
       country: "India",
       name: order.shipName,
-      phone: order.phone ?? "",
-      pin: order.shipPincode,
+      phone: asInt(order.phone ?? ""),
+      pin: asInt(order.shipPincode),
     },
     pickup_location: {
       location_type: LOCATION_TYPE,
@@ -433,8 +437,8 @@ export async function createShipment({ order, items }: CreateShipmentInput): Pro
       state: SUPPLIER.state,
       country: "India",
       name: SUPPLIER.legalName,
-      phone: SUPPLIER.mobile,
-      pin: PICKUP_PINCODE ?? "",
+      phone: asInt(SUPPLIER.mobile),
+      pin: asInt(PICKUP_PINCODE ?? ""),
     },
     return_location: {
       location_type: LOCATION_TYPE,
@@ -443,8 +447,8 @@ export async function createShipment({ order, items }: CreateShipmentInput): Pro
       state: SUPPLIER.state,
       country: "India",
       name: SUPPLIER.legalName,
-      phone: SUPPLIER.mobile,
-      pin: PICKUP_PINCODE ?? "",
+      phone: asInt(SUPPLIER.mobile),
+      pin: asInt(PICKUP_PINCODE ?? ""),
     },
   };
 

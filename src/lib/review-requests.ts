@@ -77,6 +77,20 @@ export async function runReviewRequestSweep(): Promise<{
       continue;
     }
 
+    // Claim this order before sending: a guarded update that only succeeds if
+    // nobody else has claimed it (reviewRequestSentAt still null) — so an
+    // overlapping or retried sweep invocation can never both see this order
+    // as eligible and both send it. Explicitly released back to null on
+    // failure so the next sweep retries, same as the old unguarded behavior.
+    const claimed = await prisma.order.updateMany({
+      where: { id: order.id, reviewRequestSentAt: null },
+      data: { reviewRequestSentAt: new Date() },
+    });
+    if (claimed.count === 0) {
+      skipped++;
+      continue;
+    }
+
     try {
       await sendReviewRequestEmail({
         to: order.customer.email,
@@ -84,14 +98,11 @@ export async function runReviewRequestSweep(): Promise<{
         orderNumber: order.orderNumber,
         products: [...products.values()],
       });
-      await prisma.order.update({
-        where: { id: order.id },
-        data: { reviewRequestSentAt: new Date() },
-      });
       sent++;
     } catch (err) {
-      // Leave reviewRequestSentAt null so the next sweep retries (bounded by max age).
+      // Release the claim so the next sweep retries (bounded by max age).
       console.error(`Review-request email failed for order ${order.orderNumber}:`, err);
+      await prisma.order.update({ where: { id: order.id }, data: { reviewRequestSentAt: null } });
       failed++;
     }
   }

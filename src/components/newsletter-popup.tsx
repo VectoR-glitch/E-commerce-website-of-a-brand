@@ -5,12 +5,12 @@ import { usePathname } from "next/navigation";
 import { NewsletterForm } from "@/components/newsletter-form";
 import { Kicker } from "@/components/kicker";
 import { Ornament } from "@/components/ornament";
+import { NEWSLETTER_POPUP_DISMISSED_KEY } from "@/lib/constants";
 
 // Shown once per browser (localStorage-gated) to a new visitor, a few seconds
 // after their first page load. Skipped on routes where an interruption would
 // actively hurt (mid-checkout, cart, auth, account, admin) — this is meant to
 // greet a browsing visitor, not a paying or signed-in one.
-const STORAGE_KEY = "klenich_newsletter_popup_dismissed";
 const SHOW_DELAY_MS = 4000;
 const SKIP_PREFIXES = ["/checkout", "/cart", "/login", "/register", "/account", "/admin"];
 
@@ -27,13 +27,13 @@ export function NewsletterPopup() {
   // browser hasn't already dismissed or subscribed.
   useEffect(() => {
     if (skip) return;
-    if (localStorage.getItem(STORAGE_KEY)) return;
+    if (localStorage.getItem(NEWSLETTER_POPUP_DISMISSED_KEY)) return;
     const timer = setTimeout(() => setOpen(true), SHOW_DELAY_MS);
     return () => clearTimeout(timer);
   }, [skip]);
 
   function dismiss() {
-    localStorage.setItem(STORAGE_KEY, "1");
+    localStorage.setItem(NEWSLETTER_POPUP_DISMISSED_KEY, "1");
     setOpen(false);
   }
 
@@ -132,10 +132,7 @@ export function NewsletterPopup() {
           </div>
 
           <div className="mx-auto mt-8 max-w-sm">
-            <NewsletterForm
-              className="w-full"
-              onSuccess={() => localStorage.setItem(STORAGE_KEY, "1")}
-            />
+            <NewsletterForm className="w-full" />
           </div>
         </div>
       </div>

@@ -1,6 +1,13 @@
 // Shared commerce limits. Kept here (no "use client") so both client
 // components and server route handlers can import them from one source.
 
+// localStorage key set by ANY successful newsletter signup (footer form,
+// popup form, or any future entry point) — shared here (rather than defined
+// in newsletter-popup.tsx and imported by newsletter-form.tsx) specifically
+// to avoid a circular import between the two, since the popup already
+// imports the form.
+export const NEWSLETTER_POPUP_DISMISSED_KEY = "klenich_newsletter_popup_dismissed";
+
 // Safe ceiling for a single order's total, in paise. Sits comfortably under
 // Razorpay's per-order maximum, so the customer gets a clear message in the
 // cart instead of a payment failure at checkout. Raise if you ever need to

@@ -282,22 +282,53 @@ export async function createEkartShipment(
     return { error: err instanceof Error ? err.message : "Ekart booking failed." };
   }
 
+  // From here on, Ekart has ALREADY booked (and charged for) a real
+  // shipment — the PENDING claim must never be released again, and the real
+  // tracking id must never be lost behind it. Persisting it is retried
+  // separately from (and before) the best-effort status flip below, so a
+  // transient DB hiccup on the status/notification step can't strand a real
+  // booking behind the PENDING sentinel with no recovery path.
+  let persisted = false;
+  let persistErr: unknown;
+  for (let attempt = 0; attempt < 3 && !persisted; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 500 * attempt));
+    try {
+      await prisma.order.update({
+        where: { id },
+        data: {
+          ekartTrackingId: created.trackingId,
+          ekartWbn: created.wbn,
+          ekartShipmentCreatedAt: new Date(),
+        },
+      });
+      persisted = true;
+    } catch (err) {
+      persistErr = err;
+    }
+  }
+  if (!persisted) {
+    console.error(`Ekart booked ${created.trackingId} for order ${id} but persisting it failed 3x:`, persistErr);
+    return {
+      error:
+        `Ekart booked this shipment (tracking id ${created.trackingId}` +
+        `${created.wbn ? `, WBN ${created.wbn}` : ""}) but saving it to the order failed after retries. ` +
+        `This tracking id is REAL — record it manually rather than booking again.`,
+    };
+  }
+
+  // Status flip + customer notification are best-effort from here — the
+  // tracking id is already safely recorded regardless of what happens below,
+  // so a failure here just means an admin manually flips the status later.
   const alreadyShipped = SHIPPED_OR_LATER.includes(order.status);
   let won = false;
-  await prisma.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id },
-      data: {
-        ekartTrackingId: created.trackingId,
-        ekartWbn: created.wbn,
-        ekartShipmentCreatedAt: new Date(),
-      },
-    });
+  try {
     if (!alreadyShipped) {
-      const claimed = await tx.order.updateMany({ where: { id, status: order.status }, data: { status: "SHIPPED" } });
+      const claimed = await prisma.order.updateMany({ where: { id, status: order.status }, data: { status: "SHIPPED" } });
       won = claimed.count > 0;
     }
-  });
+  } catch (err) {
+    console.error(`Ekart shipment ${created.trackingId} booked but status flip failed for order ${id}:`, err);
+  }
 
   revalidatePath(`/admin/orders/${id}`);
   revalidatePath("/admin/orders");
@@ -574,20 +605,43 @@ export async function uploadProductImage(
 
   const data = Buffer.from(await image.arrayBuffer());
 
-  // First image for a product becomes the primary (card/PDP default).
-  const count = await prisma.productImage.count({ where: { productId } });
-  await prisma.productImage.create({
-    data: {
-      productId,
-      data,
-      contentType: image.type,
-      alt,
-      fragrance,
-      size,
-      isPrimary: count === 0,
-      sortOrder: count,
-    },
-  });
+  // First image for a product becomes the primary (card/PDP default). The
+  // count-then-create must be atomic w.r.t. a concurrent upload to the same
+  // product (two tabs, or a multi-file batch overlapping another upload) —
+  // otherwise both could read count===0 and both become isPrimary. Postgres'
+  // default READ COMMITTED isolation wouldn't catch that even inside a
+  // transaction, so this explicitly uses SERIALIZABLE, which makes Postgres
+  // itself detect the conflict and abort the loser (P2034) — retried once,
+  // since by the second attempt the other upload's row is already committed
+  // and visible.
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      await prisma.$transaction(
+        async (tx) => {
+          const count = await tx.productImage.count({ where: { productId } });
+          await tx.productImage.create({
+            data: {
+              productId,
+              data,
+              contentType: image.type,
+              alt,
+              fragrance,
+              size,
+              isPrimary: count === 0,
+              sortOrder: count,
+            },
+          });
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+      break;
+    } catch (err) {
+      const isSerializationConflict =
+        err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2034";
+      if (attempt === 0 && isSerializationConflict) continue;
+      throw err;
+    }
+  }
   revalidatePath(`/admin/products/${productId}`);
   return {};
 }

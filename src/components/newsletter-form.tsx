@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState } from "react";
+import { NEWSLETTER_POPUP_DISMISSED_KEY } from "@/lib/constants";
 
 export function NewsletterForm({
   onSuccess,
@@ -34,6 +35,10 @@ export function NewsletterForm({
       }
       setCouponCode(data.couponCode ?? null);
       setState("sent");
+      // Any successful signup, from any instance of this form (footer, popup,
+      // or any future entry point), suppresses the acquisition popup — a
+      // visitor who just subscribed should never be asked to do it again.
+      localStorage.setItem(NEWSLETTER_POPUP_DISMISSED_KEY, "1");
       onSuccess?.();
     } catch {
       setError("Couldn’t reach the server. Please try again.");

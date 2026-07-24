@@ -14,6 +14,25 @@ import { SITE_URL } from "@/lib/constants";
 const apiKey = process.env.RESEND_API_KEY;
 const resend = apiKey ? new Resend(apiKey) : null;
 
+const EMAIL_TIMEOUT_MS = 15000;
+
+// Resend's SDK exposes no per-call timeout/AbortSignal — wraps every send in
+// a timeout race so a hung request (e.g. a stalled TLS handshake) can never
+// block a caller indefinitely, matching every other external call in this
+// codebase (Ekart, WhatsApp, Upstash), which all set an explicit timeout for
+// exactly this reason. Especially important for the daily cron, whose tasks
+// run sequentially — one hung email send would otherwise starve every task
+// after it of the function's time budget.
+async function sendEmail(payload: Parameters<NonNullable<typeof resend>["emails"]["send"]>[0]) {
+  if (!resend) throw new Error("Resend not configured");
+  return Promise.race([
+    resend.emails.send(payload),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("Resend request timed out")), EMAIL_TIMEOUT_MS),
+    ),
+  ]);
+}
+
 const FROM = process.env.RESEND_FROM ?? "Klenich <onboarding@resend.dev>";
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL ?? "bharatblissofficial@gmail.com";
 
@@ -212,7 +231,7 @@ export async function sendOrderEmails(
     : undefined;
 
   // 1. Customer confirmation
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: order.email,
     subject: `Your Klenich order ${order.orderNumber} is confirmed`,
@@ -228,7 +247,7 @@ export async function sendOrderEmails(
   });
 
   // 2. Admin notification (to your inbox)
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: ADMIN_EMAIL,
     replyTo: order.email,
@@ -334,7 +353,7 @@ export async function sendOrderStatusEmail(order: OrderForEmail, status: OrderSt
     ? `<p style="margin:0 0 18px;padding:12px 14px;background:${C.bone};border:1px solid ${C.line};border-radius:4px;font-size:14px;color:${C.ink};">${copy.note}</p>`
     : "";
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: order.email,
     replyTo: ADMIN_EMAIL,
@@ -362,7 +381,7 @@ export async function sendVerificationEmail(
 ): Promise<void> {
   if (!resend) return; // no key → safe no-op until configured
   const hi = name ? `Hi ${escapeHtml(name)},` : "Welcome,";
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to,
     subject: "Verify your email for Klenich",
@@ -396,7 +415,7 @@ export async function sendPasswordResetEmail(
 ): Promise<void> {
   if (!resend) return;
   const hi = name ? `Hi ${escapeHtml(name)},` : "Hi,";
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to,
     subject: "Reset your Klenich password",
@@ -436,7 +455,7 @@ export async function sendBackInStockEmail(input: {
   const label = escapeHtml(input.variantLabel);
   const name = escapeHtml(input.productName);
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: input.to,
     subject: `Back in stock: ${input.productName}`,
@@ -525,7 +544,7 @@ export async function sendAbandonedCartEmail(input: {
     SITE_URL,
   ];
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: input.to,
     subject: "You left something behind 🧺",
@@ -593,7 +612,7 @@ export async function sendContactEmail(msg: ContactMessage): Promise<boolean> {
     msg.message,
   ].join("\n");
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: ADMIN_EMAIL,
     replyTo: msg.email,
@@ -633,7 +652,7 @@ export async function sendSubscriptionReminder(input: {
   const label = escapeHtml(input.variantLabel);
   const qty = input.quantity > 1 ? ` × ${input.quantity}` : "";
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: input.to,
     subject: `Time to restock your ${input.productName}?`,
@@ -694,7 +713,7 @@ export async function sendSubscriptionPlanReminder(input: {
     })
     .join("");
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: input.to,
     subject: "Time to restock your subscription?",
@@ -737,7 +756,7 @@ export async function sendWelcomeDiscountEmail(to: string, code: string): Promis
   if (!resend) return false;
   const escapedCode = escapeHtml(code);
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to,
     subject: "Here's your 10% off — welcome to Klenich",
@@ -787,7 +806,7 @@ export async function sendReviewRequestEmail(input: {
     .join("");
   const textLines = input.products.map((p) => `${p.name}: ${SITE_URL}/product/${p.slug}#reviews`);
 
-  await resend.emails.send({
+  await sendEmail({
     from: FROM,
     to: input.to,
     subject: isPlural ? "How are you liking your Klenich order?" : `How's your ${input.products[0]?.name}?`,

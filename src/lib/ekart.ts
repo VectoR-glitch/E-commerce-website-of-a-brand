@@ -60,9 +60,13 @@ function friendlyEkartError(status: number, rawText: string): string {
     const parsed = JSON.parse(rawText) as { description?: string; message?: string };
     description = parsed.description ?? parsed.message ?? null;
   } catch {
-    // not JSON — fall through to the raw text below
+    // Not JSON — an infra-level failure (edge/load-balancer 502/503 etc.)
+    // returns an HTML error page, not Ekart's usual {description} shape.
+    // Never surface that raw markup to the admin; a generic message is more
+    // useful than a chunk of "<html><head><title>502 Bad Gateway</title>...".
+    return `Ekart is temporarily unavailable (HTTP ${status}). Please try again in a few minutes.`;
   }
-  const text = description ?? rawText.slice(0, 300) ?? `HTTP ${status}`;
+  const text = description ?? `HTTP ${status}`;
   for (const [pattern, friendly] of FRIENDLY_ERROR_PATTERNS) {
     if (pattern.test(text)) return friendly;
   }
@@ -137,6 +141,16 @@ export type ShippingItem = {
   quantity: number;
 };
 
+// A real single parcel doesn't get taller than this regardless of cart
+// quantity — clamps the stacking heuristic below so a bulk order (e.g. 30
+// units of one SKU) can't compute a physically absurd height that Ekart's
+// rate API rejects outright (a genuinely serviceable pincode must never come
+// back as "we don't deliver here" purely because of cart quantity). Past this
+// point actual weight, not volumetric, correctly dominates billing anyway —
+// a real bulk order gets packed into multiple physical boxes, so representing
+// it as one over-tall column was already an approximation past this size.
+const MAX_PARCEL_HEIGHT_CM = 100;
+
 /**
  * Combines each cart/order line's own per-unit box into one parcel's
  * length/width/height. Null if ANY line is missing a dimension — same
@@ -145,7 +159,7 @@ export type ShippingItem = {
  * its largest item), height is the sum of each line's height × quantity (a
  * simple "stack every box in one column" heuristic — errs toward
  * overestimating volumetric weight rather than under, the safer direction for
- * both a checkout quote and a real booking).
+ * both a checkout quote and a real booking), clamped to MAX_PARCEL_HEIGHT_CM.
  */
 export function combineParcelDims(
   items: ShippingItem[],
@@ -160,7 +174,7 @@ export function combineParcelDims(
     height += it.heightCm * it.quantity;
   }
   if (length <= 0 || width <= 0 || height <= 0) return null;
-  return { length, width, height };
+  return { length, width, height: Math.min(height, MAX_PARCEL_HEIGHT_CM) };
 }
 
 type ServiceabilityDetails = {
@@ -540,7 +554,10 @@ export async function trackShipment(trackingId: string): Promise<TrackedShipment
     if (err instanceof EkartUnavailableError) throw err;
     throw new EkartUnavailableError(`Ekart track network error: ${err}`);
   }
-  if (!res.ok) throw new EkartUnavailableError(`Ekart track ${res.status}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new EkartUnavailableError(friendlyEkartError(res.status, text));
+  }
 
   let body: { track?: { status?: string; desc?: string } };
   try {

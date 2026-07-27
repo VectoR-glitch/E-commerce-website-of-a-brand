@@ -57,6 +57,9 @@ type OrderItem = {
 
 export type OrderForEmail = {
   orderNumber: string;
+  // Null for orders created before this field existed — those simply don't
+  // get a tracking link in their emails.
+  trackingToken: string | null;
   email: string;
   shipName: string;
   shipLine1: string;
@@ -91,6 +94,10 @@ function itemsRows(items: OrderItem[]): string {
         </tr>`;
     })
     .join("");
+}
+
+function trackingUrl(order: OrderForEmail): string | null {
+  return order.trackingToken ? `${SITE_URL}/track-order/${order.trackingToken}` : null;
 }
 
 function summaryBlock(order: OrderForEmail): string {
@@ -201,6 +208,12 @@ function orderText(order: OrderForEmail, opts: { admin: boolean }): string {
   lines.push(`  ${order.shipCity}, ${order.shipState} — ${order.shipPincode}`);
   lines.push("");
 
+  const track = trackingUrl(order);
+  if (track && !opts.admin) {
+    lines.push(`Track your order: ${track}`);
+    lines.push("");
+  }
+
   lines.push("Klenich · Plant-powered home care, made in India");
   lines.push(SITE_URL);
   return lines.join("\n");
@@ -241,7 +254,9 @@ export async function sendOrderEmails(
       isCod
         ? "Thank you — your order is confirmed."
         : "Thank you — your order is on its way to being prepared.",
-      `<p style="color:${C.muted};font-size:14px;margin:0 0 18px;">Order <strong style="color:${C.ink};">${order.orderNumber}</strong></p>${payNote}${summary}`,
+      `<p style="color:${C.muted};font-size:14px;margin:0 0 18px;">Order <strong style="color:${C.ink};">${order.orderNumber}</strong></p>${payNote}${summary}${
+        trackingUrl(order) ? `<p style="margin:22px 0 0;">${ctaButton(trackingUrl(order)!, "Track Your Order")}</p>` : ""
+      }`,
     ),
     attachments,
   });
@@ -332,6 +347,11 @@ function statusText(order: OrderForEmail, copy: StatusCopy): string {
   }
   lines.push(`Total: ${formatINR(order.totalPaise)}`);
   lines.push("");
+  const track = trackingUrl(order);
+  if (track) {
+    lines.push(`Track your order: ${track}`);
+    lines.push("");
+  }
   lines.push("Questions? Just reply to this email.");
   lines.push("");
   lines.push("Klenich · Plant-powered home care, made in India");
@@ -362,7 +382,9 @@ export async function sendOrderStatusEmail(order: OrderForEmail, status: OrderSt
     html: shell(
       copy.heading,
       copy.intro,
-      `<p style="color:${C.muted};font-size:14px;margin:0 0 18px;">Order <strong style="color:${C.ink};">${order.orderNumber}</strong></p>${noteHtml}${summaryBlock(order)}`,
+      `<p style="color:${C.muted};font-size:14px;margin:0 0 18px;">Order <strong style="color:${C.ink};">${order.orderNumber}</strong></p>${noteHtml}${summaryBlock(order)}${
+        trackingUrl(order) ? `<p style="margin:22px 0 0;">${ctaButton(trackingUrl(order)!, "Track Your Order")}</p>` : ""
+      }`,
     ),
   });
 }

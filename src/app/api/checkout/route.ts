@@ -290,6 +290,9 @@ export async function POST(request: Request) {
         totalPaise,
         subscriptionIntervalDays: subscriptionIntervalDays ?? null,
         razorpayOrderId: rzpOrder.id,
+        // Unguessable id for the "Track your order" email link — independent
+        // of the human-friendly orderNumber so the link can't be brute-forced.
+        trackingToken: randomBytes(32).toString("base64url"),
         items: { create: orderItems },
       },
     });

@@ -365,6 +365,10 @@ model CartItem {
 model Order {
   id          String @id @default(cuid())
   orderNumber String @unique // human-friendly, e.g. KLN-2026-0042
+  // Unguessable id for the "Track your order" email link (/track-order/[token]),
+  // generated once at checkout. Not derived from orderNumber, so the link
+  // can't be brute-forced from a visible order number.
+  trackingToken String? @unique
 
   customer   Customer? @relation(fields: [customerId], references: [id])
   customerId String? // null for guest checkout

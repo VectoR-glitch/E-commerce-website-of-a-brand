@@ -179,6 +179,7 @@ type OrderWithItems = Prisma.OrderGetPayload<{ include: { items: true } }>;
 function toOrderForEmail(order: OrderWithItems): OrderForEmail {
   return {
     orderNumber: order.orderNumber,
+    trackingToken: order.trackingToken,
     email: order.email,
     shipName: order.shipName,
     shipLine1: order.shipLine1,

@@ -1,14 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-// A hairline brass bar pinned to the very top that tracks read progress —
-// echoes the Ornament pinstripe motif — with a small brass droplet riding its
+// A bold forest-green "liquid" bar pinned to the very top that fills as you
+// read — a literal pour, not a hairline — with a brass droplet riding its
 // leading edge. It follows scroll position directly (no transition) so it
 // stays accurate, and doubles as a click-to-jump seek bar for pointer users.
 export function ScrollProgress() {
   const [progress, setProgress] = useState(0);
-  const barRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let raf = 0;
@@ -42,21 +41,19 @@ export function ScrollProgress() {
 
   return (
     <div
-      ref={barRef}
       onClick={seek}
       aria-hidden="true"
-      className="group/scrub fixed inset-x-0 top-0 z-50 h-2 cursor-pointer"
+      className="fixed inset-x-0 top-0 z-50 h-2 cursor-pointer bg-sage/60 transition-[filter] duration-200 hover:brightness-105"
     >
-      <div className="absolute inset-x-0 top-0 h-0.5 bg-line/0 transition-colors duration-200 group-hover/scrub:bg-line/50" />
       <div
-        className="absolute inset-x-0 top-0 h-0.5 origin-left bg-brass"
+        className="h-full origin-left bg-forest"
         style={{ transform: `scaleX(${progress})` }}
       />
       <div
-        className="scroll-droplet pointer-events-none absolute top-0.5 -translate-x-1/2 -translate-y-1/2"
+        className="scroll-droplet pointer-events-none absolute top-1/2 -translate-x-1/2 -translate-y-1/2"
         style={{ left: `${progress * 100}%` }}
       >
-        <span className="block h-1.5 w-1.5 rounded-full bg-brass-deep" />
+        <span className="block h-2.5 w-2.5 rounded-full border border-bone bg-brass-deep" />
       </div>
     </div>
   );

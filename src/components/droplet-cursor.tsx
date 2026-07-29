@@ -32,8 +32,12 @@ export function DropletCursor() {
         seen = true;
         pos.x = mouse.x;
         pos.y = mouse.y;
-        drop!.style.opacity = "0.6";
       }
+      // Re-assert on every move (not just the first) — otherwise a single
+      // document `mouseleave` (e.g. the cursor grazing the browser chrome
+      // while clicking a nav link) zeroes opacity forever, since nothing
+      // else would ever set it back.
+      drop!.style.opacity = "0.6";
     }
 
     function onLeave() {

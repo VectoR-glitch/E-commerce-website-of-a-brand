@@ -4,6 +4,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { CleaningFact } from "@/components/cleaning-fact";
 import { ScrollProgress } from "@/components/scroll-progress";
 import { BackToTop } from "@/components/back-to-top";
+import { DropletCursor } from "@/components/droplet-cursor";
 import { CartDrawer } from "@/components/cart-drawer";
 import { MapleEasterEgg } from "@/components/maple-easter-egg";
 import { NewsletterPopup } from "@/components/newsletter-popup";
@@ -41,6 +42,7 @@ export default async function SiteLayout({
         Skip to content
       </a>
       <ScrollProgress />
+      <DropletCursor />
       <SiteHeader accountSlot={<HeaderAccount />} />
       <main id="main" tabIndex={-1} className="flex-1 outline-none">
         {children}

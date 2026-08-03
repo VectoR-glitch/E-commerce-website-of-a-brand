@@ -1,59 +1,49 @@
-# Dependency Vulnerabilities — Accepted Residual Risk
+# Dependency Vulnerabilities — Status
 
-**Snapshot:** 2026-06-27 · `npm audit --omit=dev`
-**Result:** 16 moderate · 0 high · 0 critical
-**Decision:** Accepted as residual risk. Do **not** run `npm audit fix --force` — every
-offered fix is a major-version **downgrade** that would break the stack (see below).
-Re-evaluate when upstream publishes forward-compatible patches.
+**Snapshot:** 2026-08-03 · GitHub Dependabot alerts (continuous scanning, enabled this date)
+**Result:** 0 open alerts.
+**Monitoring:** Dependabot security alerts + automated security fixes are enabled at the
+repo level (continuous, not periodic). `.github/dependabot.yml` also runs a weekly npm
+version-update check. Supersedes the one-off manual `npm audit` snapshot from 2026-06-27.
 
-## Why these are low-risk
-- **All 16 are moderate**; none high or critical.
-- **All are transitive** — none is a package we depend on directly; they're pulled in by
-  Sanity, Next, and Prisma tooling.
-- **The "fixes" are downgrades, not upgrades.** npm proposes `sanity@5.14.1` (we're on 6.x),
-  `next@9.3.3` (we're on 16.2.9), and `prisma@6.19.3` (we're on 7.8). `npm audit fix --force`
-  would regress the whole stack and break the app. The genuinely patched, forward-compatible
-  versions are not yet published for our major lines.
+## What happened on 2026-08-03
 
-## The 4 root causes (16 findings collapse to these)
+Enabling Dependabot surfaced 26 open alerts (14 high, 12 moderate) — more than the prior
+manual `npm audit` snapshot had found, because Dependabot's advisory database and dependency
+graph scanning catch more than a point-in-time `npm audit` run. All 26 were resolved same-day:
 
-### 1. `uuid <11.1.1` — GHSA-w5hq-g745-h8pq (missing buffer bounds check in v3/v5/v6 when `buf` is provided)
-Pulled in via Sanity packages: `@sanity/uuid`, `typeid-js`, `@sanity/preview-url-secret`,
-`@sanity/visual-editing`, `@sanity/cli`, `@sanity/vision`, `sanity`, `next-sanity`.
-- **Exposure:** the flaw only triggers in uuid v3/v5/v6 when a caller passes a `buf`
-  argument. That's internal Sanity Studio / preview / CLI usage — not reachable from the
-  storefront's request path. Largely build/Studio-time.
+- **`next` 16.2.9 → 16.2.12** — patched 9 core CVEs in Next.js itself: SSRF in Server Actions
+  and in rewrites, a middleware/proxy bypass, DoS in the App Router and Image Optimization
+  API, unbounded Server Action payload, cache confusion, and unauthenticated Server Function
+  endpoint disclosure. These were runtime-scoped (the deployed storefront), not build tooling.
+- **`sharp` 0.34.5 → 0.35.0** and **`postcss` → 8.5.18**, both via `package.json` `overrides`
+  — `next@16.2.12` still bundled the older, vulnerable versions of each internally. (Same
+  "npm suggests downgrading to `next@9.3.3`" trap noted below in the original 2026-06-27
+  findings — the fix is a targeted override, not `npm audit fix --force`.)
+- **`fast-uri`, `hono`, `@hono/node-server`, `valibot`** — resolved via plain `npm audit fix`
+  (no forced downgrade needed); all four are dev-only, pulled in by Sanity/Prisma tooling.
 
-### 2. `postcss <8.5.10`
-Bundled inside `next@16.2.9`.
-- **Exposure:** build-time CSS tooling, not a runtime request surface. Will clear with a
-  future Next patch release (npm's only "fix" is an absurd downgrade to next@9).
+Verified before merging: `tsc` and `eslint` clean, a full production build succeeded across
+all routes, and the homepage/`/shop` were visually checked (product images via `sharp`,
+Tailwind styling via `postcss`) with no regression. Vercel's own remote preview build also
+succeeded independently of the local checks.
 
-### 3. `js-yaml <=4.1.1`
-Via `@vercel/frameworks` → `@sanity/cli` / `sanity`.
-- **Exposure:** Sanity CLI / Studio tooling, not the storefront runtime.
+## Historical context — the 2026-06-27 manual audit
 
-### 4. `@hono/node-server <1.19.13`
-Via `@prisma/dev` → `prisma`.
-- **Exposure:** Prisma's dev/CLI tooling, not the runtime query path (`@prisma/client` +
-  the pg driver adapter serve requests).
+Before Dependabot was enabled, a one-off `npm audit --omit=dev` found 16 moderate findings,
+all judged low-risk because they lived in Sanity/Prisma CLI/Studio tooling, not the storefront
+runtime, and npm's only offered "fix" at the time was a major-version downgrade (`next@9.3.3`,
+`sanity@5.14.1`, `prisma@6.19.3`) that would have broken the stack. That reasoning was correct
+for what it covered, but it only checked local `npm audit`, which missed several of the
+runtime-scoped `next`/`sharp`/`postcss` issues that Dependabot's broader scanning caught.
 
-## Net assessment
-The vulnerable code sits in **build / Studio / CLI tooling**, not in the storefront's
-runtime request path (checkout, payment verify, webhooks, product pages). Combined with
-moderate severity and the lack of safe forward fixes, the residual risk is **low and
-accepted** for launch.
+## Going forward
 
-## Follow-ups (when convenient — not blocking)
-- **Re-run `npm audit --omit=dev` periodically** and after every `next` / `sanity` /
-  `next-sanity` / `prisma` minor upgrade — adopt the patched versions as soon as they ship
-  for our major lines (no `--force`).
-- **Consider trimming Sanity from the production dependency surface.** `@sanity/vision`,
-  `@sanity/visual-editing`, and Studio packages are authoring tools, not storefront runtime.
-  Moving them out of `dependencies` (or not deploying Sanity Studio with the storefront)
-  would drop most of these findings from the production audit entirely.
-- **Upgrade Next** on its next patch to clear the bundled `postcss` advisory.
-
-## Notes
-- No dependency changes were made for this entry — it is documentation only. The app's
-  build is therefore unchanged; `tsc` and `eslint` pass and the dev server serves normally.
+- Dependabot alerts are continuous — new findings will show up as GitHub issues/PRs, not on
+  the next person who happens to run `npm audit` manually.
+- The weekly `dependabot.yml` version-update schedule keeps routine (non-security) bumps
+  flowing too, rather than drifting for months between manual checks.
+- If a future finding's only fix is a genuine breaking downgrade (the `next@9.3.3` trap from
+  before), re-apply the same approach used here: check if the fix is actually bundled *inside*
+  a newer version of the top-level package first, and use `overrides` for anything still stuck
+  at an old version transitively, rather than accepting the downgrade.

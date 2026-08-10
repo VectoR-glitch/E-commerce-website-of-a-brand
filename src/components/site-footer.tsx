@@ -90,6 +90,19 @@ export function SiteFooter({ shopLinks = FALLBACK_SHOP_LINKS }: { shopLinks?: Fo
         ))}
       </div>
       <div className="border-t border-line">
+        <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-8 py-6 text-center sm:flex-row sm:justify-center">
+          <p className="text-sm text-ink/70">It would be awesome if you visit our portfolio website</p>
+          <a
+            href="https://mybharatbliss.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="smallcaps inline-block shrink-0 bg-forest px-6 py-3 text-bone btn-fill-forest"
+          >
+            Press me
+          </a>
+        </div>
+      </div>
+      <div className="border-t border-line">
         <div className="mx-auto flex max-w-6xl flex-col items-center gap-3 px-8 py-6 sm:flex-row sm:justify-between">
           <p className="smallcaps text-ink/70">
             Bliss in Every Drop · Bharat Bliss Pvt Ltd · © {copyrightYear} 🍁

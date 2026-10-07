@@ -19,7 +19,7 @@
     "razorpay": "^2.9.8",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "resend": "^6.18.1",
+    "resend": "^6.32.0",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
